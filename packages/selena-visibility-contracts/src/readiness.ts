@@ -5,7 +5,9 @@ export const readinessComponentSchema = z.object({ id: z.string(), label: z.stri
 export type ReadinessComponent = z.infer<typeof readinessComponentSchema>;
 export const readinessFindingSchema = z.object({ id: z.string(), severity: z.enum(["CRITICAL", "HIGH", "MEDIUM", "LOW"]), pageUrl: z.string().url(), blockId: z.string().nullable(), ruleId: z.string(), ruleVersion: z.string(), statement: z.string(), evidence: z.string(), generatedFixId: z.string().nullable() });
 export type ReadinessFinding = z.infer<typeof readinessFindingSchema>;
-export const readinessResultSchema = z.object({ score: z.number().int().min(0).max(100), scoringModelVersion: z.literal(READINESS_SCORING_MODEL_VERSION), components: z.array(readinessComponentSchema), findings: z.array(readinessFindingSchema), pagesScanned: z.number().int().min(1).max(5), paidProviderCalls: z.literal(0), visibilityClaim: z.literal("Readiness is technical/content readiness, not observed AI visibility or a ChatGPT recommendation.") });
+export const readinessBlockSchema = z.object({ blockId: z.string(), blockType: z.string(), pageUrl: z.string().url(), selectorOrPath: z.string(), textSnapshot: z.string(), citabilityScore: z.number().int().min(0).max(100), ruleId: z.string(), ruleVersion: z.literal(READINESS_SCORING_MODEL_VERSION), evidence: z.string() });
+export type ReadinessBlock = z.infer<typeof readinessBlockSchema>;
+export const readinessResultSchema = z.object({ score: z.number().int().min(0).max(100), scoringModelVersion: z.literal(READINESS_SCORING_MODEL_VERSION), components: z.array(readinessComponentSchema), findings: z.array(readinessFindingSchema), blocks: z.array(readinessBlockSchema), pagesScanned: z.number().int().min(1).max(5), paidProviderCalls: z.literal(0), visibilityClaim: z.literal("Readiness is technical/content readiness, not observed AI visibility or a ChatGPT recommendation.") });
 export type ReadinessResult = z.infer<typeof readinessResultSchema>;
 export const generatedFixSchema = z.object({ id: z.string(), findingId: z.string(), ruleId: z.string(), ruleVersion: z.string(), title: z.string(), instruction: z.string(), proposedText: z.string(), autoApply: z.literal(false) });
 export type GeneratedFix = z.infer<typeof generatedFixSchema>;
@@ -29,6 +31,12 @@ export function previewReadinessFix(fix: GeneratedFix, item: ReadinessFinding): 
 export function compareReadiness(baseline: ReadinessResult, verified: ReadinessResult): ReadinessComparison {
 	return readinessComparisonSchema.parse({ id: `readiness-compare:${baseline.score}:${verified.score}`, baselineScore: baseline.score, verifiedScore: verified.score, delta: verified.score - baseline.score, baselineScoringModelVersion: baseline.scoringModelVersion, verifiedScoringModelVersion: verified.scoringModelVersion, aiVisibilityCompared: false });
 }
+
+const blocksFromHeadings = (pageUrl: string, headings: string[], visibleText: string): ReadinessBlock[] => headings.map((heading, index) => {
+	const blockId = `block:${index + 1}:${heading.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "section"}`;
+	const score = visibleText.length >= 160 ? 100 : 45;
+	return { blockId, blockType: "heading-section", pageUrl, selectorOrPath: `heading[${index + 1}]`, textSnapshot: heading, citabilityScore: score, ruleId: "READINESS-CITABILITY-BLOCK-001", ruleVersion: READINESS_SCORING_MODEL_VERSION, evidence: `Heading block ${index + 1} captured from page text.` };
+});
 
 export function scorePublicReadiness(input: ReadinessInput): ReadinessResult {
 	const technical = input.status >= 200 && input.status < 400 ? 100 : 0;
@@ -58,5 +66,5 @@ export function scorePublicReadiness(input: ReadinessInput): ReadinessResult {
 	if (input.headings.length === 0) findings.push(finding(input.pageUrl, "READINESS-CITABILITY-001", "HIGH", "No heading structure was detected for answer extraction.", "headings empty"));
 	if (input.contacts.length === 0) findings.push(finding(input.pageUrl, "READINESS-BUSINESS-001", "MEDIUM", "No public contact signal was detected.", "contact evidence empty"));
 	const score = Math.round(components.filter((item) => item.status === "weighted").reduce((sum, item) => sum + item.score * item.weight, 0));
-	return readinessResultSchema.parse({ score, scoringModelVersion: READINESS_SCORING_MODEL_VERSION, components, findings, pagesScanned: 1, paidProviderCalls: 0, visibilityClaim: "Readiness is technical/content readiness, not observed AI visibility or a ChatGPT recommendation." });
+	return readinessResultSchema.parse({ score, scoringModelVersion: READINESS_SCORING_MODEL_VERSION, components, findings, blocks: blocksFromHeadings(input.pageUrl, input.headings, input.visibleText), pagesScanned: 1, paidProviderCalls: 0, visibilityClaim: "Readiness is technical/content readiness, not observed AI visibility or a ChatGPT recommendation." });
 }

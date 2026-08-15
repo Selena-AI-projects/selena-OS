@@ -14,6 +14,12 @@ describe("Public Readiness", () => {
 	it("returns evidence-backed findings for a sparse page", () => {
 		const result = scorePublicReadiness({ ...page, robots: null, headings: [], jsonLd: [], contacts: [], services: [], metadata: {} });
 		expect(result.findings.map((item) => item.ruleId)).toEqual(expect.arrayContaining(["READINESS-CRAWL-001", "READINESS-SCHEMA-001", "READINESS-CITABILITY-001"]));
+		expect(result.blocks).toEqual([]);
+	});
+	it("records reproducible block-level citability provenance", () => {
+		const result = scorePublicReadiness({ pageUrl: "https://example.com", status: 200, robots: "User-agent: *", canonical: "https://example.com", headings: ["About", "Services"], visibleText: "A".repeat(220), jsonLd: [], contacts: [], services: ["service"], metadata: { title: "Example", description: "Description" }, internalLinks: ["/about"] });
+		expect(result.blocks).toHaveLength(2);
+		expect(result.blocks[0]).toMatchObject({ blockType: "heading-section", selectorOrPath: "heading[1]", citabilityScore: 100, ruleVersion: "public-readiness-v1" });
 	});
 	it("creates a non-applying fix preview and keeps readiness comparison separate from AI visibility", () => {
 		const baseline = scorePublicReadiness({ pageUrl: "https://example.com", status: 200, robots: null, canonical: null, headings: [], visibleText: "short", jsonLd: [], contacts: [], services: [], metadata: {}, internalLinks: [] });
