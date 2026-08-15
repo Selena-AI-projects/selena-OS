@@ -23,6 +23,7 @@ import { Route as AuthRegisterRouteImport } from './routes/auth/register'
 import { Route as AuthResetPasswordRouteImport } from './routes/auth/reset-password'
 import { Route as AuthedAcceptInvitationInvitationIdRouteImport } from './routes/_authed/accept-invitation/$invitationId'
 import { Route as AuthedAdminIndexRouteImport } from './routes/_authed/admin/index'
+import { Route as AuthedAdminProvidersRouteImport } from './routes/_authed/admin/providers'
 import { Route as AuthedAdminToolsRouteImport } from './routes/_authed/admin/tools'
 import { Route as AuthedAdminWorkflowsRouteImport } from './routes/_authed/admin/workflows'
 import { Route as AuthedAppIndexRouteImport } from './routes/_authed/app/index'
@@ -147,6 +148,11 @@ const AuthedAcceptInvitationInvitationIdRoute =
 const AuthedAdminIndexRoute = AuthedAdminIndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => AuthedAdminRoute,
+} as any)
+const AuthedAdminProvidersRoute = AuthedAdminProvidersRouteImport.update({
+  id: '/providers',
+  path: '/providers',
   getParentRoute: () => AuthedAdminRoute,
 } as any)
 const AuthedAdminToolsRoute = AuthedAdminToolsRouteImport.update({
@@ -460,6 +466,7 @@ export interface FileRoutesByFullPath {
   '/auth/register': typeof AuthRegisterRoute
   '/auth/reset-password': typeof AuthResetPasswordRoute
   '/accept-invitation/$invitationId': typeof AuthedAcceptInvitationInvitationIdRoute
+  '/admin/providers': typeof AuthedAdminProvidersRoute
   '/admin/tools': typeof AuthedAdminToolsRoute
   '/admin/workflows': typeof AuthedAdminWorkflowsRoute
   '/app/$brand': typeof AuthedAppBrandRouteWithChildren
@@ -527,6 +534,7 @@ export interface FileRoutesByTo {
   '/auth/register': typeof AuthRegisterRoute
   '/auth/reset-password': typeof AuthResetPasswordRoute
   '/accept-invitation/$invitationId': typeof AuthedAcceptInvitationInvitationIdRoute
+  '/admin/providers': typeof AuthedAdminProvidersRoute
   '/admin/tools': typeof AuthedAdminToolsRoute
   '/admin/workflows': typeof AuthedAdminWorkflowsRoute
   '/app/new': typeof AuthedAppNewRoute
@@ -598,6 +606,7 @@ export interface FileRoutesById {
   '/auth/register': typeof AuthRegisterRoute
   '/auth/reset-password': typeof AuthResetPasswordRoute
   '/_authed/accept-invitation/$invitationId': typeof AuthedAcceptInvitationInvitationIdRoute
+  '/_authed/admin/providers': typeof AuthedAdminProvidersRoute
   '/_authed/admin/tools': typeof AuthedAdminToolsRoute
   '/_authed/admin/workflows': typeof AuthedAdminWorkflowsRoute
   '/_authed/app/$brand': typeof AuthedAppBrandRouteWithChildren
@@ -670,6 +679,7 @@ export interface FileRouteTypes {
     | '/auth/register'
     | '/auth/reset-password'
     | '/accept-invitation/$invitationId'
+    | '/admin/providers'
     | '/admin/tools'
     | '/admin/workflows'
     | '/app/$brand'
@@ -737,6 +747,7 @@ export interface FileRouteTypes {
     | '/auth/register'
     | '/auth/reset-password'
     | '/accept-invitation/$invitationId'
+    | '/admin/providers'
     | '/admin/tools'
     | '/admin/workflows'
     | '/app/new'
@@ -807,6 +818,7 @@ export interface FileRouteTypes {
     | '/auth/register'
     | '/auth/reset-password'
     | '/_authed/accept-invitation/$invitationId'
+    | '/_authed/admin/providers'
     | '/_authed/admin/tools'
     | '/_authed/admin/workflows'
     | '/_authed/app/$brand'
@@ -1003,6 +1015,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/admin/'
       preLoaderRoute: typeof AuthedAdminIndexRouteImport
+      parentRoute: typeof AuthedAdminRoute
+    }
+    '/_authed/admin/providers': {
+      id: '/_authed/admin/providers'
+      path: '/providers'
+      fullPath: '/admin/providers'
+      preLoaderRoute: typeof AuthedAdminProvidersRouteImport
       parentRoute: typeof AuthedAdminRoute
     }
     '/_authed/admin/tools': {
@@ -1394,12 +1413,14 @@ declare module '@tanstack/react-router' {
 }
 
 interface AuthedAdminRouteChildren {
+  AuthedAdminProvidersRoute: typeof AuthedAdminProvidersRoute
   AuthedAdminToolsRoute: typeof AuthedAdminToolsRoute
   AuthedAdminWorkflowsRoute: typeof AuthedAdminWorkflowsRoute
   AuthedAdminIndexRoute: typeof AuthedAdminIndexRoute
 }
 
 const AuthedAdminRouteChildren: AuthedAdminRouteChildren = {
+  AuthedAdminProvidersRoute: AuthedAdminProvidersRoute,
   AuthedAdminToolsRoute: AuthedAdminToolsRoute,
   AuthedAdminWorkflowsRoute: AuthedAdminWorkflowsRoute,
   AuthedAdminIndexRoute: AuthedAdminIndexRoute,

@@ -1,24 +1,25 @@
-import * as React from "react";
-import { Link, useRouteContext } from "@tanstack/react-router";
-import type { ClientConfig } from "@workspace/config/types";
 import {
-	IconDashboard,
-	IconChartBar,
-	IconSpeakerphone,
-	IconSitemap,
-	IconTarget,
-	IconLink,
 	IconBuilding,
 	IconBuildings,
-	IconListDetails,
+	IconChartBar,
 	IconCpu,
-	IconTable,
+	IconCreditCard,
+	IconDashboard,
+	IconKey,
+	IconLink,
+	IconListDetails,
 	IconReport,
+	IconSitemap,
+	IconSpeakerphone,
+	IconTable,
+	IconTarget,
 	IconTimeline,
 	IconTool,
 	IconUsers,
-	IconCreditCard,
 } from "@tabler/icons-react";
+import { Link, useRouteContext } from "@tanstack/react-router";
+import type { ClientConfig } from "@workspace/config/types";
+import type { BrandWithPrompts } from "@workspace/lib/db/schema";
 
 import {
 	Sidebar,
@@ -30,12 +31,12 @@ import {
 	SidebarMenuItem,
 	useSidebar,
 } from "@workspace/ui/components/sidebar";
-import { NavMain, type NavGroup } from "@/components/nav-main";
-import { NavUser } from "@/components/nav-user";
-import { NavAppInfo } from "@/components/nav-app-info";
+import type * as React from "react";
 import { DemoModePill } from "@/components/demo-mode-pill";
 import { Logo } from "@/components/logo";
-import type { BrandWithPrompts } from "@workspace/lib/db/schema";
+import { NavAppInfo } from "@/components/nav-app-info";
+import { type NavGroup, NavMain } from "@/components/nav-main";
+import { NavUser } from "@/components/nav-user";
 
 /**
  * How much of the app the shell around this page can reach:
@@ -181,6 +182,12 @@ export function AppSidebar({
 						title: "Tools",
 						url: "/admin/tools",
 						icon: IconTool,
+						absolute: true,
+					},
+					{
+						title: "Providers",
+						url: "/admin/providers",
+						icon: IconKey,
 						absolute: true,
 					},
 				]

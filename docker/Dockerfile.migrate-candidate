@@ -1,0 +1,18 @@
+FROM node:24-alpine
+
+RUN corepack enable pnpm
+WORKDIR /app
+
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY packages/lib/package.json ./packages/lib/
+COPY packages/config/package.json ./packages/config/
+COPY packages/deployment/package.json ./packages/deployment/
+
+RUN pnpm install --frozen-lockfile --filter @workspace/lib...
+
+COPY packages/lib ./packages/lib
+COPY packages/config ./packages/config
+COPY packages/deployment ./packages/deployment
+
+WORKDIR /app/packages/lib
+CMD ["pnpm", "exec", "drizzle-kit", "migrate"]

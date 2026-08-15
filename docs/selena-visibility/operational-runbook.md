@@ -51,3 +51,11 @@ Staging project: `selena-ai-visibility` (`51dd0770-e622-4734-a705-ace401234bb8`)
 Fixture bindings use `DEPLOYMENT_MODE=local`, `SCRAPE_TARGETS=stub:stub`, `ONBOARDING_LLM_TARGET=stub:stub`, telemetry disabled and `SCHEDULE_MAINTENANCE_ENABLED=false`. Staging-only auth/encryption secrets are generated randomly and passed to Railway through sealed stdin bindings; their values are never read back.
 
 Activation order is migration SUCCESS → web SUCCESS and `/api/setup-status` HTTP 200 → worker SUCCESS with bounded logs. Real provider calls, payment calls, Elmo measurements and scheduler fan-out remain disabled.
+
+## Production readiness gate (2026-08-15)
+
+- Release candidate `selena-visibility-mvp-rc1` remains unchanged and does not contain commits `3e3501f5` and `6c515889`.
+- Release candidate `selena-visibility-mvp-rc2` was created at commit `6c515889474c13824f806eaf3e70cbaf128126a5` and published to the Selena origin repository.
+- Read-only Railway review confirmed staging remains healthy and production environment `72cd278f-af7c-4802-8da3-20a143d0ba1e` currently contains zero services.
+- Production PostgreSQL backup/PITR cannot be verified because no production PostgreSQL service exists. No production service, migration, secret, domain, or deployment was created.
+- Required rollback plan before production boot: retain the immutable release tag, take a provider-confirmed database backup/PITR checkpoint, apply migrations as a one-shot job, verify health, and roll back application services to the prior immutable release without destructive database changes. This plan is pending the production database and backup/PITR capability.

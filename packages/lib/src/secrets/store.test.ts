@@ -4,7 +4,13 @@ import { EncryptionKeyError, encryptSecret } from "./crypto";
 // refreshCredentialOverlay reads rows through drizzle; mock the db module so the
 // store is testable with no database. `db.select().from()` resolves to
 // `dbState.rows`, or rejects with `dbState.error` when one is set.
-const dbState = vi.hoisted(() => ({ rows: [] as unknown[], error: null as Error | null, queries: 0 }));
+const dbState = vi.hoisted(() => ({
+	rows: [] as Array<{ name: string; encryptedValue: string }>,
+	error: null as Error | null,
+	queries: 0,
+	inserts: 0,
+	failRefreshAfterInsert: false,
+}));
 vi.mock("../db/db", () => ({
 	db: {
 		select: () => ({
@@ -13,10 +19,25 @@ vi.mock("../db/db", () => ({
 				return dbState.error ? Promise.reject(dbState.error) : Promise.resolve(dbState.rows);
 			},
 		}),
+		insert: () => ({
+			values: (row: { name: string; encryptedValue: string }) => ({
+				onConflictDoUpdate: async () => {
+					dbState.inserts++;
+					dbState.rows = [...dbState.rows.filter((existing) => existing.name !== row.name), row];
+					if (dbState.failRefreshAfterInsert) dbState.error = new Error("refresh unavailable");
+				},
+			}),
+		}),
 	},
 }));
 
-import { clearCredentialOverlay, encryptCredential, getCredential, refreshCredentialOverlay } from "./store";
+import {
+	clearCredentialOverlay,
+	encryptCredential,
+	getCredential,
+	refreshCredentialOverlay,
+	storeCredential,
+} from "./store";
 
 const KEY = Buffer.alloc(32, 7);
 const KEY_B64 = KEY.toString("base64");
@@ -29,6 +50,8 @@ beforeEach(() => {
 	dbState.rows = [];
 	dbState.error = null;
 	dbState.queries = 0;
+	dbState.inserts = 0;
+	dbState.failRefreshAfterInsert = false;
 	clearCredentialOverlay();
 	vi.spyOn(console, "error").mockImplementation(() => {});
 });
@@ -198,5 +221,44 @@ describe("encryptCredential", () => {
 	it("throws EncryptionKeyError when no encryption key is set", async () => {
 		vi.stubEnv("ELMO_ENCRYPTION_KEY", undefined);
 		await expect(encryptCredential("OPENAI_API_KEY", "x")).rejects.toThrow(EncryptionKeyError);
+	});
+});
+
+describe("storeCredential", () => {
+	it("persists only ciphertext and refreshes the in-process credential", async () => {
+		vi.stubEnv("ELMO_ENCRYPTION_KEY", KEY_B64);
+		vi.stubEnv("BRIGHTDATA_API_TOKEN", undefined);
+
+		await storeCredential("BRIGHTDATA_API_TOKEN", "runtime-value");
+
+		expect(dbState.inserts).toBe(1);
+		expect(dbState.rows[0]?.name).toBe("BRIGHTDATA_API_TOKEN");
+		expect(dbState.rows[0]?.encryptedValue).not.toContain("runtime-value");
+		expect(getCredential("BRIGHTDATA_API_TOKEN")).toBe("runtime-value");
+	});
+
+	it("replaces the same credential instead of creating a second row", async () => {
+		vi.stubEnv("ELMO_ENCRYPTION_KEY", KEY_B64);
+		vi.stubEnv("BRIGHTDATA_API_TOKEN", undefined);
+
+		await storeCredential("BRIGHTDATA_API_TOKEN", "first-value");
+		await storeCredential("BRIGHTDATA_API_TOKEN", "second-value");
+
+		expect(dbState.inserts).toBe(2);
+		expect(dbState.rows).toHaveLength(1);
+		expect(getCredential("BRIGHTDATA_API_TOKEN")).toBe("second-value");
+	});
+
+	it("reports deferred propagation when refresh fails after a successful write", async () => {
+		vi.stubEnv("ELMO_ENCRYPTION_KEY", KEY_B64);
+		dbState.failRefreshAfterInsert = true;
+
+		await expect(storeCredential("BRIGHTDATA_API_TOKEN", "stored-value")).resolves.toEqual({
+			runtimeRefreshed: false,
+		});
+
+		expect(dbState.rows).toHaveLength(1);
+		expect(dbState.rows[0]?.encryptedValue).not.toContain("stored-value");
+		expect(console.error).toHaveBeenCalledWith(expect.stringContaining("scheduled refresh will retry"));
 	});
 });

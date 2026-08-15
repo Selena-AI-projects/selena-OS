@@ -1,12 +1,11 @@
 import { createHash } from "node:crypto";
 import { getCredential } from "./secrets";
 
-export type PublicProvider = "BRIGHT_DATA_SERP" | "GOOGLE_PLACES" | "GOOGLE_GBP_REVIEWS" | "META_INSTAGRAM";
+export type PublicProvider = "BRIGHT_DATA_SERP" | "GOOGLE_GBP_REVIEWS" | "META_INSTAGRAM";
 export type PublicProviderFlags = Record<PublicProvider, boolean>;
 
 export const PUBLIC_PROVIDER_FLAGS_DISABLED: PublicProviderFlags = {
 	BRIGHT_DATA_SERP: false,
-	GOOGLE_PLACES: false,
 	GOOGLE_GBP_REVIEWS: false,
 	META_INSTAGRAM: false,
 };
@@ -46,7 +45,7 @@ export class PublicProviderCostLedger {
 	}
 }
 
-export type PublicProviderSystemCredential = "BRIGHTDATA_API_TOKEN" | "GOOGLE_PLACES_API_KEY";
+export type PublicProviderSystemCredential = "BRIGHTDATA_API_TOKEN";
 export type PublicProviderCredentialStatus = "PRESENT" | "MISSING" | "OAUTH_REQUIRED";
 export type PublicProviderCredentialResolver = (name: PublicProviderSystemCredential) => string | undefined;
 export type PublicProviderOAuthTokenResolver = (
@@ -56,7 +55,6 @@ export type PublicProviderOAuthTokenResolver = (
 
 const SYSTEM_CREDENTIALS: Partial<Record<PublicProvider, PublicProviderSystemCredential>> = {
 	BRIGHT_DATA_SERP: "BRIGHTDATA_API_TOKEN",
-	GOOGLE_PLACES: "GOOGLE_PLACES_API_KEY",
 };
 
 export function getPublicProviderCredentialStatus(
@@ -74,7 +72,6 @@ export type ProviderHttpClientOptions = {
 	fetcher?: typeof fetch;
 	credentialResolver?: PublicProviderCredentialResolver;
 	oauthTokenResolver?: PublicProviderOAuthTokenResolver;
-	googlePlacesUnitCostUsd?: number;
 };
 
 type CredentialRequirement =
@@ -131,20 +128,6 @@ export function createBrightDataSerpClient(options: ProviderHttpClientOptions) {
 				{ kind: "system", name: "BRIGHTDATA_API_TOKEN" },
 				options,
 				{ provider: "BRIGHT_DATA_SERP", auditId, requestCount: 1, costUsd: 0.0015 },
-			),
-	};
-}
-
-export function createGooglePlacesClient(options: ProviderHttpClientOptions) {
-	return {
-		placeDetails: (auditId: string, placeId: string, fields = ["id", "displayName", "rating", "userRatingCount"]) =>
-			guardedFetch(
-				"GOOGLE_PLACES",
-				`https://places.googleapis.com/v1/places/${encodeURIComponent(placeId)}`,
-				(apiKey) => ({ headers: { "x-goog-api-key": apiKey, "x-goog-fieldmask": fields.join(",") } }),
-				{ kind: "system", name: "GOOGLE_PLACES_API_KEY" },
-				options,
-				{ provider: "GOOGLE_PLACES", auditId, requestCount: 1, costUsd: options.googlePlacesUnitCostUsd ?? NaN },
 			),
 	};
 }

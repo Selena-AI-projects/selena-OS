@@ -177,13 +177,6 @@ export const ENV_REGISTRY: EnvVarSpec[] = [
 		description: "BrightData API token.",
 	},
 	{
-		name: "GOOGLE_PLACES_API_KEY",
-		scope: "server",
-		requiredBy: "optional",
-		credential: true,
-		description: "Google Places API (New) key for gated public place evidence.",
-	},
-	{
 		name: "OXYLABS_USERNAME",
 		scope: "server",
 		requiredBy: "dynamic-scrape-targets",

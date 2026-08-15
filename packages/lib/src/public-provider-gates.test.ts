@@ -2,7 +2,6 @@ import { describe, expect, it, vi } from "vitest";
 import {
 	createBrightDataSerpClient,
 	createGoogleGbpReviewsClient,
-	createGooglePlacesClient,
 	createMetaInstagramClient,
 	GBP_RAW_RETENTION_DAYS,
 	getPublicProviderCredentialStatus,
@@ -37,22 +36,6 @@ describe("public provider gates", () => {
 		for (let index = 0; index < 166; index++) await client.search("audit-a", `brand ${index}`);
 		await expect(client.search("audit-a", "last")).rejects.toThrow("AUDIT_COST_LIMIT_EXCEEDED");
 		expect(fetcher).toHaveBeenCalledTimes(166);
-	});
-
-	it("requires an explicit Google Places unit price and preserves field masks", async () => {
-		const fetcher = vi.fn().mockImplementation(() => Promise.resolve(response({ id: "place-1" })));
-		const ledger = new PublicProviderCostLedger();
-		const client = createGooglePlacesClient({
-			flags: { GOOGLE_PLACES: true },
-			ledger,
-			credentialResolver: () => "fixture",
-			fetcher,
-			googlePlacesUnitCostUsd: 0.01,
-		});
-		await client.placeDetails("audit-a", "place-1");
-		expect(fetcher.mock.calls[0]?.[1]).toMatchObject({
-			headers: expect.objectContaining({ "x-goog-fieldmask": "id,displayName,rating,userRatingCount" }),
-		});
 	});
 
 	it("allows GBP and Meta only through OAuth-shaped clients", async () => {
@@ -103,7 +86,7 @@ describe("public provider gates", () => {
 		const resolver = vi.fn((name: string) => (name === "BRIGHTDATA_API_TOKEN" ? "never-return-this" : undefined));
 
 		expect(getPublicProviderCredentialStatus("BRIGHT_DATA_SERP", resolver)).toBe("PRESENT");
-		expect(getPublicProviderCredentialStatus("GOOGLE_PLACES", resolver)).toBe("MISSING");
+		expect(getPublicProviderCredentialStatus("BRIGHT_DATA_SERP", () => undefined)).toBe("MISSING");
 		expect(getPublicProviderCredentialStatus("META_INSTAGRAM", resolver)).toBe("OAUTH_REQUIRED");
 	});
 

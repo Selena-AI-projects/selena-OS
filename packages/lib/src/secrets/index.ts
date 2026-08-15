@@ -5,11 +5,17 @@ export {
 	EncryptionKeyError,
 	encryptSecret,
 	getKeyring,
-	keyId,
 	type Keyring,
+	keyId,
 	RETIRED_KEYS_ENV,
 	SecretDecryptError,
 	UnknownKeyError,
 } from "./crypto";
 export { startCredentialRefresh } from "./refresh";
-export { clearCredentialOverlay, encryptCredential, getCredential, refreshCredentialOverlay } from "./store";
+export {
+	clearCredentialOverlay,
+	encryptCredential,
+	getCredential,
+	refreshCredentialOverlay,
+	storeCredential,
+} from "./store";

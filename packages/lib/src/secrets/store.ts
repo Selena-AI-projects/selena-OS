@@ -82,3 +82,23 @@ export async function encryptCredential(name: string, value: string): Promise<En
 	}
 	return encryptSecret(value, { key: keyring.primary, aad: aadForName(name) });
 }
+
+/** Encrypt and upsert one credential, then make the new value available to
+ * providers in this process. The plaintext is never returned or persisted. */
+export async function storeCredential(name: string, value: string): Promise<{ runtimeRefreshed: boolean }> {
+	const encryptedValue = await encryptCredential(name, value);
+	await db
+		.insert(secrets)
+		.values({ name, encryptedValue })
+		.onConflictDoUpdate({
+			target: secrets.name,
+			set: { encryptedValue, updatedAt: new Date() },
+		});
+	try {
+		await refreshCredentialOverlay();
+		return { runtimeRefreshed: true };
+	} catch {
+		console.error("[secrets] credential stored; in-process refresh failed and the scheduled refresh will retry");
+		return { runtimeRefreshed: false };
+	}
+}
