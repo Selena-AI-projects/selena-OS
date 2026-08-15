@@ -4,6 +4,7 @@ export {
 } from "./brand-plans";
 export {
 	assertDirectDispatchAllowed,
+	assertTransportAllowed,
 	type ControlledCycleState,
 	cardinalityExceeded,
 	isMaintenanceEnabled,

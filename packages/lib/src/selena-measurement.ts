@@ -33,6 +33,8 @@ export function createNoopMeasurementAdapter(channel: SelenaMeasurementChannel):
 	return {
 		channel,
 		async measure(permit) {
+			// The real adapter supplies the same state guard before provider
+			// transport; the noop adapter keeps the contract testable without calls.
 			if (permit.channel !== channel) throw new Error("MEASUREMENT_CHANNEL_MISMATCH");
 			return { dispatchKey: permit.dispatchKey, status: "queued" };
 		},

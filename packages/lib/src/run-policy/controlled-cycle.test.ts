@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { assertDirectDispatchAllowed, cardinalityExceeded, isMaintenanceEnabled } from "./controlled-cycle";
+import { assertDirectDispatchAllowed, assertTransportAllowed, cardinalityExceeded, isMaintenanceEnabled } from "./controlled-cycle";
 
 const base = {
 	activeMaintenanceJobs: 0,
@@ -38,5 +38,19 @@ describe("controlled cycle guards", () => {
 
 	it("allows a clean first dispatch", () => {
 		expect(() => assertDirectDispatchAllowed(base)).not.toThrow();
+	});
+
+	it("blocks global and order stops before transport and records an audit event", () => {
+		const events: string[] = [];
+		for (const stop of ["globalEmergencyStop", "orderStopped"] as const) {
+			const state = { ...base, [stop]: true, audit: (event: { type: string }) => events.push(event.type) };
+			expect(() => assertTransportAllowed(state)).toThrow(stop === "globalEmergencyStop" ? "SELENA_GLOBAL_EMERGENCY_STOP" : "SELENA_ORDER_STOPPED");
+		}
+		expect(events).toEqual(["GLOBAL_EMERGENCY_STOP", "ORDER_STOPPED"]);
+	});
+
+	it("blocks the next run at expected_runs + 1", () => {
+		expect(cardinalityExceeded(7, 90, base)).toBe(true);
+		expect(cardinalityExceeded(6, 90, base)).toBe(false);
 	});
 });

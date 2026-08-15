@@ -11,5 +11,5 @@
 7. Re-enable only after owner approval and a successful fixture canary.
 
 Rollback is not verified for production until the production PostgreSQL and
-recoverable backup/PITR gate exists.
-
+recoverable backup/PITR gate exists. Staging rollback may be exercised between
+immutable RC4 and RC2 images without touching production.
