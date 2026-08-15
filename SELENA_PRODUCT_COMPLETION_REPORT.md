@@ -2,8 +2,7 @@
 
 Date: 2026-08-15  
 Release line: `release/selena-visibility-mvp`  
-Release line status: branch is after RC4 postflight; origin/staging are RC4 until
-the RC5 push and deployment complete. Immutable RC4 remains at
+Release candidate: `selena-visibility-mvp-rc5` at final HEAD. Immutable RC4 remains at
 `9513e7aa53ac408cca8608fa1c4403f60256bae2`.
 
 ## Result
@@ -52,13 +51,21 @@ The current branch is intentionally not described as RC5 until the final
 quality gates, GitHub-tracked Railway staging deployment and browser postflight
 have passed. RC4 is not moved or deleted.
 
-Current RC5 blocker: Railway source-connect was attempted for both existing
-staging web and worker services with repository
-`parkourcafe/selena-ai-visibility` and branch
-`release/selena-visibility-mvp`; Railway returned `User does not have access to
-the repo` for both services. Existing RC4 staging remains running and was not
-changed. The owner must repair the Railway GitHub integration/repository access
-before RC5 can be deployed from tracked source.
+The earlier Railway GitHub access blocker was resolved by the owner. RC5 was
+then deployed from the tracked GitHub branch to staging only.
+
+RC5 deployment evidence:
+
+- web `39a4772f-c990-4e06-a7ca-5769177fd676`, SUCCESS, image
+  `sha256:13b1d768e3c77458b8e407448863995b9b32d92dbe5cb1218622d74df4a7c46a`
+- worker `02527bc9-0808-476b-9349-d576f284edeb`, SUCCESS, image
+  `sha256:1da3e3c9e6171407b73b4d00aa8a34d768dfe6c68934874ee255a12043760e73`
+- source commit `f9edcd8ff05483007094416f6d4a7576e191168d`
+- Railway config `/railway.json`, builder `DOCKERFILE`, path
+  `docker/Dockerfile`
+- `/api/setup-status` and `/selena`: HTTP 200
+- worker log: `SCHEDULE_MAINTENANCE_ENABLED=false`, worker ready
+- provider/payment/measurement calls: 0; production unchanged
 
 ## Release safety
 
@@ -86,8 +93,17 @@ answer text is absent; the reproducible queue is
 | Canonical reporting | PASS | Canonical report/export parity and provenance are covered by existing tests |
 | Client flow and PWA | PASS | Existing Selena routes and fixture flow cover the MVP boundary |
 | Provider and secret boundary | PASS | Encrypted credential boundary; no plaintext output |
-| Staging readiness | PASS | RC4 web/worker, fixture-only postflight and browser E2E verified |
+| Staging readiness | PASS | RC5 web/worker from GitHub-tracked Dockerfile, fixture-only postflight and browser E2E verified |
 | Production readiness | BLOCKED | Production DB/backup/PITR is owner-controlled |
+
+## RC5 browser postflight
+
+The RC5 browser postflight loaded `/selena` with meaningful content and no
+console errors. Submitting `http://127.0.0.1` produced the expected
+`Private hosts are not allowed` rejection. `/app/selena` redirected to the
+login boundary with the expected return path. The health/API checks and worker
+postflight remained fixture-only; no provider, payment or measurement call was
+made.
 
 ## RC4 staging deployment evidence
 
