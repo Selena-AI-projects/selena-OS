@@ -2,16 +2,16 @@
 
 Date: 2026-08-15  
 Release line: `release/selena-visibility-mvp`  
-Release candidate: `selena-visibility-mvp-rc5` at final HEAD. Immutable RC4 remains at
-`9513e7aa53ac408cca8608fa1c4403f60256bae2`.
+Release candidate: `selena-visibility-mvp-rc6` at final HEAD. Immutable RC4 remains at
+`9513e7aa53ac408cca8608fa1c4403f60256bae2`; immutable RC5 remains at
+`918176c3cbc4b4b7484608d8fa91ebe402afde9a`.
 
 ## Result
 
-`RC4 STAGING VERIFIED — PRODUCTION OWNER GATE REMAINS`. Both RC4 application
-services reached terminal `SUCCESS` in Railway staging and the browser E2E
-completed in fixture-only mode. Production PostgreSQL, backup/PITR, DNS,
-payments and real providers remain intentionally inactive. The Selena-scoped
-changes lint, typecheck, tests and build successfully.
+`RC6 STAGING ACCEPTED — OWNER CATALOG LOCK REQUIRED`. RC6 web and worker reached
+terminal `SUCCESS` in Railway staging and browser acceptance completed in
+fixture-only mode. Production PostgreSQL, backup/PITR, DNS, payments and real
+providers remain intentionally inactive.
 
 ## Verified
 
@@ -38,18 +38,19 @@ changes lint, typecheck, tests and build successfully.
 | RC4 Railway staging deployment | PASS | Web `a7a3bc26-172a-4367-9b6c-40b9cad89a4e`; worker `e0c52d08-5818-404d-be06-366b7545809e`; both `SUCCESS` and `RUNNING` |
 | Browser E2E against RC4 staging | PASS | Public page render, no console errors, SSRF rejection and authenticated-route redirect verified |
 | RC5 tracked Railway build targets | PASS (local) | `railway.json` selects `docker/Dockerfile`; web and worker final targets build successfully |
+| RC6 catalog contracts | PASS | Four locked plans, exact models, channel separation, cardinality, caps, retry reserve and Growth scope gates |
+| RC6 staging deployment | PASS | Final web `d040633d-72c3-4604-b38b-fc4acb4bdfa0`; worker `29665e7c-1803-475e-b34c-226bfdbf73d3`; both SUCCESS |
+| RC6 browser acceptance | PASS | Four plan cards/prices/channels, zero console errors, SSRF rejection and auth boundary |
 
-## RC5 continuation
+## RC6 continuation
 
-The current working tree adds a provider-neutral payment boundary that is
-disabled by default, test-mode only until explicit owner input, and validates
-HMAC webhook signatures and legal state transitions. No Stripe adapter,
-checkout session, payment call, or provider call is enabled. Required owner
-inputs are listed in `OWNER_PAYMENT_INPUTS.md`.
+RC6 adds the Selena-specific versioned catalog `selena-catalog-rc6-v1`, four
+tariffs, exact Visitor/API channel and model allowlists, immutable quote/order
+lock helpers, hard cardinality/provider/order/retry caps and Growth scope gates.
+Payment remains provider-neutral and test-only; no checkout session, payment
+call or provider call is enabled.
 
-The current branch is intentionally not described as RC5 until the final
-quality gates, GitHub-tracked Railway staging deployment and browser postflight
-have passed. RC4 is not moved or deleted.
+RC4 and RC5 were not moved or deleted.
 
 The earlier Railway GitHub access blocker was resolved by the owner. RC5 was
 then deployed from the tracked GitHub branch to staging only.
@@ -95,6 +96,23 @@ answer text is absent; the reproducible queue is
 | Provider and secret boundary | PASS | Encrypted credential boundary; no plaintext output |
 | Staging readiness | PASS | RC5 web/worker from GitHub-tracked Dockerfile, fixture-only postflight and browser E2E verified |
 | Production readiness | BLOCKED | Production DB/backup/PITR is owner-controlled |
+
+## RC6 deployment and browser postflight
+
+Source commit: `c853f75a4f1a1a0601c67ed5b2292719cc0afc39`. Final web image digest:
+`sha256:6f7b724fb9c537d8b5847ee6d5093e01ac60f4fa570ca7195c260fec2ea98dc4`.
+Final worker image digest:
+`sha256:093aba6d01b1fdf81e9a55d899a2ce755999082366f940fbf68f6f854b3a37c8`.
+Tracked Railway config used `/railway.json` with `docker/Dockerfile`.
+`/api/setup-status` and `/selena` returned 200; worker was ready with
+`SCHEDULE_MAINTENANCE_ENABLED=false`. Provider calls, payment charges and
+measurement jobs were 0.
+
+Browser verified all four plans, exact prices, Visitor/API labels and Growth
+manual approval text with zero console errors. The private-host fixture was
+rejected with `Private hosts are not allowed`, and `/app/selena` redirected to
+the login boundary. Quote/test-payment behavior is covered by contract/server
+tests; no credentials or real payment action were used in staging.
 
 ## RC5 browser postflight
 
