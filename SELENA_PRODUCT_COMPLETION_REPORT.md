@@ -35,7 +35,7 @@ changes lint, typecheck, tests and build successfully.
 | Full repository lint | DEFERRED | Existing upstream web diagnostics: 33 errors, 133 warnings; changed-scope lint passes |
 | Impeccable detect | DEFERRED | CLI is not installed in this workspace |
 | Production PostgreSQL, backup/PITR and rollback | BLOCKED | Production Railway environment has no services |
-| Browser E2E against current staging | IN PROGRESS | Requires staging deployment of RC4 |
+| Browser E2E against RC4 staging | BLOCKED | RC4 web upload `a7a3bc26-172a-4367-9b6c-40b9cad89a4e` remains `Building`; RC4 worker upload failed; existing RC2 services remain online |
 
 ## Release safety
 
@@ -64,3 +64,13 @@ answer text is absent; the reproducible queue is
 | Client flow and PWA | PASS | Existing Selena routes and fixture flow cover the MVP boundary |
 | Provider and secret boundary | PASS | Encrypted credential boundary; no plaintext output |
 | Staging/production readiness | BLOCKED | Production DB/backup/PITR is owner-controlled |
+
+## RC4 staging deployment evidence
+
+The existing staging URL remains healthy: `/api/setup-status` returned 200 and
+`/selena` returned 200. An unauthenticated public-scan request returned 401 as
+expected. The RC4 web and worker upload attempts were staging-only and made no
+provider or payment calls. Railway accepted the Docker upload context for web,
+but its build did not complete; the worker upload used Railpack and failed
+because the service source has no root start command. The existing RC2 web and
+worker were not replaced.
