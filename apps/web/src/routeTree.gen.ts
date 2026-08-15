@@ -80,6 +80,8 @@ import { Route as ApiV1SelenaPaymentsTestRouteImport } from './routes/api/v1/sel
 import { Route as ApiV1SelenaProjectsIndexRouteImport } from './routes/api/v1/selena/projects/index'
 import { Route as ApiV1SelenaQuotesIndexRouteImport } from './routes/api/v1/selena/quotes/index'
 import { Route as ApiV1SelenaScenariosIndexRouteImport } from './routes/api/v1/selena/scenarios/index'
+import { Route as ApiV1SelenaReadinessScansScanIdRouteImport } from './routes/api/v1/selena/readiness/scans/$scanId'
+import { Route as ApiV1SelenaReadinessScansScanIdFixesFindingIdRouteImport } from './routes/api/v1/selena/readiness/scans/$scanId/fixes/$findingId'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -458,6 +460,18 @@ const ApiV1SelenaScenariosIndexRoute =
     path: '/api/v1/selena/scenarios/',
     getParentRoute: () => rootRouteImport,
   } as any)
+const ApiV1SelenaReadinessScansScanIdRoute =
+  ApiV1SelenaReadinessScansScanIdRouteImport.update({
+    id: '/api/v1/selena/readiness/scans/$scanId',
+    path: '/api/v1/selena/readiness/scans/$scanId',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiV1SelenaReadinessScansScanIdFixesFindingIdRoute =
+  ApiV1SelenaReadinessScansScanIdFixesFindingIdRouteImport.update({
+    id: '/fixes/$findingId',
+    path: '/fixes/$findingId',
+    getParentRoute: () => ApiV1SelenaReadinessScansScanIdRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -530,6 +544,8 @@ export interface FileRoutesByFullPath {
   '/api/v1/selena/projects/': typeof ApiV1SelenaProjectsIndexRoute
   '/api/v1/selena/quotes/': typeof ApiV1SelenaQuotesIndexRoute
   '/api/v1/selena/scenarios/': typeof ApiV1SelenaScenariosIndexRoute
+  '/api/v1/selena/readiness/scans/$scanId': typeof ApiV1SelenaReadinessScansScanIdRouteWithChildren
+  '/api/v1/selena/readiness/scans/$scanId/fixes/$findingId': typeof ApiV1SelenaReadinessScansScanIdFixesFindingIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -598,6 +614,8 @@ export interface FileRoutesByTo {
   '/api/v1/selena/projects': typeof ApiV1SelenaProjectsIndexRoute
   '/api/v1/selena/quotes': typeof ApiV1SelenaQuotesIndexRoute
   '/api/v1/selena/scenarios': typeof ApiV1SelenaScenariosIndexRoute
+  '/api/v1/selena/readiness/scans/$scanId': typeof ApiV1SelenaReadinessScansScanIdRouteWithChildren
+  '/api/v1/selena/readiness/scans/$scanId/fixes/$findingId': typeof ApiV1SelenaReadinessScansScanIdFixesFindingIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -672,6 +690,8 @@ export interface FileRoutesById {
   '/api/v1/selena/projects/': typeof ApiV1SelenaProjectsIndexRoute
   '/api/v1/selena/quotes/': typeof ApiV1SelenaQuotesIndexRoute
   '/api/v1/selena/scenarios/': typeof ApiV1SelenaScenariosIndexRoute
+  '/api/v1/selena/readiness/scans/$scanId': typeof ApiV1SelenaReadinessScansScanIdRouteWithChildren
+  '/api/v1/selena/readiness/scans/$scanId/fixes/$findingId': typeof ApiV1SelenaReadinessScansScanIdFixesFindingIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -746,6 +766,8 @@ export interface FileRouteTypes {
     | '/api/v1/selena/projects/'
     | '/api/v1/selena/quotes/'
     | '/api/v1/selena/scenarios/'
+    | '/api/v1/selena/readiness/scans/$scanId'
+    | '/api/v1/selena/readiness/scans/$scanId/fixes/$findingId'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -814,6 +836,8 @@ export interface FileRouteTypes {
     | '/api/v1/selena/projects'
     | '/api/v1/selena/quotes'
     | '/api/v1/selena/scenarios'
+    | '/api/v1/selena/readiness/scans/$scanId'
+    | '/api/v1/selena/readiness/scans/$scanId/fixes/$findingId'
   id:
     | '__root__'
     | '/'
@@ -887,6 +911,8 @@ export interface FileRouteTypes {
     | '/api/v1/selena/projects/'
     | '/api/v1/selena/quotes/'
     | '/api/v1/selena/scenarios/'
+    | '/api/v1/selena/readiness/scans/$scanId'
+    | '/api/v1/selena/readiness/scans/$scanId/fixes/$findingId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -928,6 +954,7 @@ export interface RootRouteChildren {
   ApiV1SelenaProjectsIndexRoute: typeof ApiV1SelenaProjectsIndexRoute
   ApiV1SelenaQuotesIndexRoute: typeof ApiV1SelenaQuotesIndexRoute
   ApiV1SelenaScenariosIndexRoute: typeof ApiV1SelenaScenariosIndexRoute
+  ApiV1SelenaReadinessScansScanIdRoute: typeof ApiV1SelenaReadinessScansScanIdRouteWithChildren
 }
 
 declare module '@tanstack/react-router' {
@@ -1429,6 +1456,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiV1SelenaScenariosIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/v1/selena/readiness/scans/$scanId': {
+      id: '/api/v1/selena/readiness/scans/$scanId'
+      path: '/api/v1/selena/readiness/scans/$scanId'
+      fullPath: '/api/v1/selena/readiness/scans/$scanId'
+      preLoaderRoute: typeof ApiV1SelenaReadinessScansScanIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/v1/selena/readiness/scans/$scanId/fixes/$findingId': {
+      id: '/api/v1/selena/readiness/scans/$scanId/fixes/$findingId'
+      path: '/fixes/$findingId'
+      fullPath: '/api/v1/selena/readiness/scans/$scanId/fixes/$findingId'
+      preLoaderRoute: typeof ApiV1SelenaReadinessScansScanIdFixesFindingIdRouteImport
+      parentRoute: typeof ApiV1SelenaReadinessScansScanIdRoute
+    }
   }
 }
 
@@ -1558,6 +1599,21 @@ const ApiV1PromptsPromptIdRouteChildren: ApiV1PromptsPromptIdRouteChildren = {
 const ApiV1PromptsPromptIdRouteWithChildren =
   ApiV1PromptsPromptIdRoute._addFileChildren(ApiV1PromptsPromptIdRouteChildren)
 
+interface ApiV1SelenaReadinessScansScanIdRouteChildren {
+  ApiV1SelenaReadinessScansScanIdFixesFindingIdRoute: typeof ApiV1SelenaReadinessScansScanIdFixesFindingIdRoute
+}
+
+const ApiV1SelenaReadinessScansScanIdRouteChildren: ApiV1SelenaReadinessScansScanIdRouteChildren =
+  {
+    ApiV1SelenaReadinessScansScanIdFixesFindingIdRoute:
+      ApiV1SelenaReadinessScansScanIdFixesFindingIdRoute,
+  }
+
+const ApiV1SelenaReadinessScansScanIdRouteWithChildren =
+  ApiV1SelenaReadinessScansScanIdRoute._addFileChildren(
+    ApiV1SelenaReadinessScansScanIdRouteChildren,
+  )
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AuthedRoute: AuthedRouteWithChildren,
@@ -1597,6 +1653,8 @@ const rootRouteChildren: RootRouteChildren = {
   ApiV1SelenaProjectsIndexRoute: ApiV1SelenaProjectsIndexRoute,
   ApiV1SelenaQuotesIndexRoute: ApiV1SelenaQuotesIndexRoute,
   ApiV1SelenaScenariosIndexRoute: ApiV1SelenaScenariosIndexRoute,
+  ApiV1SelenaReadinessScansScanIdRoute:
+    ApiV1SelenaReadinessScansScanIdRouteWithChildren,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
