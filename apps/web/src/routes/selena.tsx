@@ -79,7 +79,7 @@ function PlanCard({ plan }: { plan: SelenaPlan }) {
 		<article className="rounded-lg border p-4">
 			<div className="flex items-start justify-between gap-3">
 				<h3 className="font-semibold">{plan.name}</h3>
-				<span className="text-lg font-bold tabular-nums">${plan.price.toLocaleString()} <span className="text-xs font-normal text-muted-foreground">{interval}</span></span>
+				<span className="text-lg font-bold tabular-nums">${plan.price.toLocaleString("en-US")} <span className="text-xs font-normal text-muted-foreground">{interval}</span></span>
 			</div>
 			<p className="mt-2 text-sm text-muted-foreground">{plan.channelScope.join(" + ")} · {plan.systems.length} systems</p>
 			<p className="mt-1 text-sm text-muted-foreground">{plan.scenarioLimit === null ? "Custom locked scenarios" : `Up to ${plan.scenarioLimit} language scenarios`} · {plan.repeatCount ?? "locked"} repeat(s)</p>
