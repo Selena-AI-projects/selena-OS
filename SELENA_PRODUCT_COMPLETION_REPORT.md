@@ -52,6 +52,14 @@ The current branch is intentionally not described as RC5 until the final
 quality gates, GitHub-tracked Railway staging deployment and browser postflight
 have passed. RC4 is not moved or deleted.
 
+Current RC5 blocker: Railway source-connect was attempted for both existing
+staging web and worker services with repository
+`parkourcafe/selena-ai-visibility` and branch
+`release/selena-visibility-mvp`; Railway returned `User does not have access to
+the repo` for both services. Existing RC4 staging remains running and was not
+changed. The owner must repair the Railway GitHub integration/repository access
+before RC5 can be deployed from tracked source.
+
 ## Release safety
 
 Real provider, payment and Elmo measurement calls remain disabled. Production
