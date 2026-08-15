@@ -11,7 +11,7 @@ function PublicSelenaScan() {
 	const [website, setWebsite] = useState("");
 	const [result, setResult] = useState<{
 		id: string;
-		result: { suggestedBrandName: string; domain: string; excerpt: string };
+		result: { suggestedBrandName: string; domain: string; excerpt: string; readiness?: { score: number; findings: Array<{ severity: string; statement: string; evidence: string }> } };
 	} | null>(null);
 	const [error, setError] = useState("");
 	const [pending, setPending] = useState(false);
@@ -61,6 +61,12 @@ function PublicSelenaScan() {
 				<section className="rounded-lg border p-5">
 					<p className="text-sm text-muted-foreground">Preview for {result.result.domain}</p>
 					<h2 className="mt-1 text-2xl font-semibold">{result.result.suggestedBrandName}</h2>
+					{result.result.readiness && <div className="mt-5 rounded-md bg-muted/50 p-4">
+						<p className="text-sm text-muted-foreground">Website Public Readiness</p>
+						<p className="mt-1 text-4xl font-semibold tabular-nums">{result.result.readiness.score}<span className="text-lg text-muted-foreground">/100</span></p>
+						<p className="mt-2 text-xs text-muted-foreground">Readiness — это техническая/контентная готовность сайта, а не фактическая видимость или рекомендация в ChatGPT.</p>
+						{result.result.readiness.findings.slice(0, 3).map((item) => <div key={`${item.severity}:${item.statement}`} className="mt-3 border-t pt-3 text-sm"><span className="font-medium">{item.severity}</span> {item.statement}<p className="mt-1 text-xs text-muted-foreground">Evidence: {item.evidence}</p></div>)}
+					</div>}
 					<p className="mt-4 whitespace-pre-wrap text-sm">
 						{result.result.excerpt || "No public excerpt was available."}
 					</p>
