@@ -2,9 +2,9 @@
 
 Date: 2026-08-15  
 Release line: `release/selena-visibility-mvp`  
-Release candidate: `selena-visibility-mvp-rc4` at
-`9513e7aa53ac408cca8608fa1c4403f60256bae2`
-Postflight report commit before this update: `d418f434f967138b76fe15e3a103cf8d5481fd35`
+Release line status: branch is after RC4 postflight; origin/staging are RC4 until
+the RC5 push and deployment complete. Immutable RC4 remains at
+`9513e7aa53ac408cca8608fa1c4403f60256bae2`.
 
 ## Result
 
@@ -18,12 +18,12 @@ changes lint, typecheck, tests and build successfully.
 
 | Area | Result | Evidence |
 | --- | --- | --- |
-| Selena flow, quote, payment boundary and state handling | PASS | Existing lib/web tests and fixture flow |
+| Selena flow, quote, payment boundary and state handling | PASS | Existing lib/web tests and fixture flow; RC5 adds provider-neutral test-mode payment contract |
 | Recommendation grounding and tenant isolation | PASS | Recommendation and persistence tests |
 | Provider/credential boundary and Google Places removal | PASS | Provider-gate tests; active source/UI scan |
-| Global emergency stop and order stop before transport | PASS (RC4 code) | `assertTransportAllowed` guard and audit-event regression tests |
-| Scheduler/direct-dispatch exclusivity | PASS | Controlled-cycle tests and `SCHEDULE_MAINTENANCE_ENABLED=false` worker configuration |
-| Expected-runs cardinality | PASS | Boundary tests block the next run above expected cardinality |
+| Global emergency stop and order stop before transport | PASS (RC4 code) | `assertTransportAllowed` guard and audit-event regression tests; must remain a release-worker gate |
+| Scheduler/direct-dispatch exclusivity | PASS | Controlled-cycle tests and `SCHEDULE_MAINTENANCE_ENABLED=false` worker configuration; no recurring maintenance fan-out |
+| Expected-runs cardinality | PASS | Boundary tests block `expected_runs + 1` |
 | Website Collector and SSRF policy | PASS | Collector/security tests |
 | Lib tests | PASS | 46 files, 545 tests |
 | Web tests | PASS | 13 files, 237 tests |
@@ -38,6 +38,19 @@ changes lint, typecheck, tests and build successfully.
 | Production PostgreSQL, backup/PITR and rollback | BLOCKED | Production Railway environment has no services |
 | RC4 Railway staging deployment | PASS | Web `a7a3bc26-172a-4367-9b6c-40b9cad89a4e`; worker `e0c52d08-5818-404d-be06-366b7545809e`; both `SUCCESS` and `RUNNING` |
 | Browser E2E against RC4 staging | PASS | Public page render, no console errors, SSRF rejection and authenticated-route redirect verified |
+| RC5 tracked Railway build targets | PASS (local) | `railway.json` selects `docker/Dockerfile`; web and worker final targets build successfully |
+
+## RC5 continuation
+
+The current working tree adds a provider-neutral payment boundary that is
+disabled by default, test-mode only until explicit owner input, and validates
+HMAC webhook signatures and legal state transitions. No Stripe adapter,
+checkout session, payment call, or provider call is enabled. Required owner
+inputs are listed in `OWNER_PAYMENT_INPUTS.md`.
+
+The current branch is intentionally not described as RC5 until the final
+quality gates, GitHub-tracked Railway staging deployment and browser postflight
+have passed. RC4 is not moved or deleted.
 
 ## Release safety
 

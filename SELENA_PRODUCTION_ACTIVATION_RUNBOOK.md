@@ -1,7 +1,7 @@
 # Selena AI Visibility — production activation runbook
 
 This runbook is intentionally stopped before paid infrastructure or live
-provider calls. RC4 staging remains fixture-only.
+provider calls. RC4 remains immutable; RC5 staging must remain fixture-only.
 
 ## Preconditions
 
@@ -15,12 +15,17 @@ provider calls. RC4 staging remains fixture-only.
 6. Keep provider/payment flags disabled and
    `SCHEDULE_MAINTENANCE_ENABLED=false`.
 
-## Staging RC4 canary
+## Staging RC5 canary
 
-Deploy the immutable `selena-visibility-mvp-rc4` to the existing staging
+Deploy the immutable `selena-visibility-mvp-rc5` from the tracked GitHub branch
+and Railway `railway.json`/`docker/Dockerfile` to the existing staging
 environment only. Verify `/api/setup-status` and `/selena` return 200, worker
 logs show maintenance disabled, and the browser fixture flow produces zero
 provider/payment calls before considering the candidate for activation.
+
+Payment remains disabled/test-mode only. Do not create a checkout session or
+enable live mode until the owner supplies `OWNER_PAYMENT_INPUTS.md` and gives
+the exact authorization `PAYMENTS GO`.
 
 ## Controlled launch
 

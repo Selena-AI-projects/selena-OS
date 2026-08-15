@@ -1,6 +1,9 @@
 # Elmo 
 # Supports: web app (Nitro server) and worker
 
+# Build-time selector used by the final runtime stage.
+ARG RAILWAY_SERVICE_NAME=web
+
 # Base stage with Node.js
 FROM node:24-alpine AS base
 RUN corepack enable pnpm
@@ -112,3 +115,6 @@ USER worker
 
 ENTRYPOINT ["/entrypoint.sh"]
 CMD ["npx", "tsx", "src/index.ts"]
+
+# The service name selects the final runtime stage: web or worker.
+FROM ${RAILWAY_SERVICE_NAME} AS final
