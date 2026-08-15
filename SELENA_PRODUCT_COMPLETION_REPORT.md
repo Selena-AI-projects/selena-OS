@@ -12,8 +12,8 @@ separate from observed AI visibility.
 
 Local contracts tests/typecheck, lib typecheck, web tests, web build and
 changed-scope lint passed. Staging web deployment
-`ea26ea89-9955-4283-9f01-ebd1fa1f65f8` and worker deployment
-`967a33d8-1e23-4af0-b103-9f49957f4ffc` are `SUCCESS` on this commit;
+`356822e9-eddd-484d-8073-843e99be038a` and worker deployment
+`1d1cb57f-d467-4013-8cf1-7d5486eba5b3` are `SUCCESS` on commit `f23ee36e`;
 `/check`, `/selena` and `/api/setup-status` returned HTTP 200.
 
 Browser acceptance verified pricing, SSRF rejection, a real readiness result
@@ -21,10 +21,10 @@ for `example.com`, and the expanded fix preview with the explicit “nothing is
 applied automatically” guard. Worker logs confirm maintenance is disabled and
 the worker is ready. The readiness result now contains deterministic
 block-level citability provenance; the OSS registry is documented in
-`SELENA_RC6_OSS_COMPONENTS.md`. Remaining v1.2 scope is server-persisted
-Verify/Compare endpoints. The persisted scan and fix routes are deployed
-behind the existing API authentication boundary; unauthenticated probes
-returned 401.
+`SELENA_RC6_OSS_COMPONENTS.md`. The persisted scan, fix and verification
+routes are deployed behind the existing API authentication boundary;
+unauthenticated probes returned 401. Verification creates a new scan record
+and returns a readiness-only comparison with `providerCalls: 0`.
 
 Date: 2026-08-15  
 Release line: `release/selena-visibility-mvp`  
