@@ -7,10 +7,28 @@ export const readinessFindingSchema = z.object({ id: z.string(), severity: z.enu
 export type ReadinessFinding = z.infer<typeof readinessFindingSchema>;
 export const readinessResultSchema = z.object({ score: z.number().int().min(0).max(100), scoringModelVersion: z.literal(READINESS_SCORING_MODEL_VERSION), components: z.array(readinessComponentSchema), findings: z.array(readinessFindingSchema), pagesScanned: z.number().int().min(1).max(5), paidProviderCalls: z.literal(0), visibilityClaim: z.literal("Readiness is technical/content readiness, not observed AI visibility or a ChatGPT recommendation.") });
 export type ReadinessResult = z.infer<typeof readinessResultSchema>;
+export const generatedFixSchema = z.object({ id: z.string(), findingId: z.string(), ruleId: z.string(), ruleVersion: z.string(), title: z.string(), instruction: z.string(), proposedText: z.string(), autoApply: z.literal(false) });
+export type GeneratedFix = z.infer<typeof generatedFixSchema>;
+export const fixPreviewSchema = z.object({ id: z.string(), fixId: z.string(), pageUrl: z.string().url(), before: z.string(), proposedAfter: z.string(), applied: z.literal(false) });
+export type FixPreview = z.infer<typeof fixPreviewSchema>;
+export const readinessComparisonSchema = z.object({ id: z.string(), baselineScore: z.number().int().min(0).max(100), verifiedScore: z.number().int().min(0).max(100), delta: z.number().int(), baselineScoringModelVersion: z.literal(READINESS_SCORING_MODEL_VERSION), verifiedScoringModelVersion: z.literal(READINESS_SCORING_MODEL_VERSION), aiVisibilityCompared: z.literal(false) });
+export type ReadinessComparison = z.infer<typeof readinessComparisonSchema>;
 
 type ReadinessInput = { pageUrl: string; status: number; robots: string | null; canonical: string | null; headings: string[]; visibleText: string; jsonLd: unknown[]; contacts: string[]; services: string[]; metadata: Record<string, string>; internalLinks: string[] };
 const present = (value: unknown) => Array.isArray(value) ? value.length > 0 : typeof value === "string" ? value.trim().length > 0 && value !== "UNKNOWN" : Boolean(value);
 const finding = (pageUrl: string, ruleId: string, severity: ReadinessFinding["severity"], statement: string, evidence: string): ReadinessFinding => ({ id: `${ruleId}:${pageUrl}`, severity, pageUrl, blockId: null, ruleId, ruleVersion: READINESS_SCORING_MODEL_VERSION, statement, evidence, generatedFixId: null });
+
+export function generateReadinessFix(item: ReadinessFinding): GeneratedFix {
+	return generatedFixSchema.parse({ id: `fix:${item.id}`, findingId: item.id, ruleId: item.ruleId, ruleVersion: item.ruleVersion, title: `Improve ${item.ruleId}`, instruction: `Review the evidence for ${item.ruleId} and apply the proposed change on the site.`, proposedText: `Proposed improvement for: ${item.statement}`, autoApply: false });
+}
+
+export function previewReadinessFix(fix: GeneratedFix, item: ReadinessFinding): FixPreview {
+	return fixPreviewSchema.parse({ id: `preview:${fix.id}`, fixId: fix.id, pageUrl: item.pageUrl, before: item.evidence, proposedAfter: fix.proposedText, applied: false });
+}
+
+export function compareReadiness(baseline: ReadinessResult, verified: ReadinessResult): ReadinessComparison {
+	return readinessComparisonSchema.parse({ id: `readiness-compare:${baseline.score}:${verified.score}`, baselineScore: baseline.score, verifiedScore: verified.score, delta: verified.score - baseline.score, baselineScoringModelVersion: baseline.scoringModelVersion, verifiedScoringModelVersion: verified.scoringModelVersion, aiVisibilityCompared: false });
+}
 
 export function scorePublicReadiness(input: ReadinessInput): ReadinessResult {
 	const technical = input.status >= 200 && input.status < 400 ? 100 : 0;
