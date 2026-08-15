@@ -88,7 +88,7 @@ export const createSelenaTestPaymentFn = createServerFn({ method: "POST" })
 		if (payment)
 			await db
 				.update(svOrders)
-				.set({ status: "APPROVED", paidAt: new Date(), updatedAt: new Date() })
+				.set({ status: "PAID_REVIEW_REQUIRED", paidAt: new Date(), updatedAt: new Date() })
 				.where(and(eq(svOrders.id, data.orderId), eq(svOrders.organizationId, context.tenantId)));
 		return payment ?? { status: "SUCCEEDED", duplicate: true, providerEventId: data.providerEventId };
 	});

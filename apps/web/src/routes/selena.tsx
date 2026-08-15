@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { Button } from "@workspace/ui/components/button";
 import { Input } from "@workspace/ui/components/input";
+import { SELENA_CATALOG, type SelenaPlan } from "@workspace/selena-visibility-contracts";
 import { useState } from "react";
 import { runSelenaPublicScanFn } from "../server/selena-public-scan";
 
@@ -35,6 +36,10 @@ function PublicSelenaScan() {
 					Run a public preview without connecting Google, Instagram, Search Console, or any client account.
 				</p>
 			</div>
+			<section aria-labelledby="selena-plans" className="grid gap-3 sm:grid-cols-2">
+				<h2 id="selena-plans" className="sr-only">Selena plans</h2>
+				{Object.values(SELENA_CATALOG).map((plan) => <PlanCard key={plan.planId} plan={plan} />)}
+			</section>
 			<form onSubmit={submit} className="flex gap-3">
 				<Input
 					type="url"
@@ -65,5 +70,21 @@ function PublicSelenaScan() {
 				</section>
 			)}
 		</main>
+	);
+}
+
+function PlanCard({ plan }: { plan: SelenaPlan }) {
+	const interval = plan.billingInterval === "month" ? "/month" : plan.billingInterval === "one_time" ? "one-time" : "90 days";
+	return (
+		<article className="rounded-lg border p-4">
+			<div className="flex items-start justify-between gap-3">
+				<h3 className="font-semibold">{plan.name}</h3>
+				<span className="text-lg font-bold tabular-nums">${plan.price.toLocaleString()} <span className="text-xs font-normal text-muted-foreground">{interval}</span></span>
+			</div>
+			<p className="mt-2 text-sm text-muted-foreground">{plan.channelScope.join(" + ")} · {plan.systems.length} systems</p>
+			<p className="mt-1 text-sm text-muted-foreground">{plan.scenarioLimit === null ? "Custom locked scenarios" : `Up to ${plan.scenarioLimit} language scenarios`} · {plan.repeatCount ?? "locked"} repeat(s)</p>
+			<p className="mt-2 text-xs text-muted-foreground">{plan.verificationLevel === "automated" ? "Automated — not expert verified" : plan.verificationLevel === "expert_verified" ? "Expert Verified" : "Awaiting expert review"}</p>
+			<p className="mt-2 text-xs text-muted-foreground">{plan.purchaseMode === "manual_approval_contact_sales" ? "Manual approval / contact sales" : "Test checkout available in staging"}</p>
+		</article>
 	);
 }
