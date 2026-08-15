@@ -19,8 +19,10 @@ changed-scope lint passed. Staging web deployment
 Browser acceptance verified pricing, SSRF rejection, a real readiness result
 for `example.com`, and the expanded fix preview with the explicit “nothing is
 applied automatically” guard. Worker logs confirm maintenance is disabled and
-the worker is ready. Remaining v1.2 scope includes persisted block-level
-citability, server-persisted Verify/Compare endpoints and the OSS registry.
+the worker is ready. The readiness result now contains deterministic
+block-level citability provenance; the OSS registry is documented in
+`SELENA_RC6_OSS_COMPONENTS.md`. Remaining v1.2 scope is server-persisted
+readiness entities and persisted Verify/Compare endpoints.
 
 Date: 2026-08-15  
 Release line: `release/selena-visibility-mvp`  
