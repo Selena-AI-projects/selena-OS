@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { db } from "@workspace/lib/db/db";
 import { svOrders, svPayments } from "@workspace/lib/db/schema";
+import { SELENA_CHECKOUT_METADATA } from "@workspace/selena-visibility-contracts";
 import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 import { resolveApiKeyAuthContext } from "../../../../../lib/selena-auth-context";
@@ -70,6 +71,7 @@ export const Route = createFileRoute("/api/v1/selena/payments/test")({
 							provider: "test",
 							providerEventId: parsed.data.providerEventId,
 							duplicate: true,
+							checkoutMetadata: SELENA_CHECKOUT_METADATA,
 						},
 					);
 				} catch (error) {

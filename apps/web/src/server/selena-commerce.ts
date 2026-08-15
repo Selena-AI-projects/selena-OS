@@ -2,7 +2,12 @@ import { createServerFn } from "@tanstack/react-start";
 import { db } from "@workspace/lib/db/db";
 import { svOrders, svPayments } from "@workspace/lib/db/schema";
 import { createSelenaRepositories } from "@workspace/lib/selena-visibility-repositories";
-import { calculateQuote, quoteCreateSchema, quotePricingSchema } from "@workspace/selena-visibility-contracts";
+import {
+	calculateQuote,
+	quoteCreateSchema,
+	quotePricingSchema,
+	SELENA_CHECKOUT_METADATA,
+} from "@workspace/selena-visibility-contracts";
 import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 import { resolveSessionAuthContext } from "../lib/selena-auth-context";
@@ -90,5 +95,12 @@ export const createSelenaTestPaymentFn = createServerFn({ method: "POST" })
 				.update(svOrders)
 				.set({ status: "PAID_REVIEW_REQUIRED", paidAt: new Date(), updatedAt: new Date() })
 				.where(and(eq(svOrders.id, data.orderId), eq(svOrders.organizationId, context.tenantId)));
-		return payment ?? { status: "SUCCEEDED", duplicate: true, providerEventId: data.providerEventId };
+		return (
+			payment ?? {
+				status: "SUCCEEDED",
+				duplicate: true,
+				providerEventId: data.providerEventId,
+				checkoutMetadata: SELENA_CHECKOUT_METADATA,
+			}
+		);
 	});

@@ -4,7 +4,10 @@ This template is not approval and does not enable production.
 
 - Release/tag:
 - Configuration Lock hash:
-- Owner legal entity/country:
+- Temporary approved seller legal entity: PT Izi Jiza Bali
+- Official legal entity/country/KYC confirmation:
+- Registered address/NIB/NPWP:
+- Settlement bank details:
 - Payment provider and settlement currency:
 - Tax/refund/Terms/Privacy versions:
 - Production domain/DNS:
