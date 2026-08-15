@@ -79,6 +79,7 @@ import { Route as ApiV1SelenaOrdersIndexRouteImport } from './routes/api/v1/sele
 import { Route as ApiV1SelenaPaymentsTestRouteImport } from './routes/api/v1/selena/payments/test'
 import { Route as ApiV1SelenaProjectsIndexRouteImport } from './routes/api/v1/selena/projects/index'
 import { Route as ApiV1SelenaQuotesIndexRouteImport } from './routes/api/v1/selena/quotes/index'
+import { Route as ApiV1SelenaReadinessVerifyRouteImport } from './routes/api/v1/selena/readiness/verify'
 import { Route as ApiV1SelenaScenariosIndexRouteImport } from './routes/api/v1/selena/scenarios/index'
 import { Route as ApiV1SelenaReadinessScansScanIdRouteImport } from './routes/api/v1/selena/readiness/scans/$scanId'
 import { Route as ApiV1SelenaReadinessScansScanIdFixesFindingIdRouteImport } from './routes/api/v1/selena/readiness/scans/$scanId/fixes/$findingId'
@@ -454,6 +455,12 @@ const ApiV1SelenaQuotesIndexRoute = ApiV1SelenaQuotesIndexRouteImport.update({
   path: '/api/v1/selena/quotes/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiV1SelenaReadinessVerifyRoute =
+  ApiV1SelenaReadinessVerifyRouteImport.update({
+    id: '/api/v1/selena/readiness/verify',
+    path: '/api/v1/selena/readiness/verify',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiV1SelenaScenariosIndexRoute =
   ApiV1SelenaScenariosIndexRouteImport.update({
     id: '/api/v1/selena/scenarios/',
@@ -534,6 +541,7 @@ export interface FileRoutesByFullPath {
   '/app/$brand/settings/prompts': typeof AuthedAppBrandSettingsPromptsRoute
   '/api/v1/prompts/$promptId/snapshot': typeof ApiV1PromptsPromptIdSnapshotRoute
   '/api/v1/selena/payments/test': typeof ApiV1SelenaPaymentsTestRoute
+  '/api/v1/selena/readiness/verify': typeof ApiV1SelenaReadinessVerifyRoute
   '/app/$brand/prompts/': typeof AuthedAppBrandPromptsIndexRoute
   '/app/$brand/settings/': typeof AuthedAppBrandSettingsIndexRoute
   '/api/plausible/js/script/': typeof ApiPlausibleJsScriptIndexRoute
@@ -604,6 +612,7 @@ export interface FileRoutesByTo {
   '/app/$brand/settings/prompts': typeof AuthedAppBrandSettingsPromptsRoute
   '/api/v1/prompts/$promptId/snapshot': typeof ApiV1PromptsPromptIdSnapshotRoute
   '/api/v1/selena/payments/test': typeof ApiV1SelenaPaymentsTestRoute
+  '/api/v1/selena/readiness/verify': typeof ApiV1SelenaReadinessVerifyRoute
   '/app/$brand/prompts': typeof AuthedAppBrandPromptsIndexRoute
   '/app/$brand/settings': typeof AuthedAppBrandSettingsIndexRoute
   '/api/plausible/js/script': typeof ApiPlausibleJsScriptIndexRoute
@@ -680,6 +689,7 @@ export interface FileRoutesById {
   '/_authed/app/$brand/settings/prompts': typeof AuthedAppBrandSettingsPromptsRoute
   '/api/v1/prompts/$promptId/snapshot': typeof ApiV1PromptsPromptIdSnapshotRoute
   '/api/v1/selena/payments/test': typeof ApiV1SelenaPaymentsTestRoute
+  '/api/v1/selena/readiness/verify': typeof ApiV1SelenaReadinessVerifyRoute
   '/_authed/app/$brand/prompts/': typeof AuthedAppBrandPromptsIndexRoute
   '/_authed/app/$brand/settings/': typeof AuthedAppBrandSettingsIndexRoute
   '/api/plausible/js/script/': typeof ApiPlausibleJsScriptIndexRoute
@@ -756,6 +766,7 @@ export interface FileRouteTypes {
     | '/app/$brand/settings/prompts'
     | '/api/v1/prompts/$promptId/snapshot'
     | '/api/v1/selena/payments/test'
+    | '/api/v1/selena/readiness/verify'
     | '/app/$brand/prompts/'
     | '/app/$brand/settings/'
     | '/api/plausible/js/script/'
@@ -826,6 +837,7 @@ export interface FileRouteTypes {
     | '/app/$brand/settings/prompts'
     | '/api/v1/prompts/$promptId/snapshot'
     | '/api/v1/selena/payments/test'
+    | '/api/v1/selena/readiness/verify'
     | '/app/$brand/prompts'
     | '/app/$brand/settings'
     | '/api/plausible/js/script'
@@ -901,6 +913,7 @@ export interface FileRouteTypes {
     | '/_authed/app/$brand/settings/prompts'
     | '/api/v1/prompts/$promptId/snapshot'
     | '/api/v1/selena/payments/test'
+    | '/api/v1/selena/readiness/verify'
     | '/_authed/app/$brand/prompts/'
     | '/_authed/app/$brand/settings/'
     | '/api/plausible/js/script/'
@@ -946,6 +959,7 @@ export interface RootRouteChildren {
   ApiV1PromptsIndexRoute: typeof ApiV1PromptsIndexRoute
   ApiV1ReportsIndexRoute: typeof ApiV1ReportsIndexRoute
   ApiV1SelenaPaymentsTestRoute: typeof ApiV1SelenaPaymentsTestRoute
+  ApiV1SelenaReadinessVerifyRoute: typeof ApiV1SelenaReadinessVerifyRoute
   ApiPlausibleJsScriptIndexRoute: typeof ApiPlausibleJsScriptIndexRoute
   ApiV1SelenaCyclesIndexRoute: typeof ApiV1SelenaCyclesIndexRoute
   ApiV1SelenaFindingsIndexRoute: typeof ApiV1SelenaFindingsIndexRoute
@@ -1449,6 +1463,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiV1SelenaQuotesIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/v1/selena/readiness/verify': {
+      id: '/api/v1/selena/readiness/verify'
+      path: '/api/v1/selena/readiness/verify'
+      fullPath: '/api/v1/selena/readiness/verify'
+      preLoaderRoute: typeof ApiV1SelenaReadinessVerifyRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/v1/selena/scenarios/': {
       id: '/api/v1/selena/scenarios/'
       path: '/api/v1/selena/scenarios'
@@ -1645,6 +1666,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiV1PromptsIndexRoute: ApiV1PromptsIndexRoute,
   ApiV1ReportsIndexRoute: ApiV1ReportsIndexRoute,
   ApiV1SelenaPaymentsTestRoute: ApiV1SelenaPaymentsTestRoute,
+  ApiV1SelenaReadinessVerifyRoute: ApiV1SelenaReadinessVerifyRoute,
   ApiPlausibleJsScriptIndexRoute: ApiPlausibleJsScriptIndexRoute,
   ApiV1SelenaCyclesIndexRoute: ApiV1SelenaCyclesIndexRoute,
   ApiV1SelenaFindingsIndexRoute: ApiV1SelenaFindingsIndexRoute,
