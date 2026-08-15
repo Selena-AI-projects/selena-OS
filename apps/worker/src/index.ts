@@ -1,6 +1,7 @@
 import * as Sentry from "@sentry/node";
 import { getDeployment } from "@workspace/deployment";
 import { getProvider, parseScrapeTargets, validateScrapeTargets } from "@workspace/lib/providers";
+import { isMaintenanceEnabled } from "@workspace/lib/run-policy";
 import { startCredentialRefresh } from "@workspace/lib/secrets";
 import boss from "./boss";
 import { registerHandlers } from "./handlers";
@@ -74,8 +75,13 @@ async function main() {
 	}
 	console.log("Queues created");
 
-	await boss.schedule("schedule-maintenance", "*/5 * * * *", { source: "scheduled" }, { tz: "UTC" });
-	console.log("Scheduled maintenance job (every 5 minutes)");
+	if (isMaintenanceEnabled(process.env.SCHEDULE_MAINTENANCE_ENABLED)) {
+		await boss.schedule("schedule-maintenance", "*/5 * * * *", { source: "scheduled" }, { tz: "UTC" });
+		console.log("Scheduled maintenance job (every 5 minutes)");
+	} else {
+		await boss.unschedule("schedule-maintenance");
+		console.log("Maintenance schedule disabled by SCHEDULE_MAINTENANCE_ENABLED=false");
+	}
 
 	if (process.env.DEPLOYMENT_MODE === "whitelabel") {
 		await boss.schedule("sync-auth0-memberships", "*/15 * * * *", { source: "scheduled" }, { tz: "UTC" });

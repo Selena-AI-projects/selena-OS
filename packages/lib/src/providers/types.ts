@@ -18,6 +18,8 @@ export interface ScrapeResult {
 export interface ProviderOptions {
 	webSearch?: boolean;
 	version?: string;
+	/** Optional per-call output cap; providers must not exceed their global cap. */
+	maxOutputTokens?: number;
 }
 
 export interface StructuredResearchOptions<T> {

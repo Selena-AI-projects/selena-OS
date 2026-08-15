@@ -33,6 +33,20 @@
 		"./entitlements": "./src/entitlements/index.ts",
 		"./run-policy": "./src/run-policy/index.ts",
 		"./usage": "./src/usage/cost.ts"
+		,"./selena-visibility-repositories": "./src/selena-visibility-repositories.ts",
+		"./selena-export": "./src/selena-export.ts",
+		"./selena-measurement": "./src/selena-measurement.ts",
+		"./selena-findings": "./src/selena-findings.ts"
+		,"./selena-dataset-gateway": "./src/selena-dataset-gateway.ts"
+		,"./recommendation-engine": "./src/recommendation-engine.ts"
+		,"./website-collector": "./src/website-collector.ts"
+		,"./website-security": "./src/website-security.ts"
+		,"./selena-monitoring": "./src/selena-monitoring.ts"
+		,"./selena-flow": "./src/selena-flow.ts"
+		,"./public-source-adapters": "./src/public-source-adapters.ts"
+		,"./public-provider-gates": "./src/public-provider-gates.ts"
+		,"./recommendation-persistence": "./src/recommendation-persistence.ts"
+		,"./recommendation-engine": "./src/recommendation-engine.ts"
 	},
 	"dependencies": {
 		"@ai-sdk/anthropic": "^4.0.27",
@@ -43,6 +57,7 @@
 		"@brightdata/sdk": "^1.1.0",
 		"@mozilla/readability": "^0.6.0",
 		"@workspace/config": "workspace:*",
+		"@workspace/selena-visibility-contracts": "workspace:*",
 		"ai": "^7.0.48",
 		"better-auth": "^1.6.26",
 		"dataforseo-client": "^2.1.2",

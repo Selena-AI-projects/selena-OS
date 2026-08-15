@@ -7,6 +7,7 @@ import { mistralApi } from "./registry/mistral-api";
 import { olostep } from "./registry/olostep";
 import { openaiApi } from "./registry/openai-api";
 import { openrouter } from "./registry/openrouter";
+import { openrouterApi } from "./registry/openrouter-api";
 import { oxylabs } from "./registry/oxylabs";
 import { stub } from "./registry/stub";
 import type { ModelConfig, Provider, ProviderAccess } from "./types";
@@ -35,6 +36,7 @@ const providerMap: Record<string, Provider> = {
 	"mistral-api": mistralApi,
 	dataforseo,
 	openrouter,
+	"openrouter-api": openrouterApi,
 	stub,
 };
 

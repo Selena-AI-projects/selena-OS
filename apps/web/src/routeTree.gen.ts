@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthedRouteImport } from './routes/_authed'
+import { Route as SelenaRouteImport } from './routes/selena'
 import { Route as AuthedAdminRouteImport } from './routes/_authed/admin'
 import { Route as AuthedAppRouteImport } from './routes/_authed/app'
 import { Route as AuthedChoosePlanRouteImport } from './routes/_authed/choose-plan'
@@ -27,6 +28,7 @@ import { Route as AuthedAdminWorkflowsRouteImport } from './routes/_authed/admin
 import { Route as AuthedAppIndexRouteImport } from './routes/_authed/app/index'
 import { Route as AuthedAppBrandRouteImport } from './routes/_authed/app/$brand'
 import { Route as AuthedAppNewRouteImport } from './routes/_authed/app/new'
+import { Route as AuthedAppSelenaRouteImport } from './routes/_authed/app/selena'
 import { Route as AuthedReportsIndexRouteImport } from './routes/_authed/reports/index'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
 import { Route as ApiManifestIndexRouteImport } from './routes/api/manifest/index'
@@ -50,6 +52,11 @@ import { Route as ApiV1PromptsIndexRouteImport } from './routes/api/v1/prompts/i
 import { Route as ApiV1PromptsPromptIdRouteImport } from './routes/api/v1/prompts/$promptId'
 import { Route as ApiV1ReportsIndexRouteImport } from './routes/api/v1/reports/index'
 import { Route as ApiV1ReportsReportIdRouteImport } from './routes/api/v1/reports/$reportId'
+import { Route as ApiV1SelenaActionPlanRouteImport } from './routes/api/v1/selena/action-plan'
+import { Route as ApiV1SelenaDashboardRouteImport } from './routes/api/v1/selena/dashboard'
+import { Route as ApiV1SelenaProfilesRouteImport } from './routes/api/v1/selena/profiles'
+import { Route as ApiV1SelenaPublicScanRouteImport } from './routes/api/v1/selena/public-scan'
+import { Route as ApiV1SelenaWebsiteCollectorRouteImport } from './routes/api/v1/selena/website-collector'
 import { Route as ApiV1ToolsAnalyzeRouteImport } from './routes/api/v1/tools/analyze'
 import { Route as AuthedAppBrandPromptsIndexRouteImport } from './routes/_authed/app/$brand/prompts/index'
 import { Route as AuthedAppBrandPromptsPromptIdRouteImport } from './routes/_authed/app/$brand/prompts/$promptId'
@@ -63,6 +70,14 @@ import { Route as AuthedAppBrandSettingsMembersRouteImport } from './routes/_aut
 import { Route as AuthedAppBrandSettingsPromptsRouteImport } from './routes/_authed/app/$brand/settings/prompts'
 import { Route as ApiPlausibleJsScriptIndexRouteImport } from './routes/api/plausible/js/script/index'
 import { Route as ApiV1PromptsPromptIdSnapshotRouteImport } from './routes/api/v1/prompts/$promptId/snapshot'
+import { Route as ApiV1SelenaCyclesIndexRouteImport } from './routes/api/v1/selena/cycles/index'
+import { Route as ApiV1SelenaFindingsIndexRouteImport } from './routes/api/v1/selena/findings/index'
+import { Route as ApiV1SelenaLocksIndexRouteImport } from './routes/api/v1/selena/locks/index'
+import { Route as ApiV1SelenaOrdersIndexRouteImport } from './routes/api/v1/selena/orders/index'
+import { Route as ApiV1SelenaPaymentsTestRouteImport } from './routes/api/v1/selena/payments/test'
+import { Route as ApiV1SelenaProjectsIndexRouteImport } from './routes/api/v1/selena/projects/index'
+import { Route as ApiV1SelenaQuotesIndexRouteImport } from './routes/api/v1/selena/quotes/index'
+import { Route as ApiV1SelenaScenariosIndexRouteImport } from './routes/api/v1/selena/scenarios/index'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -71,6 +86,11 @@ const IndexRoute = IndexRouteImport.update({
 } as any)
 const AuthedRoute = AuthedRouteImport.update({
   id: '/_authed',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SelenaRoute = SelenaRouteImport.update({
+  id: '/selena',
+  path: '/selena',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AuthedAdminRoute = AuthedAdminRouteImport.update({
@@ -152,6 +172,11 @@ const AuthedAppBrandRoute = AuthedAppBrandRouteImport.update({
 const AuthedAppNewRoute = AuthedAppNewRouteImport.update({
   id: '/new',
   path: '/new',
+  getParentRoute: () => AuthedAppRoute,
+} as any)
+const AuthedAppSelenaRoute = AuthedAppSelenaRouteImport.update({
+  id: '/selena',
+  path: '/selena',
   getParentRoute: () => AuthedAppRoute,
 } as any)
 const AuthedReportsIndexRoute = AuthedReportsIndexRouteImport.update({
@@ -275,6 +300,32 @@ const ApiV1ReportsReportIdRoute = ApiV1ReportsReportIdRouteImport.update({
   path: '/api/v1/reports/$reportId',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiV1SelenaActionPlanRoute = ApiV1SelenaActionPlanRouteImport.update({
+  id: '/api/v1/selena/action-plan',
+  path: '/api/v1/selena/action-plan',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiV1SelenaDashboardRoute = ApiV1SelenaDashboardRouteImport.update({
+  id: '/api/v1/selena/dashboard',
+  path: '/api/v1/selena/dashboard',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiV1SelenaProfilesRoute = ApiV1SelenaProfilesRouteImport.update({
+  id: '/api/v1/selena/profiles',
+  path: '/api/v1/selena/profiles',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiV1SelenaPublicScanRoute = ApiV1SelenaPublicScanRouteImport.update({
+  id: '/api/v1/selena/public-scan',
+  path: '/api/v1/selena/public-scan',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiV1SelenaWebsiteCollectorRoute =
+  ApiV1SelenaWebsiteCollectorRouteImport.update({
+    id: '/api/v1/selena/website-collector',
+    path: '/api/v1/selena/website-collector',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiV1ToolsAnalyzeRoute = ApiV1ToolsAnalyzeRouteImport.update({
   id: '/api/v1/tools/analyze',
   path: '/api/v1/tools/analyze',
@@ -352,9 +403,53 @@ const ApiV1PromptsPromptIdSnapshotRoute =
     path: '/snapshot',
     getParentRoute: () => ApiV1PromptsPromptIdRoute,
   } as any)
+const ApiV1SelenaCyclesIndexRoute = ApiV1SelenaCyclesIndexRouteImport.update({
+  id: '/api/v1/selena/cycles/',
+  path: '/api/v1/selena/cycles/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiV1SelenaFindingsIndexRoute =
+  ApiV1SelenaFindingsIndexRouteImport.update({
+    id: '/api/v1/selena/findings/',
+    path: '/api/v1/selena/findings/',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiV1SelenaLocksIndexRoute = ApiV1SelenaLocksIndexRouteImport.update({
+  id: '/api/v1/selena/locks/',
+  path: '/api/v1/selena/locks/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiV1SelenaOrdersIndexRoute = ApiV1SelenaOrdersIndexRouteImport.update({
+  id: '/api/v1/selena/orders/',
+  path: '/api/v1/selena/orders/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiV1SelenaPaymentsTestRoute = ApiV1SelenaPaymentsTestRouteImport.update({
+  id: '/api/v1/selena/payments/test',
+  path: '/api/v1/selena/payments/test',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiV1SelenaProjectsIndexRoute =
+  ApiV1SelenaProjectsIndexRouteImport.update({
+    id: '/api/v1/selena/projects/',
+    path: '/api/v1/selena/projects/',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiV1SelenaQuotesIndexRoute = ApiV1SelenaQuotesIndexRouteImport.update({
+  id: '/api/v1/selena/quotes/',
+  path: '/api/v1/selena/quotes/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiV1SelenaScenariosIndexRoute =
+  ApiV1SelenaScenariosIndexRouteImport.update({
+    id: '/api/v1/selena/scenarios/',
+    path: '/api/v1/selena/scenarios/',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/selena': typeof SelenaRoute
   '/admin': typeof AuthedAdminRouteWithChildren
   '/app': typeof AuthedAppRouteWithChildren
   '/choose-plan': typeof AuthedChoosePlanRoute
@@ -369,6 +464,7 @@ export interface FileRoutesByFullPath {
   '/admin/workflows': typeof AuthedAdminWorkflowsRoute
   '/app/$brand': typeof AuthedAppBrandRouteWithChildren
   '/app/new': typeof AuthedAppNewRoute
+  '/app/selena': typeof AuthedAppSelenaRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/admin/': typeof AuthedAdminIndexRoute
   '/app/': typeof AuthedAppIndexRoute
@@ -387,6 +483,11 @@ export interface FileRoutesByFullPath {
   '/api/v1/competitors/$competitorId': typeof ApiV1CompetitorsCompetitorIdRoute
   '/api/v1/prompts/$promptId': typeof ApiV1PromptsPromptIdRouteWithChildren
   '/api/v1/reports/$reportId': typeof ApiV1ReportsReportIdRoute
+  '/api/v1/selena/action-plan': typeof ApiV1SelenaActionPlanRoute
+  '/api/v1/selena/dashboard': typeof ApiV1SelenaDashboardRoute
+  '/api/v1/selena/profiles': typeof ApiV1SelenaProfilesRoute
+  '/api/v1/selena/public-scan': typeof ApiV1SelenaPublicScanRoute
+  '/api/v1/selena/website-collector': typeof ApiV1SelenaWebsiteCollectorRoute
   '/api/v1/tools/analyze': typeof ApiV1ToolsAnalyzeRoute
   '/app/$brand/': typeof AuthedAppBrandIndexRoute
   '/api/plausible/event/': typeof ApiPlausibleEventIndexRoute
@@ -404,12 +505,21 @@ export interface FileRoutesByFullPath {
   '/app/$brand/settings/members': typeof AuthedAppBrandSettingsMembersRoute
   '/app/$brand/settings/prompts': typeof AuthedAppBrandSettingsPromptsRoute
   '/api/v1/prompts/$promptId/snapshot': typeof ApiV1PromptsPromptIdSnapshotRoute
+  '/api/v1/selena/payments/test': typeof ApiV1SelenaPaymentsTestRoute
   '/app/$brand/prompts/': typeof AuthedAppBrandPromptsIndexRoute
   '/app/$brand/settings/': typeof AuthedAppBrandSettingsIndexRoute
   '/api/plausible/js/script/': typeof ApiPlausibleJsScriptIndexRoute
+  '/api/v1/selena/cycles/': typeof ApiV1SelenaCyclesIndexRoute
+  '/api/v1/selena/findings/': typeof ApiV1SelenaFindingsIndexRoute
+  '/api/v1/selena/locks/': typeof ApiV1SelenaLocksIndexRoute
+  '/api/v1/selena/orders/': typeof ApiV1SelenaOrdersIndexRoute
+  '/api/v1/selena/projects/': typeof ApiV1SelenaProjectsIndexRoute
+  '/api/v1/selena/quotes/': typeof ApiV1SelenaQuotesIndexRoute
+  '/api/v1/selena/scenarios/': typeof ApiV1SelenaScenariosIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/selena': typeof SelenaRoute
   '/choose-plan': typeof AuthedChoosePlanRoute
   '/auth/forgot-password': typeof AuthForgotPasswordRoute
   '/auth/login': typeof AuthLoginRoute
@@ -420,6 +530,7 @@ export interface FileRoutesByTo {
   '/admin/tools': typeof AuthedAdminToolsRoute
   '/admin/workflows': typeof AuthedAdminWorkflowsRoute
   '/app/new': typeof AuthedAppNewRoute
+  '/app/selena': typeof AuthedAppSelenaRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/admin': typeof AuthedAdminIndexRoute
   '/app': typeof AuthedAppIndexRoute
@@ -438,6 +549,11 @@ export interface FileRoutesByTo {
   '/api/v1/competitors/$competitorId': typeof ApiV1CompetitorsCompetitorIdRoute
   '/api/v1/prompts/$promptId': typeof ApiV1PromptsPromptIdRouteWithChildren
   '/api/v1/reports/$reportId': typeof ApiV1ReportsReportIdRoute
+  '/api/v1/selena/action-plan': typeof ApiV1SelenaActionPlanRoute
+  '/api/v1/selena/dashboard': typeof ApiV1SelenaDashboardRoute
+  '/api/v1/selena/profiles': typeof ApiV1SelenaProfilesRoute
+  '/api/v1/selena/public-scan': typeof ApiV1SelenaPublicScanRoute
+  '/api/v1/selena/website-collector': typeof ApiV1SelenaWebsiteCollectorRoute
   '/api/v1/tools/analyze': typeof ApiV1ToolsAnalyzeRoute
   '/app/$brand': typeof AuthedAppBrandIndexRoute
   '/api/plausible/event': typeof ApiPlausibleEventIndexRoute
@@ -455,14 +571,23 @@ export interface FileRoutesByTo {
   '/app/$brand/settings/members': typeof AuthedAppBrandSettingsMembersRoute
   '/app/$brand/settings/prompts': typeof AuthedAppBrandSettingsPromptsRoute
   '/api/v1/prompts/$promptId/snapshot': typeof ApiV1PromptsPromptIdSnapshotRoute
+  '/api/v1/selena/payments/test': typeof ApiV1SelenaPaymentsTestRoute
   '/app/$brand/prompts': typeof AuthedAppBrandPromptsIndexRoute
   '/app/$brand/settings': typeof AuthedAppBrandSettingsIndexRoute
   '/api/plausible/js/script': typeof ApiPlausibleJsScriptIndexRoute
+  '/api/v1/selena/cycles': typeof ApiV1SelenaCyclesIndexRoute
+  '/api/v1/selena/findings': typeof ApiV1SelenaFindingsIndexRoute
+  '/api/v1/selena/locks': typeof ApiV1SelenaLocksIndexRoute
+  '/api/v1/selena/orders': typeof ApiV1SelenaOrdersIndexRoute
+  '/api/v1/selena/projects': typeof ApiV1SelenaProjectsIndexRoute
+  '/api/v1/selena/quotes': typeof ApiV1SelenaQuotesIndexRoute
+  '/api/v1/selena/scenarios': typeof ApiV1SelenaScenariosIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/_authed': typeof AuthedRouteWithChildren
+  '/selena': typeof SelenaRoute
   '/_authed/admin': typeof AuthedAdminRouteWithChildren
   '/_authed/app': typeof AuthedAppRouteWithChildren
   '/_authed/choose-plan': typeof AuthedChoosePlanRoute
@@ -477,6 +602,7 @@ export interface FileRoutesById {
   '/_authed/admin/workflows': typeof AuthedAdminWorkflowsRoute
   '/_authed/app/$brand': typeof AuthedAppBrandRouteWithChildren
   '/_authed/app/new': typeof AuthedAppNewRoute
+  '/_authed/app/selena': typeof AuthedAppSelenaRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/_authed/admin/': typeof AuthedAdminIndexRoute
   '/_authed/app/': typeof AuthedAppIndexRoute
@@ -495,6 +621,11 @@ export interface FileRoutesById {
   '/api/v1/competitors/$competitorId': typeof ApiV1CompetitorsCompetitorIdRoute
   '/api/v1/prompts/$promptId': typeof ApiV1PromptsPromptIdRouteWithChildren
   '/api/v1/reports/$reportId': typeof ApiV1ReportsReportIdRoute
+  '/api/v1/selena/action-plan': typeof ApiV1SelenaActionPlanRoute
+  '/api/v1/selena/dashboard': typeof ApiV1SelenaDashboardRoute
+  '/api/v1/selena/profiles': typeof ApiV1SelenaProfilesRoute
+  '/api/v1/selena/public-scan': typeof ApiV1SelenaPublicScanRoute
+  '/api/v1/selena/website-collector': typeof ApiV1SelenaWebsiteCollectorRoute
   '/api/v1/tools/analyze': typeof ApiV1ToolsAnalyzeRoute
   '/_authed/app/$brand/': typeof AuthedAppBrandIndexRoute
   '/api/plausible/event/': typeof ApiPlausibleEventIndexRoute
@@ -512,14 +643,23 @@ export interface FileRoutesById {
   '/_authed/app/$brand/settings/members': typeof AuthedAppBrandSettingsMembersRoute
   '/_authed/app/$brand/settings/prompts': typeof AuthedAppBrandSettingsPromptsRoute
   '/api/v1/prompts/$promptId/snapshot': typeof ApiV1PromptsPromptIdSnapshotRoute
+  '/api/v1/selena/payments/test': typeof ApiV1SelenaPaymentsTestRoute
   '/_authed/app/$brand/prompts/': typeof AuthedAppBrandPromptsIndexRoute
   '/_authed/app/$brand/settings/': typeof AuthedAppBrandSettingsIndexRoute
   '/api/plausible/js/script/': typeof ApiPlausibleJsScriptIndexRoute
+  '/api/v1/selena/cycles/': typeof ApiV1SelenaCyclesIndexRoute
+  '/api/v1/selena/findings/': typeof ApiV1SelenaFindingsIndexRoute
+  '/api/v1/selena/locks/': typeof ApiV1SelenaLocksIndexRoute
+  '/api/v1/selena/orders/': typeof ApiV1SelenaOrdersIndexRoute
+  '/api/v1/selena/projects/': typeof ApiV1SelenaProjectsIndexRoute
+  '/api/v1/selena/quotes/': typeof ApiV1SelenaQuotesIndexRoute
+  '/api/v1/selena/scenarios/': typeof ApiV1SelenaScenariosIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/selena'
     | '/admin'
     | '/app'
     | '/choose-plan'
@@ -534,6 +674,7 @@ export interface FileRouteTypes {
     | '/admin/workflows'
     | '/app/$brand'
     | '/app/new'
+    | '/app/selena'
     | '/api/auth/$'
     | '/admin/'
     | '/app/'
@@ -552,6 +693,11 @@ export interface FileRouteTypes {
     | '/api/v1/competitors/$competitorId'
     | '/api/v1/prompts/$promptId'
     | '/api/v1/reports/$reportId'
+    | '/api/v1/selena/action-plan'
+    | '/api/v1/selena/dashboard'
+    | '/api/v1/selena/profiles'
+    | '/api/v1/selena/public-scan'
+    | '/api/v1/selena/website-collector'
     | '/api/v1/tools/analyze'
     | '/app/$brand/'
     | '/api/plausible/event/'
@@ -569,12 +715,21 @@ export interface FileRouteTypes {
     | '/app/$brand/settings/members'
     | '/app/$brand/settings/prompts'
     | '/api/v1/prompts/$promptId/snapshot'
+    | '/api/v1/selena/payments/test'
     | '/app/$brand/prompts/'
     | '/app/$brand/settings/'
     | '/api/plausible/js/script/'
+    | '/api/v1/selena/cycles/'
+    | '/api/v1/selena/findings/'
+    | '/api/v1/selena/locks/'
+    | '/api/v1/selena/orders/'
+    | '/api/v1/selena/projects/'
+    | '/api/v1/selena/quotes/'
+    | '/api/v1/selena/scenarios/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/selena'
     | '/choose-plan'
     | '/auth/forgot-password'
     | '/auth/login'
@@ -585,6 +740,7 @@ export interface FileRouteTypes {
     | '/admin/tools'
     | '/admin/workflows'
     | '/app/new'
+    | '/app/selena'
     | '/api/auth/$'
     | '/admin'
     | '/app'
@@ -603,6 +759,11 @@ export interface FileRouteTypes {
     | '/api/v1/competitors/$competitorId'
     | '/api/v1/prompts/$promptId'
     | '/api/v1/reports/$reportId'
+    | '/api/v1/selena/action-plan'
+    | '/api/v1/selena/dashboard'
+    | '/api/v1/selena/profiles'
+    | '/api/v1/selena/public-scan'
+    | '/api/v1/selena/website-collector'
     | '/api/v1/tools/analyze'
     | '/app/$brand'
     | '/api/plausible/event'
@@ -620,13 +781,22 @@ export interface FileRouteTypes {
     | '/app/$brand/settings/members'
     | '/app/$brand/settings/prompts'
     | '/api/v1/prompts/$promptId/snapshot'
+    | '/api/v1/selena/payments/test'
     | '/app/$brand/prompts'
     | '/app/$brand/settings'
     | '/api/plausible/js/script'
+    | '/api/v1/selena/cycles'
+    | '/api/v1/selena/findings'
+    | '/api/v1/selena/locks'
+    | '/api/v1/selena/orders'
+    | '/api/v1/selena/projects'
+    | '/api/v1/selena/quotes'
+    | '/api/v1/selena/scenarios'
   id:
     | '__root__'
     | '/'
     | '/_authed'
+    | '/selena'
     | '/_authed/admin'
     | '/_authed/app'
     | '/_authed/choose-plan'
@@ -641,6 +811,7 @@ export interface FileRouteTypes {
     | '/_authed/admin/workflows'
     | '/_authed/app/$brand'
     | '/_authed/app/new'
+    | '/_authed/app/selena'
     | '/api/auth/$'
     | '/_authed/admin/'
     | '/_authed/app/'
@@ -659,6 +830,11 @@ export interface FileRouteTypes {
     | '/api/v1/competitors/$competitorId'
     | '/api/v1/prompts/$promptId'
     | '/api/v1/reports/$reportId'
+    | '/api/v1/selena/action-plan'
+    | '/api/v1/selena/dashboard'
+    | '/api/v1/selena/profiles'
+    | '/api/v1/selena/public-scan'
+    | '/api/v1/selena/website-collector'
     | '/api/v1/tools/analyze'
     | '/_authed/app/$brand/'
     | '/api/plausible/event/'
@@ -676,14 +852,23 @@ export interface FileRouteTypes {
     | '/_authed/app/$brand/settings/members'
     | '/_authed/app/$brand/settings/prompts'
     | '/api/v1/prompts/$promptId/snapshot'
+    | '/api/v1/selena/payments/test'
     | '/_authed/app/$brand/prompts/'
     | '/_authed/app/$brand/settings/'
     | '/api/plausible/js/script/'
+    | '/api/v1/selena/cycles/'
+    | '/api/v1/selena/findings/'
+    | '/api/v1/selena/locks/'
+    | '/api/v1/selena/orders/'
+    | '/api/v1/selena/projects/'
+    | '/api/v1/selena/quotes/'
+    | '/api/v1/selena/scenarios/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AuthedRoute: typeof AuthedRouteWithChildren
+  SelenaRoute: typeof SelenaRoute
   AuthForgotPasswordRoute: typeof AuthForgotPasswordRoute
   AuthLoginRoute: typeof AuthLoginRoute
   AuthLogoutRoute: typeof AuthLogoutRoute
@@ -697,6 +882,11 @@ export interface RootRouteChildren {
   ApiV1CompetitorsCompetitorIdRoute: typeof ApiV1CompetitorsCompetitorIdRoute
   ApiV1PromptsPromptIdRoute: typeof ApiV1PromptsPromptIdRouteWithChildren
   ApiV1ReportsReportIdRoute: typeof ApiV1ReportsReportIdRoute
+  ApiV1SelenaActionPlanRoute: typeof ApiV1SelenaActionPlanRoute
+  ApiV1SelenaDashboardRoute: typeof ApiV1SelenaDashboardRoute
+  ApiV1SelenaProfilesRoute: typeof ApiV1SelenaProfilesRoute
+  ApiV1SelenaPublicScanRoute: typeof ApiV1SelenaPublicScanRoute
+  ApiV1SelenaWebsiteCollectorRoute: typeof ApiV1SelenaWebsiteCollectorRoute
   ApiV1ToolsAnalyzeRoute: typeof ApiV1ToolsAnalyzeRoute
   ApiPlausibleEventIndexRoute: typeof ApiPlausibleEventIndexRoute
   ApiV1BrandsIndexRoute: typeof ApiV1BrandsIndexRoute
@@ -704,7 +894,15 @@ export interface RootRouteChildren {
   ApiV1DocsIndexRoute: typeof ApiV1DocsIndexRoute
   ApiV1PromptsIndexRoute: typeof ApiV1PromptsIndexRoute
   ApiV1ReportsIndexRoute: typeof ApiV1ReportsIndexRoute
+  ApiV1SelenaPaymentsTestRoute: typeof ApiV1SelenaPaymentsTestRoute
   ApiPlausibleJsScriptIndexRoute: typeof ApiPlausibleJsScriptIndexRoute
+  ApiV1SelenaCyclesIndexRoute: typeof ApiV1SelenaCyclesIndexRoute
+  ApiV1SelenaFindingsIndexRoute: typeof ApiV1SelenaFindingsIndexRoute
+  ApiV1SelenaLocksIndexRoute: typeof ApiV1SelenaLocksIndexRoute
+  ApiV1SelenaOrdersIndexRoute: typeof ApiV1SelenaOrdersIndexRoute
+  ApiV1SelenaProjectsIndexRoute: typeof ApiV1SelenaProjectsIndexRoute
+  ApiV1SelenaQuotesIndexRoute: typeof ApiV1SelenaQuotesIndexRoute
+  ApiV1SelenaScenariosIndexRoute: typeof ApiV1SelenaScenariosIndexRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -721,6 +919,13 @@ declare module '@tanstack/react-router' {
       path: ''
       fullPath: '/'
       preLoaderRoute: typeof AuthedRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/selena': {
+      id: '/selena'
+      path: '/selena'
+      fullPath: '/selena'
+      preLoaderRoute: typeof SelenaRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_authed/admin': {
@@ -833,6 +1038,13 @@ declare module '@tanstack/react-router' {
       path: '/new'
       fullPath: '/app/new'
       preLoaderRoute: typeof AuthedAppNewRouteImport
+      parentRoute: typeof AuthedAppRoute
+    }
+    '/_authed/app/selena': {
+      id: '/_authed/app/selena'
+      path: '/selena'
+      fullPath: '/app/selena'
+      preLoaderRoute: typeof AuthedAppSelenaRouteImport
       parentRoute: typeof AuthedAppRoute
     }
     '/_authed/reports/': {
@@ -996,6 +1208,41 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiV1ReportsReportIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/v1/selena/action-plan': {
+      id: '/api/v1/selena/action-plan'
+      path: '/api/v1/selena/action-plan'
+      fullPath: '/api/v1/selena/action-plan'
+      preLoaderRoute: typeof ApiV1SelenaActionPlanRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/v1/selena/dashboard': {
+      id: '/api/v1/selena/dashboard'
+      path: '/api/v1/selena/dashboard'
+      fullPath: '/api/v1/selena/dashboard'
+      preLoaderRoute: typeof ApiV1SelenaDashboardRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/v1/selena/profiles': {
+      id: '/api/v1/selena/profiles'
+      path: '/api/v1/selena/profiles'
+      fullPath: '/api/v1/selena/profiles'
+      preLoaderRoute: typeof ApiV1SelenaProfilesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/v1/selena/public-scan': {
+      id: '/api/v1/selena/public-scan'
+      path: '/api/v1/selena/public-scan'
+      fullPath: '/api/v1/selena/public-scan'
+      preLoaderRoute: typeof ApiV1SelenaPublicScanRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/v1/selena/website-collector': {
+      id: '/api/v1/selena/website-collector'
+      path: '/api/v1/selena/website-collector'
+      fullPath: '/api/v1/selena/website-collector'
+      preLoaderRoute: typeof ApiV1SelenaWebsiteCollectorRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/v1/tools/analyze': {
       id: '/api/v1/tools/analyze'
       path: '/api/v1/tools/analyze'
@@ -1087,6 +1334,62 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiV1PromptsPromptIdSnapshotRouteImport
       parentRoute: typeof ApiV1PromptsPromptIdRoute
     }
+    '/api/v1/selena/cycles/': {
+      id: '/api/v1/selena/cycles/'
+      path: '/api/v1/selena/cycles'
+      fullPath: '/api/v1/selena/cycles/'
+      preLoaderRoute: typeof ApiV1SelenaCyclesIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/v1/selena/findings/': {
+      id: '/api/v1/selena/findings/'
+      path: '/api/v1/selena/findings'
+      fullPath: '/api/v1/selena/findings/'
+      preLoaderRoute: typeof ApiV1SelenaFindingsIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/v1/selena/locks/': {
+      id: '/api/v1/selena/locks/'
+      path: '/api/v1/selena/locks'
+      fullPath: '/api/v1/selena/locks/'
+      preLoaderRoute: typeof ApiV1SelenaLocksIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/v1/selena/orders/': {
+      id: '/api/v1/selena/orders/'
+      path: '/api/v1/selena/orders'
+      fullPath: '/api/v1/selena/orders/'
+      preLoaderRoute: typeof ApiV1SelenaOrdersIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/v1/selena/payments/test': {
+      id: '/api/v1/selena/payments/test'
+      path: '/api/v1/selena/payments/test'
+      fullPath: '/api/v1/selena/payments/test'
+      preLoaderRoute: typeof ApiV1SelenaPaymentsTestRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/v1/selena/projects/': {
+      id: '/api/v1/selena/projects/'
+      path: '/api/v1/selena/projects'
+      fullPath: '/api/v1/selena/projects/'
+      preLoaderRoute: typeof ApiV1SelenaProjectsIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/v1/selena/quotes/': {
+      id: '/api/v1/selena/quotes/'
+      path: '/api/v1/selena/quotes'
+      fullPath: '/api/v1/selena/quotes/'
+      preLoaderRoute: typeof ApiV1SelenaQuotesIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/v1/selena/scenarios/': {
+      id: '/api/v1/selena/scenarios/'
+      path: '/api/v1/selena/scenarios'
+      fullPath: '/api/v1/selena/scenarios/'
+      preLoaderRoute: typeof ApiV1SelenaScenariosIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -1154,12 +1457,14 @@ const AuthedAppBrandRouteWithChildren = AuthedAppBrandRoute._addFileChildren(
 interface AuthedAppRouteChildren {
   AuthedAppBrandRoute: typeof AuthedAppBrandRouteWithChildren
   AuthedAppNewRoute: typeof AuthedAppNewRoute
+  AuthedAppSelenaRoute: typeof AuthedAppSelenaRoute
   AuthedAppIndexRoute: typeof AuthedAppIndexRoute
 }
 
 const AuthedAppRouteChildren: AuthedAppRouteChildren = {
   AuthedAppBrandRoute: AuthedAppBrandRouteWithChildren,
   AuthedAppNewRoute: AuthedAppNewRoute,
+  AuthedAppSelenaRoute: AuthedAppSelenaRoute,
   AuthedAppIndexRoute: AuthedAppIndexRoute,
 }
 
@@ -1215,6 +1520,7 @@ const ApiV1PromptsPromptIdRouteWithChildren =
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AuthedRoute: AuthedRouteWithChildren,
+  SelenaRoute: SelenaRoute,
   AuthForgotPasswordRoute: AuthForgotPasswordRoute,
   AuthLoginRoute: AuthLoginRoute,
   AuthLogoutRoute: AuthLogoutRoute,
@@ -1228,6 +1534,11 @@ const rootRouteChildren: RootRouteChildren = {
   ApiV1CompetitorsCompetitorIdRoute: ApiV1CompetitorsCompetitorIdRoute,
   ApiV1PromptsPromptIdRoute: ApiV1PromptsPromptIdRouteWithChildren,
   ApiV1ReportsReportIdRoute: ApiV1ReportsReportIdRoute,
+  ApiV1SelenaActionPlanRoute: ApiV1SelenaActionPlanRoute,
+  ApiV1SelenaDashboardRoute: ApiV1SelenaDashboardRoute,
+  ApiV1SelenaProfilesRoute: ApiV1SelenaProfilesRoute,
+  ApiV1SelenaPublicScanRoute: ApiV1SelenaPublicScanRoute,
+  ApiV1SelenaWebsiteCollectorRoute: ApiV1SelenaWebsiteCollectorRoute,
   ApiV1ToolsAnalyzeRoute: ApiV1ToolsAnalyzeRoute,
   ApiPlausibleEventIndexRoute: ApiPlausibleEventIndexRoute,
   ApiV1BrandsIndexRoute: ApiV1BrandsIndexRoute,
@@ -1235,7 +1546,15 @@ const rootRouteChildren: RootRouteChildren = {
   ApiV1DocsIndexRoute: ApiV1DocsIndexRoute,
   ApiV1PromptsIndexRoute: ApiV1PromptsIndexRoute,
   ApiV1ReportsIndexRoute: ApiV1ReportsIndexRoute,
+  ApiV1SelenaPaymentsTestRoute: ApiV1SelenaPaymentsTestRoute,
   ApiPlausibleJsScriptIndexRoute: ApiPlausibleJsScriptIndexRoute,
+  ApiV1SelenaCyclesIndexRoute: ApiV1SelenaCyclesIndexRoute,
+  ApiV1SelenaFindingsIndexRoute: ApiV1SelenaFindingsIndexRoute,
+  ApiV1SelenaLocksIndexRoute: ApiV1SelenaLocksIndexRoute,
+  ApiV1SelenaOrdersIndexRoute: ApiV1SelenaOrdersIndexRoute,
+  ApiV1SelenaProjectsIndexRoute: ApiV1SelenaProjectsIndexRoute,
+  ApiV1SelenaQuotesIndexRoute: ApiV1SelenaQuotesIndexRoute,
+  ApiV1SelenaScenariosIndexRoute: ApiV1SelenaScenariosIndexRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

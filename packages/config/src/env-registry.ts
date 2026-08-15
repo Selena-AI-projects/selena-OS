@@ -29,6 +29,8 @@ export interface EnvVarSpec {
 	requiredBy: DeploymentMode[] | "dynamic-scrape-targets" | "optional";
 	/** Only for requiredBy: "dynamic-scrape-targets" — the SCRAPE_TARGETS provider id that needs this key. */
 	provider?: string;
+	/** May be encrypted in the self-hosted credential store even when it is not a scrape-target credential. */
+	credential?: boolean;
 	/**
 	 * Set for vars read only by the marketing site (apps/www). They stay in
 	 * turbo.json globalEnv but are excluded from the apps/web env.d.ts check,
@@ -175,6 +177,13 @@ export const ENV_REGISTRY: EnvVarSpec[] = [
 		description: "BrightData API token.",
 	},
 	{
+		name: "GOOGLE_PLACES_API_KEY",
+		scope: "server",
+		requiredBy: "optional",
+		credential: true,
+		description: "Google Places API (New) key for gated public place evidence.",
+	},
+	{
 		name: "OXYLABS_USERNAME",
 		scope: "server",
 		requiredBy: "dynamic-scrape-targets",
@@ -201,6 +210,12 @@ export const ENV_REGISTRY: EnvVarSpec[] = [
 		requiredBy: "dynamic-scrape-targets",
 		provider: "openrouter",
 		description: "OpenRouter API key.",
+	},
+	{
+		name: "OPENROUTER_MAX_TOKENS",
+		scope: "server",
+		requiredBy: "optional",
+		description: "Optional OpenRouter API View output cap, from 1 to 4000 tokens; defaults to 1200.",
 	},
 	{
 		name: "JINA_API_KEY",
@@ -441,5 +456,7 @@ export const ENV_REGISTRY: EnvVarSpec[] = [
 ];
 
 export const CREDENTIAL_ENV_NAMES: ReadonlySet<string> = new Set(
-	ENV_REGISTRY.filter((spec) => spec.requiredBy === "dynamic-scrape-targets" && spec.provider).map((spec) => spec.name),
+	ENV_REGISTRY.filter((spec) => spec.credential || (spec.requiredBy === "dynamic-scrape-targets" && spec.provider)).map(
+		(spec) => spec.name,
+	),
 );

@@ -7,6 +7,7 @@ import { getOrgEntitlementsMap } from "@workspace/lib/entitlements";
 import { parseScrapeTargets } from "@workspace/lib/providers";
 import {
 	computeMaintenanceDecisions,
+	isMaintenanceEnabled,
 	lastRunQueryWindowMs,
 	type MaintenancePromptState,
 	type PromptRunPlan,
@@ -36,6 +37,10 @@ let lastOverdueAlertMs = 0;
  * this job only gathers state and executes the decisions.
  */
 export async function scheduleMaintenanceJob(jobs: Job<ScheduleMaintenanceData>[]): Promise<void> {
+	if (!isMaintenanceEnabled(process.env.SCHEDULE_MAINTENANCE_ENABLED)) {
+		console.log("[schedule-maintenance] Skipped because SCHEDULE_MAINTENANCE_ENABLED=false");
+		return;
+	}
 	for (const job of jobs) {
 		const source = job.data?.source || "scheduled";
 		console.log(`[schedule-maintenance] Starting maintenance check (source: ${source})`);

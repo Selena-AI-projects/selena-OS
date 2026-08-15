@@ -49,8 +49,10 @@ declare global {
 			readonly ANTHROPIC_API_KEY: string;
 			readonly MISTRAL_API_KEY?: string;
 			readonly OPENROUTER_API_KEY?: string;
+			readonly OPENROUTER_MAX_TOKENS?: string;
 			readonly OLOSTEP_API_KEY?: string;
 			readonly BRIGHTDATA_API_TOKEN?: string;
+			readonly GOOGLE_PLACES_API_KEY?: string;
 			readonly OXYLABS_USERNAME?: string;
 			readonly OXYLABS_PASSWORD?: string;
 			readonly CLORO_API_KEY?: string;

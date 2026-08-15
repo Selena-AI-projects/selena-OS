@@ -42,6 +42,7 @@
 		"@workspace/og": "workspace:*",
 		"@workspace/ui": "workspace:*",
 		"@workspace/whitelabel": "workspace:*",
+		"@workspace/selena-visibility-contracts": "workspace:*",
 		"auth0": "^6.1.0",
 		"drizzle-orm": "^0.45.2",
 		"html2canvas-pro": "^2.3.3",

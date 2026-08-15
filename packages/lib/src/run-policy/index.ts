@@ -3,6 +3,12 @@ export {
 	resolveBrandPromptRunPlans,
 } from "./brand-plans";
 export {
+	assertDirectDispatchAllowed,
+	type ControlledCycleState,
+	cardinalityExceeded,
+	isMaintenanceEnabled,
+} from "./controlled-cycle";
+export {
 	computeMaintenanceDecisions,
 	computePoolPositions,
 	EXPEDITE_MIN_INTERVAL_MS,
@@ -22,7 +28,7 @@ export {
 	resolvePromptRunPlan,
 	selectDueTargets,
 	type TargetOverdueStatus,
-	targetOverdueStatus,
 	type TargetPlan,
 	targetKey,
+	targetOverdueStatus,
 } from "./policy";
