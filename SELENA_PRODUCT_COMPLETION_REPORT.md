@@ -3,22 +3,24 @@
 ## RC6 v1.2 Public Readiness continuation — 2026-08-15
 
 This continuation is post-`selena-visibility-mvp-rc6` and does not move that
-immutable tag. Commit `d7b4aa7ef3d7078fc5812e40ccf3cedb2a5d4144` adds the
-canonical public `/check` route and a free Public Readiness result. The result
+immutable tag. Commit `66a1a1b737f789a0450aa1272b1950aebc8a0981` adds the
+canonical public `/check` route, a free Public Readiness result, and safe
+Generate Fix → Preview behavior. The result
 contains a versioned score, weighted component scores, rule-versioned findings
 and evidence, and explicitly reports `paidProviderCalls: 0`. Readiness remains
 separate from observed AI visibility.
 
 Local contracts tests/typecheck, lib typecheck, web tests, web build and
-changed-scope lint passed before the route addition; web build and
-`check-types` also passed after route generation. Staging web deployment
-`b46398b1-ea13-40f3-b59c-ed1995bc76e8` is `SUCCESS` on this commit;
+changed-scope lint passed. Staging web deployment
+`a5dc0dab-e7c3-44a0-8195-c8ad36a26e55` and worker deployment
+`ebd14af6-75e8-48f0-aba8-d0fcc5196312` are `SUCCESS` on this commit;
 `/check`, `/selena` and `/api/setup-status` returned HTTP 200.
 
-Worker deployments on this commit were still `BUILDING` when recorded, so RC6
-v1.2 staging acceptance and browser E2E remain OPEN. Remaining v1.2 scope
-includes persisted block-level citability, Generate Fix/Preview/Verify/Compare
-endpoints, the OSS registry and the full readiness persistence model.
+Browser acceptance verified pricing, SSRF rejection, a real readiness result
+for `example.com`, and the expanded fix preview with the explicit “nothing is
+applied automatically” guard. Worker logs confirm maintenance is disabled and
+the worker is ready. Remaining v1.2 scope includes persisted block-level
+citability, server-persisted Verify/Compare endpoints and the OSS registry.
 
 Date: 2026-08-15  
 Release line: `release/selena-visibility-mvp`  
