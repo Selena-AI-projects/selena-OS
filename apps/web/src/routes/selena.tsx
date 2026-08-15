@@ -7,7 +7,7 @@ import { runSelenaPublicScanFn } from "../server/selena-public-scan";
 
 export const Route = createFileRoute("/selena")({ component: PublicSelenaScan });
 
-function PublicSelenaScan() {
+export function PublicSelenaScan() {
 	const [website, setWebsite] = useState("");
 	const [result, setResult] = useState<{
 		id: string;
@@ -30,8 +30,8 @@ function PublicSelenaScan() {
 	return (
 		<main className="mx-auto flex min-h-screen max-w-2xl flex-col gap-6 px-6 py-16">
 			<div>
-				<p className="text-sm font-medium text-muted-foreground">Selena AI Visibility</p>
-				<h1 className="mt-2 text-4xl font-semibold tracking-tight">See how your brand appears in AI answers</h1>
+				<p className="text-sm font-medium text-muted-foreground">Selena Public Readiness</p>
+				<h1 className="mt-2 text-4xl font-semibold tracking-tight">Make your website easier for machines to understand and cite</h1>
 				<p className="mt-3 text-muted-foreground">
 					Run a public preview without connecting Google, Instagram, Search Console, or any client account.
 				</p>

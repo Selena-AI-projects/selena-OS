@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthedRouteImport } from './routes/_authed'
+import { Route as CheckRouteImport } from './routes/check'
 import { Route as SelenaRouteImport } from './routes/selena'
 import { Route as AuthedAdminRouteImport } from './routes/_authed/admin'
 import { Route as AuthedAppRouteImport } from './routes/_authed/app'
@@ -87,6 +88,11 @@ const IndexRoute = IndexRouteImport.update({
 } as any)
 const AuthedRoute = AuthedRouteImport.update({
   id: '/_authed',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const CheckRoute = CheckRouteImport.update({
+  id: '/check',
+  path: '/check',
   getParentRoute: () => rootRouteImport,
 } as any)
 const SelenaRoute = SelenaRouteImport.update({
@@ -455,6 +461,7 @@ const ApiV1SelenaScenariosIndexRoute =
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/check': typeof CheckRoute
   '/selena': typeof SelenaRoute
   '/admin': typeof AuthedAdminRouteWithChildren
   '/app': typeof AuthedAppRouteWithChildren
@@ -526,6 +533,7 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/check': typeof CheckRoute
   '/selena': typeof SelenaRoute
   '/choose-plan': typeof AuthedChoosePlanRoute
   '/auth/forgot-password': typeof AuthForgotPasswordRoute
@@ -595,6 +603,7 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/_authed': typeof AuthedRouteWithChildren
+  '/check': typeof CheckRoute
   '/selena': typeof SelenaRoute
   '/_authed/admin': typeof AuthedAdminRouteWithChildren
   '/_authed/app': typeof AuthedAppRouteWithChildren
@@ -668,6 +677,7 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/check'
     | '/selena'
     | '/admin'
     | '/app'
@@ -739,6 +749,7 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/check'
     | '/selena'
     | '/choose-plan'
     | '/auth/forgot-password'
@@ -807,6 +818,7 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/_authed'
+    | '/check'
     | '/selena'
     | '/_authed/admin'
     | '/_authed/app'
@@ -880,6 +892,7 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AuthedRoute: typeof AuthedRouteWithChildren
+  CheckRoute: typeof CheckRoute
   SelenaRoute: typeof SelenaRoute
   AuthForgotPasswordRoute: typeof AuthForgotPasswordRoute
   AuthLoginRoute: typeof AuthLoginRoute
@@ -931,6 +944,13 @@ declare module '@tanstack/react-router' {
       path: ''
       fullPath: '/'
       preLoaderRoute: typeof AuthedRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/check': {
+      id: '/check'
+      path: '/check'
+      fullPath: '/check'
+      preLoaderRoute: typeof CheckRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/selena': {
@@ -1541,6 +1561,7 @@ const ApiV1PromptsPromptIdRouteWithChildren =
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AuthedRoute: AuthedRouteWithChildren,
+  CheckRoute: CheckRoute,
   SelenaRoute: SelenaRoute,
   AuthForgotPasswordRoute: AuthForgotPasswordRoute,
   AuthLoginRoute: AuthLoginRoute,
