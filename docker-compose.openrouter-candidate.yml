@@ -1,0 +1,10 @@
+# Controlled-deployment override. Apply only with the production Elmo compose
+# file after backup and preflight checks. OPENROUTER_API_KEY remains supplied by
+# the existing worker env_file and is not stored here.
+services:
+  web:
+    image: local/elmo-web:0.2.19-brightdata-only-r3-20260815
+  worker:
+    image: local/elmo-worker:0.2.19-openrouter-candidate-r2
+    environment:
+      OPENROUTER_MAX_TOKENS: "1200"

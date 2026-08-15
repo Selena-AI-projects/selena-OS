@@ -1,0 +1,43 @@
+name: elmo-scheduler-smoke
+
+services:
+  postgres:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_USER: scheduler_smoke
+      POSTGRES_PASSWORD: scheduler_smoke_only
+      POSTGRES_DB: elmo_scheduler_smoke
+    volumes:
+      - elmo_scheduler_smoke_postgres:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U scheduler_smoke -d elmo_scheduler_smoke"]
+      interval: 2s
+      timeout: 3s
+      retries: 20
+
+  migrate:
+    image: local/elmo-migrate:0.2.19-openrouter-candidate
+    environment: &smoke-env
+      DATABASE_URL: postgres://scheduler_smoke:scheduler_smoke_only@postgres:5432/elmo_scheduler_smoke
+      DEPLOYMENT_MODE: local
+      BETTER_AUTH_SECRET: scheduler-smoke-auth-secret
+      ELMO_ENCRYPTION_KEY: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
+      APP_URL: http://localhost:1517
+      DISABLE_TELEMETRY: "1"
+      SCRAPE_TARGETS: stub:stub
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: ["npx", "drizzle-kit", "migrate"]
+
+  worker:
+    image: local/elmo-worker:0.2.19-openrouter-scheduler-fix
+    environment:
+      <<: *smoke-env
+      SCHEDULE_MAINTENANCE_ENABLED: "false"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+volumes:
+  elmo_scheduler_smoke_postgres:

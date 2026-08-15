@@ -1,0 +1,53 @@
+name: elmo-openrouter-smoke
+
+services:
+  postgres:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_USER: smoke
+      POSTGRES_PASSWORD: smoke-only
+      POSTGRES_DB: elmo_smoke
+    volumes:
+      - elmo_openrouter_smoke_postgres:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U smoke -d elmo_smoke"]
+      interval: 2s
+      timeout: 3s
+      retries: 20
+
+  migrate:
+    image: local/elmo-migrate:0.2.19-openrouter-candidate
+    environment: &smoke-env
+      DATABASE_URL: postgres://smoke:smoke-only@postgres:5432/elmo_smoke
+      DEPLOYMENT_MODE: local
+      BETTER_AUTH_SECRET: smoke-only-auth-secret
+      ELMO_ENCRYPTION_KEY: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
+      APP_URL: http://localhost:1516
+      DISABLE_TELEMETRY: "1"
+      SCRAPE_TARGETS: claude:openrouter-api:anthropic/claude-haiku-4.5,deepseek:openrouter-api:deepseek/deepseek-v3.2,qwen:openrouter-api:qwen/qwen3.5-9b,mistral:openrouter-api:mistralai/mistral-small-2603,grok:openrouter-api:x-ai/grok-4.5
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: ["npx", "drizzle-kit", "migrate"]
+
+  web:
+    image: local/elmo-web:0.2.19-openrouter-candidate
+    environment: *smoke-env
+    ports:
+      - "1516:3000"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+  worker:
+    image: local/elmo-worker:0.2.19-openrouter-candidate-r2
+    environment:
+      <<: *smoke-env
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:?OPENROUTER_API_KEY must be supplied at runtime}
+      OPENROUTER_MAX_TOKENS: "64"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+volumes:
+  elmo_openrouter_smoke_postgres:
