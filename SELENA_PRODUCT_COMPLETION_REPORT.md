@@ -3,19 +3,19 @@
 ## Master Correction current-state update — 2026-08-16
 
 This section supersedes the release-status wording below for the current
-working tree. The historical RC6 deployment evidence remains below as an
-immutable record; it is not evidence that the uncommitted Master Correction
-changes are already on origin or staging.
+Master Correction release. The historical RC6 deployment evidence remains
+below as an immutable record; it is not evidence for the current deployment.
 
 ### Current repository state
 
 - App branch: `release/selena-visibility-mvp`.
 - App origin and HEAD before this scoped change: `62267e4573fd5706e7ff8bf5e5598f70d31e4aa2`.
-- App scoped commits after this change: `6d0a6d83`, `acfba5ac`.
+- App scoped commits after this change: `6d0a6d83`, `acfba5ac`, `42a56a55`.
 - Site branch: `release/ai-visibility-master-correction`.
 - Site origin and HEAD before this scoped change: `baf3e6ebf16ff5d338c09af7f36a23218511a61c`.
-- Site scoped commit after this change: `ccd0205`.
-- The scoped commits are local and not pushed or deployed.
+- Site scoped commit after this change: `ccd02056ceb4d458e0cf3534b5c8b9acc5d88c8a`.
+- The scoped commits are pushed to their release branches and deployed only to
+  staging/preview. No production promotion was performed.
 - User-owned `elmo-source/tmp/` is intentionally excluded from the scope.
 - Existing immutable app tags `selena-visibility-mvp-rc4`, `rc5`, `rc6` and
   `rc6-v1.2` were not moved or deleted.
@@ -54,11 +54,34 @@ changes are already on origin or staging.
 - Local route smoke: `/`, `/check`, `/pricing`, `/visibility`, `/lab`,
   `/ai-systems`, Russian equivalents and AI Systems detail routes returned
   200; retired report sample returned 404; legacy API report returned 410.
+- Railway staging web deployment `e57379ed-fa37-459a-b68b-eeaa75d6a305` and
+  worker deployment `3a4b5de6-e359-4526-82f5-e40f78138b3d` reached terminal
+  `SUCCESS` on app commit `42a56a5501699f39b30b56ce2dc7b13463c2e1f5`. Both
+  used the tracked `railway.json` Dockerfile configuration. Image digests:
+  web `sha256:e7d42db40cada8ada28fa0f09320c87cc484786ecb746ac492f59e94b68d6c33`;
+  worker `sha256:1eec597308713aff360a464f122f318fa403ec1dd8fb81022786c6019ef17ce5`.
+- Staging health: Railway web domain `web-staging-4a8f.up.railway.app` and
+  `app.selenasystems.com` returned HTTP 200 for `/api/setup-status`; worker
+  logs reported `SCHEDULE_MAINTENANCE_ENABLED=false` and readiness. `/app/selena`
+  and `/app/learn` redirect unauthenticated users to login with a safe
+  `returnTo`; no provider/payment/measurement action was started.
+- Public-site preview deployment `dpl_E8W3A8P6fYH8ebYqbucvLZdUNiKu` is
+  `Ready` at
+  `https://selena-ai-company-ker17hbs7-yulaboober.vercel.app` for the site
+  release branch. Browser route smoke passed for English/Russian check,
+  pricing, visibility, Lab and AI Systems routes; legacy redirects and the
+  retired sample report boundary were verified, with zero application console
+  errors observed. The browser surface exposed a fixed desktop viewport, so
+  device-emulation/mobile-layout PASS is not claimed; viewport meta and
+  responsive CSS remain present and local quality gates passed.
 
 ### Release and owner boundary
 
-- No push, staging deployment, production deployment or DNS change has been
-  performed for these Master Correction commits.
+- The Master Correction commits were pushed to
+  `release/selena-visibility-mvp` and
+  `release/ai-visibility-master-correction`; staging/preview deployment and
+  post-deploy checks completed as recorded above. No production deployment,
+  promotion or DNS change was performed.
 - Production PostgreSQL, live payments, real provider calls, maintenance and
   measurement jobs remain unchanged and OFF.
 - Controlled parity is PASS; an external Cloudflare benchmark is UNKNOWN and
