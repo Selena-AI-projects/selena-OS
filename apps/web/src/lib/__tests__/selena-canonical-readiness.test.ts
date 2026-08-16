@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import {
 	CANONICAL_PUBLIC_READINESS_PAYLOAD,
 	CANONICAL_PUBLIC_READINESS_URL,
@@ -15,5 +17,25 @@ describe("canonical Public Readiness boundary", () => {
 		expect(body).toEqual(CANONICAL_PUBLIC_READINESS_PAYLOAD);
 		expect(body.providerCalls).toBe(0);
 		expect(body.measurementJobsCreated).toBe(0);
+	});
+
+	it("retires every legacy readiness read and fix path", () => {
+		const routeFiles = [
+			"../../routes/api/v1/selena/readiness/scans/$scanId.ts",
+			"../../routes/api/v1/selena/readiness/scans/$scanId/fixes/$findingId.ts",
+		];
+
+		for (const routeFile of routeFiles) {
+			const source = readFileSync(fileURLToPath(new URL(routeFile, import.meta.url)), "utf8");
+			expect(source).toContain("canonicalPublicReadinessResponse");
+			for (const retiredReference of [
+				"svPublicScans",
+				"generateReadinessFix",
+				"readinessResultSchema",
+				'from "@workspace/lib/db',
+			]) {
+				expect(source).not.toContain(retiredReference);
+			}
+		}
 	});
 });

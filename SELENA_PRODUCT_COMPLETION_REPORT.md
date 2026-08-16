@@ -1,5 +1,69 @@
 # Selena AI Visibility — completion report
 
+## Master Correction current-state update — 2026-08-16
+
+This section supersedes the release-status wording below for the current
+working tree. The historical RC6 deployment evidence remains below as an
+immutable record; it is not evidence that the uncommitted Master Correction
+changes are already on origin or staging.
+
+### Current repository state
+
+- App branch: `release/selena-visibility-mvp`.
+- App origin and HEAD before this scoped change: `62267e4573fd5706e7ff8bf5e5598f70d31e4aa2`.
+- Site branch: `release/ai-visibility-master-correction`.
+- Site origin and HEAD before this scoped change: `baf3e6ebf16ff5d338c09af7f36a23218511a61c`.
+- Current Master Correction changes are local, uncommitted and not deployed.
+- User-owned `elmo-source/tmp/` is intentionally excluded from the scope.
+- Existing immutable app tags `selena-visibility-mvp-rc4`, `rc5`, `rc6` and
+  `rc6-v1.2` were not moved or deleted.
+
+### Implemented in the current working tree
+
+- Canonical free Public Readiness remains `/check` and `/ru/check`: bounded
+  five-page collection, zero paid AI-provider calls, versioned scoring,
+  crawler matrix, block citability, evidence, fix preview, copy/export,
+  verification comparison and separate readiness/AI-visibility claims.
+- Legacy public sample/token report routes are permanently tombstoned; old
+  feature flags cannot re-enable illustrative AI-answer data.
+- `/free-ai-map` and `/ru/ai-map` are compatibility redirects, not a second
+  product. `/ai-systems` and its three detail routes are the canonical custom
+  service entry. Four AI Visibility plans remain separate from four AI Systems
+  service prices.
+- The app's legacy readiness scan/fix/verify/public-scan routes now return the
+  canonical 410 boundary and do not read the old `sv_public_scans` contract or
+  old readiness scorer. The old contracts module is no longer exported.
+- Readiness findings now carry rule/version, page URL, evidence fields, source
+  engine/version, captured timestamp, generated-fix ID and verification status.
+- The persisted Cloudflare/Selena parity matrix covers content, API, commerce,
+  N/A, platform, multilingual and transport/SSRF scenarios. Its PASS label is
+  explicitly a controlled-fixture contract, not a live Cloudflare benchmark.
+
+### Current quality evidence
+
+- Site: 140 unit tests, typecheck, ESLint, Next production build,
+  `git diff --check` and `npx impeccable detect` passed.
+- App web: 242 unit tests, typecheck, production build and changed-scope
+  Biome lint passed. Selena contracts: 15 tests and typecheck passed.
+- App repo-wide Biome lint remains `PRE-EXISTING`: 34 errors, 133 warnings and
+  15 infos across the existing 297-file scope; the changed files are clean.
+- The workspace reports a non-blocking Node engine warning (project requests
+  Node 24.x; the available runtime is Node 22.23.0).
+- Local route smoke: `/`, `/check`, `/pricing`, `/visibility`, `/lab`,
+  `/ai-systems`, Russian equivalents and AI Systems detail routes returned
+  200; retired report sample returned 404; legacy API report returned 410.
+
+### Release and owner boundary
+
+- No commit, push, staging deployment, production deployment or DNS change
+  has been performed for this Master Correction working tree.
+- Production PostgreSQL, live payments, real provider calls, maintenance and
+  measurement jobs remain unchanged and OFF.
+- Controlled parity is PASS; an external Cloudflare benchmark is UNKNOWN and
+  remains optional unless the owner explicitly requires it.
+- The safe public-site rollback target remains the owner-locked published
+  artifact `07d6fe9`; the app's existing immutable RC6 tags remain available.
+
 ## RC6 v1.2 Public Readiness continuation — 2026-08-15
 
 This continuation is post-`selena-visibility-mvp-rc6` and does not move that
