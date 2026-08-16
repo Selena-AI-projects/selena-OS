@@ -40,6 +40,10 @@ below as an immutable record; it is not evidence for the current deployment.
 - The persisted Cloudflare/Selena parity matrix covers content, API, commerce,
   N/A, platform, multilingual and transport/SSRF scenarios. Its PASS label is
   explicitly a controlled-fixture contract, not a live Cloudflare benchmark.
+- The OSS registry now pins `geo-seo-claude` to upstream commit
+  `ed280a860bca84b22f0199ee2d8776ce0c55bd56`, records that no upstream release
+  tag was returned, reproduces the upstream MIT notice and links its Central
+  Memory source provenance.
 
 ### Current quality evidence
 
