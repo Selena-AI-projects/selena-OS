@@ -12,6 +12,7 @@ below as an immutable record; it is not evidence for the current deployment.
 - App origin and HEAD before this scoped change: `62267e4573fd5706e7ff8bf5e5598f70d31e4aa2`.
 - App scoped commits after this change: `6d0a6d83`, `acfba5ac`, `42a56a55`.
 - Documentation follow-up commit: `7a04cac8` (OSS provenance and MIT notice).
+- Final report-only commit: `ce16dec0`.
 - Site branch: `release/ai-visibility-master-correction`.
 - Site origin and HEAD before this scoped change: `baf3e6ebf16ff5d338c09af7f36a23218511a61c`.
 - Site scoped commit after this change: `ccd02056ceb4d458e0cf3534b5c8b9acc5d88c8a`.
@@ -74,8 +75,9 @@ below as an immutable record; it is not evidence for the current deployment.
 - Staging health: Railway web domain `web-staging-4a8f.up.railway.app` and
   `app.selenasystems.com` returned HTTP 200 for `/api/setup-status`; worker
   logs reported `SCHEDULE_MAINTENANCE_ENABLED=false` and readiness. `/app/selena`
-  and `/app/learn` redirect unauthenticated users to login with a safe
-  `returnTo`; no provider/payment/measurement action was started.
+  and the canonical `/app/academy` boundary are protected by login; the old
+  `/app/learn` path is a compatibility redirect to `/app/academy`. No
+  provider/payment/measurement action was started.
 - Public-site preview deployment `dpl_E8W3A8P6fYH8ebYqbucvLZdUNiKu` is
   `Ready` at
   `https://selena-ai-company-ker17hbs7-yulaboober.vercel.app` for the site
@@ -95,8 +97,9 @@ below as an immutable record; it is not evidence for the current deployment.
   promotion or DNS change was performed.
 - Production PostgreSQL, live payments, real provider calls, maintenance and
   measurement jobs remain unchanged and OFF.
-- Controlled parity is PASS; an external Cloudflare benchmark is UNKNOWN and
-  remains optional unless the owner explicitly requires it.
+- Controlled parity is PASS. A live read-only Cloudflare comparison on the
+  same public URL is recorded in the site repository; numeric scores are not
+  combined because the scoring denominators differ.
 - The safe public-site rollback target remains the owner-locked published
   artifact `07d6fe9`; the app's existing immutable RC6 tags remain available.
 

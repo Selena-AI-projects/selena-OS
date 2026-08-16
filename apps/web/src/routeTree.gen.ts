@@ -17,6 +17,7 @@ import { Route as AuthedAdminRouteImport } from './routes/_authed/admin'
 import { Route as AuthedAppRouteImport } from './routes/_authed/app'
 import { Route as AuthedChoosePlanRouteImport } from './routes/_authed/choose-plan'
 import { Route as AuthedReportsRouteImport } from './routes/_authed/reports'
+import { Route as AppLearnRouteImport } from './routes/app/learn'
 import { Route as AuthForgotPasswordRouteImport } from './routes/auth/forgot-password'
 import { Route as AuthLoginRouteImport } from './routes/auth/login'
 import { Route as AuthLogoutRouteImport } from './routes/auth/logout'
@@ -29,6 +30,7 @@ import { Route as AuthedAdminToolsRouteImport } from './routes/_authed/admin/too
 import { Route as AuthedAdminWorkflowsRouteImport } from './routes/_authed/admin/workflows'
 import { Route as AuthedAppIndexRouteImport } from './routes/_authed/app/index'
 import { Route as AuthedAppBrandRouteImport } from './routes/_authed/app/$brand'
+import { Route as AuthedAppAcademyRouteImport } from './routes/_authed/app/academy'
 import { Route as AuthedAppNewRouteImport } from './routes/_authed/app/new'
 import { Route as AuthedAppSelenaRouteImport } from './routes/_authed/app/selena'
 import { Route as AuthedReportsIndexRouteImport } from './routes/_authed/reports/index'
@@ -123,6 +125,11 @@ const AuthedReportsRoute = AuthedReportsRouteImport.update({
   path: '/reports',
   getParentRoute: () => AuthedRoute,
 } as any)
+const AppLearnRoute = AppLearnRouteImport.update({
+  id: '/app/learn',
+  path: '/app/learn',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AuthForgotPasswordRoute = AuthForgotPasswordRouteImport.update({
   id: '/auth/forgot-password',
   path: '/auth/forgot-password',
@@ -182,6 +189,11 @@ const AuthedAppIndexRoute = AuthedAppIndexRouteImport.update({
 const AuthedAppBrandRoute = AuthedAppBrandRouteImport.update({
   id: '/$brand',
   path: '/$brand',
+  getParentRoute: () => AuthedAppRoute,
+} as any)
+const AuthedAppAcademyRoute = AuthedAppAcademyRouteImport.update({
+  id: '/academy',
+  path: '/academy',
   getParentRoute: () => AuthedAppRoute,
 } as any)
 const AuthedAppNewRoute = AuthedAppNewRouteImport.update({
@@ -488,6 +500,7 @@ export interface FileRoutesByFullPath {
   '/app': typeof AuthedAppRouteWithChildren
   '/choose-plan': typeof AuthedChoosePlanRoute
   '/reports': typeof AuthedReportsRouteWithChildren
+  '/app/learn': typeof AppLearnRoute
   '/auth/forgot-password': typeof AuthForgotPasswordRoute
   '/auth/login': typeof AuthLoginRoute
   '/auth/logout': typeof AuthLogoutRoute
@@ -498,6 +511,7 @@ export interface FileRoutesByFullPath {
   '/admin/tools': typeof AuthedAdminToolsRoute
   '/admin/workflows': typeof AuthedAdminWorkflowsRoute
   '/app/$brand': typeof AuthedAppBrandRouteWithChildren
+  '/app/academy': typeof AuthedAppAcademyRoute
   '/app/new': typeof AuthedAppNewRoute
   '/app/selena': typeof AuthedAppSelenaRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
@@ -560,6 +574,7 @@ export interface FileRoutesByTo {
   '/check': typeof CheckRoute
   '/selena': typeof SelenaRoute
   '/choose-plan': typeof AuthedChoosePlanRoute
+  '/app/learn': typeof AppLearnRoute
   '/auth/forgot-password': typeof AuthForgotPasswordRoute
   '/auth/login': typeof AuthLoginRoute
   '/auth/logout': typeof AuthLogoutRoute
@@ -569,6 +584,7 @@ export interface FileRoutesByTo {
   '/admin/providers': typeof AuthedAdminProvidersRoute
   '/admin/tools': typeof AuthedAdminToolsRoute
   '/admin/workflows': typeof AuthedAdminWorkflowsRoute
+  '/app/academy': typeof AuthedAppAcademyRoute
   '/app/new': typeof AuthedAppNewRoute
   '/app/selena': typeof AuthedAppSelenaRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
@@ -636,6 +652,7 @@ export interface FileRoutesById {
   '/_authed/app': typeof AuthedAppRouteWithChildren
   '/_authed/choose-plan': typeof AuthedChoosePlanRoute
   '/_authed/reports': typeof AuthedReportsRouteWithChildren
+  '/app/learn': typeof AppLearnRoute
   '/auth/forgot-password': typeof AuthForgotPasswordRoute
   '/auth/login': typeof AuthLoginRoute
   '/auth/logout': typeof AuthLogoutRoute
@@ -646,6 +663,7 @@ export interface FileRoutesById {
   '/_authed/admin/tools': typeof AuthedAdminToolsRoute
   '/_authed/admin/workflows': typeof AuthedAdminWorkflowsRoute
   '/_authed/app/$brand': typeof AuthedAppBrandRouteWithChildren
+  '/_authed/app/academy': typeof AuthedAppAcademyRoute
   '/_authed/app/new': typeof AuthedAppNewRoute
   '/_authed/app/selena': typeof AuthedAppSelenaRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
@@ -713,6 +731,7 @@ export interface FileRouteTypes {
     | '/app'
     | '/choose-plan'
     | '/reports'
+    | '/app/learn'
     | '/auth/forgot-password'
     | '/auth/login'
     | '/auth/logout'
@@ -723,6 +742,7 @@ export interface FileRouteTypes {
     | '/admin/tools'
     | '/admin/workflows'
     | '/app/$brand'
+    | '/app/academy'
     | '/app/new'
     | '/app/selena'
     | '/api/auth/$'
@@ -785,6 +805,7 @@ export interface FileRouteTypes {
     | '/check'
     | '/selena'
     | '/choose-plan'
+    | '/app/learn'
     | '/auth/forgot-password'
     | '/auth/login'
     | '/auth/logout'
@@ -794,6 +815,7 @@ export interface FileRouteTypes {
     | '/admin/providers'
     | '/admin/tools'
     | '/admin/workflows'
+    | '/app/academy'
     | '/app/new'
     | '/app/selena'
     | '/api/auth/$'
@@ -860,6 +882,7 @@ export interface FileRouteTypes {
     | '/_authed/app'
     | '/_authed/choose-plan'
     | '/_authed/reports'
+    | '/app/learn'
     | '/auth/forgot-password'
     | '/auth/login'
     | '/auth/logout'
@@ -870,6 +893,7 @@ export interface FileRouteTypes {
     | '/_authed/admin/tools'
     | '/_authed/admin/workflows'
     | '/_authed/app/$brand'
+    | '/_authed/app/academy'
     | '/_authed/app/new'
     | '/_authed/app/selena'
     | '/api/auth/$'
@@ -933,6 +957,7 @@ export interface RootRouteChildren {
   AuthedRoute: typeof AuthedRouteWithChildren
   CheckRoute: typeof CheckRoute
   SelenaRoute: typeof SelenaRoute
+  AppLearnRoute: typeof AppLearnRoute
   AuthForgotPasswordRoute: typeof AuthForgotPasswordRoute
   AuthLoginRoute: typeof AuthLoginRoute
   AuthLogoutRoute: typeof AuthLogoutRoute
@@ -1029,6 +1054,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthedReportsRouteImport
       parentRoute: typeof AuthedRoute
     }
+    '/app/learn': {
+      id: '/app/learn'
+      path: '/app/learn'
+      fullPath: '/app/learn'
+      preLoaderRoute: typeof AppLearnRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/auth/forgot-password': {
       id: '/auth/forgot-password'
       path: '/auth/forgot-password'
@@ -1111,6 +1143,13 @@ declare module '@tanstack/react-router' {
       path: '/$brand'
       fullPath: '/app/$brand'
       preLoaderRoute: typeof AuthedAppBrandRouteImport
+      parentRoute: typeof AuthedAppRoute
+    }
+    '/_authed/app/academy': {
+      id: '/_authed/app/academy'
+      path: '/academy'
+      fullPath: '/app/academy'
+      preLoaderRoute: typeof AuthedAppAcademyRouteImport
       parentRoute: typeof AuthedAppRoute
     }
     '/_authed/app/new': {
@@ -1559,6 +1598,7 @@ const AuthedAppBrandRouteWithChildren = AuthedAppBrandRoute._addFileChildren(
 
 interface AuthedAppRouteChildren {
   AuthedAppBrandRoute: typeof AuthedAppBrandRouteWithChildren
+  AuthedAppAcademyRoute: typeof AuthedAppAcademyRoute
   AuthedAppNewRoute: typeof AuthedAppNewRoute
   AuthedAppSelenaRoute: typeof AuthedAppSelenaRoute
   AuthedAppIndexRoute: typeof AuthedAppIndexRoute
@@ -1566,6 +1606,7 @@ interface AuthedAppRouteChildren {
 
 const AuthedAppRouteChildren: AuthedAppRouteChildren = {
   AuthedAppBrandRoute: AuthedAppBrandRouteWithChildren,
+  AuthedAppAcademyRoute: AuthedAppAcademyRoute,
   AuthedAppNewRoute: AuthedAppNewRoute,
   AuthedAppSelenaRoute: AuthedAppSelenaRoute,
   AuthedAppIndexRoute: AuthedAppIndexRoute,
@@ -1640,6 +1681,7 @@ const rootRouteChildren: RootRouteChildren = {
   AuthedRoute: AuthedRouteWithChildren,
   CheckRoute: CheckRoute,
   SelenaRoute: SelenaRoute,
+  AppLearnRoute: AppLearnRoute,
   AuthForgotPasswordRoute: AuthForgotPasswordRoute,
   AuthLoginRoute: AuthLoginRoute,
   AuthLogoutRoute: AuthLogoutRoute,
