@@ -11,6 +11,7 @@ below as an immutable record; it is not evidence for the current deployment.
 - App branch: `release/selena-visibility-mvp`.
 - App origin and HEAD before this scoped change: `62267e4573fd5706e7ff8bf5e5598f70d31e4aa2`.
 - App scoped commits after this change: `6d0a6d83`, `acfba5ac`, `42a56a55`.
+- Documentation follow-up commit: `7a04cac8` (OSS provenance and MIT notice).
 - Site branch: `release/ai-visibility-master-correction`.
 - Site origin and HEAD before this scoped change: `baf3e6ebf16ff5d338c09af7f36a23218511a61c`.
 - Site scoped commit after this change: `ccd02056ceb4d458e0cf3534b5c8b9acc5d88c8a`.
@@ -64,6 +65,12 @@ below as an immutable record; it is not evidence for the current deployment.
   used the tracked `railway.json` Dockerfile configuration. Image digests:
   web `sha256:e7d42db40cada8ada28fa0f09320c87cc484786ecb746ac492f59e94b68d6c33`;
   worker `sha256:1eec597308713aff360a464f122f318fa403ec1dd8fb81022786c6019ef17ce5`.
+- The final docs/provenance head `7a04cac844ae21b26a298a745e1be1be7f190a1e`
+  also reached terminal `SUCCESS`: web deployment
+  `0e80f112-21d9-45fc-a9c0-781b087ae5b3` with image digest
+  `sha256:e7d42db40cada8ada28fa0f09320c87cc484786ecb746ac492f59e94b68d6c33`;
+  worker deployment `b7a032a6-a9e1-4b82-90e9-7594169b1d15` with image digest
+  `sha256:44e12860086d59575b67ce21265a77cc93496ad40e5f03c693b131213e3c115c`.
 - Staging health: Railway web domain `web-staging-4a8f.up.railway.app` and
   `app.selenasystems.com` returned HTTP 200 for `/api/setup-status`; worker
   logs reported `SCHEDULE_MAINTENANCE_ENABLED=false` and readiness. `/app/selena`
