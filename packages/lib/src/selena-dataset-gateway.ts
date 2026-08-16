@@ -12,7 +12,7 @@ export type SelenaRulepack = {
 export const rulepacks: Record<string, SelenaRulepack> = {
 	"selena-visibility-v1": {
 		version: "selena-visibility-v1",
-		name: "Selena Visibility baseline",
+		name: "AI Visibility baseline",
 		claimThresholds: { mention: 0.2, ownedCitation: 0.2, invalid: 0.1 },
 	},
 };

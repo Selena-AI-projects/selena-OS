@@ -1,6 +1,7 @@
 import { createFileRoute, redirect } from "@tanstack/react-router";
+import { CANONICAL_PUBLIC_READINESS_URL } from "../lib/selena-canonical-readiness";
 
-export const SELENA_PUBLIC_READINESS_URL = "https://www.selenasystems.com/check";
+export const SELENA_PUBLIC_READINESS_URL = CANONICAL_PUBLIC_READINESS_URL;
 
 /**
  * Public Readiness has one canonical surface. The authenticated application

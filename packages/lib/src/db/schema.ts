@@ -301,7 +301,7 @@ export const usageEvents = pgTable(
 
 export type UsageEvent = typeof usageEvents.$inferSelect;
 
-// Selena AI Visibility client domain. These tables are intentionally additive:
+// AI Visibility client domain. These tables are intentionally additive:
 // Elmo brands/prompts/prompt_runs remain the measurement engine's source of
 // truth, while these records provide immutable commercial configuration and
 // order-scoped client workflow around it.
