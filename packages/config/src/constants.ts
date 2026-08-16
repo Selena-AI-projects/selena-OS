@@ -9,8 +9,8 @@
  * NOTE: Whitelabel mode does NOT use these defaults - all values must be
  * provided via environment variables.
  */
-export const DEFAULT_APP_NAME = "Elmo";
-export const DEFAULT_APP_ICON = "/icons/elmo-icon.svg";
+export const DEFAULT_APP_NAME = "Selena Systems";
+export const DEFAULT_APP_ICON = "/icons/selena-icon.svg";
 export const DEFAULT_APP_URL = "http://localhost:3000/";
 
 /** Provider setup guide, linked from SCRAPE_TARGETS errors and the LLMs page. */
@@ -19,10 +19,10 @@ export const PROVIDERS_DOCS_URL = "https://docs.elmohq.com/docs/user-guide/provi
 /**
  * Elmo brand constants — used for icon generation, manifest, and the brand kit.
  */
-export const ELMO_BRAND_COLOR = "#2563eb"; // blue-600
-export const ELMO_BRAND_FONT = "Titan One";
-export const ELMO_THEME_COLOR = "#2563eb";
-export const ELMO_BACKGROUND_COLOR = "#ffffff";
+export const ELMO_BRAND_COLOR = "#8f5c34";
+export const ELMO_BRAND_FONT = "Geist Sans";
+export const ELMO_THEME_COLOR = "#181614";
+export const ELMO_BACKGROUND_COLOR = "#f7f2ea";
 
 /**
  * Default chart colors for the Elmo product.

@@ -3,7 +3,9 @@
  * Respects white-label / deployment branding configuration.
  */
 
-const DEFAULT_DESCRIPTION = "Track and optimize your brand's visibility across AI models.";
+import { DEFAULT_APP_NAME } from "@workspace/config/constants";
+
+const DEFAULT_DESCRIPTION = "Measure how AI systems represent your brand and turn evidence into an action plan.";
 
 interface RouteMatchContext {
 	context?: {
@@ -15,10 +17,10 @@ interface RouteMatchContext {
 
 /**
  * Get the app display name from route match context.
- * Returns the white-label branding name if configured, otherwise "Elmo".
+ * Returns the white-label branding name if configured, otherwise Selena Systems.
  */
 export function getAppName(match: RouteMatchContext): string {
-	return match.context?.clientConfig?.branding?.name || "Elmo";
+	return match.context?.clientConfig?.branding?.name || DEFAULT_APP_NAME;
 }
 
 /**

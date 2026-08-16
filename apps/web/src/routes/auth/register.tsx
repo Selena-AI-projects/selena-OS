@@ -72,7 +72,7 @@ function RegisterPage() {
 				return;
 			}
 
-			navigate({ to: returnTo ?? "/app" });
+			navigate({ to: safeReturnTo(returnTo) });
 		} catch {
 			setError("Something went wrong. Please try again.");
 			setLoading(false);
@@ -104,7 +104,7 @@ function RegisterPage() {
 	}
 
 	return (
-		<FullPageCard title="Create account" subtitle="Sign up to get started">
+		<FullPageCard title="Create your workspace" subtitle="Set up your AI Visibility account">
 			{isCloud && (
 				<div className="space-y-4 w-full pb-4">
 					<Button

@@ -1,9 +1,10 @@
-import { Badge } from "@workspace/ui/components/badge";
-import { BaseChart } from "./base-chart";
 import { DEFAULT_APP_ICON, DEFAULT_APP_NAME } from "@workspace/config/constants";
 import type { Brand, Competitor } from "@workspace/lib/db/schema";
+import { Badge } from "@workspace/ui/components/badge";
+import { SelenaWordmark } from "@/components/selena-wordmark";
 import type { ChartDataPoint, LookbackPeriod } from "@/lib/chart-utils";
-import { getBadgeVariant, getBadgeClassName } from "@/lib/chart-utils";
+import { getBadgeClassName, getBadgeVariant } from "@/lib/chart-utils";
+import { BaseChart } from "./base-chart";
 
 export interface ChartExportBranding {
 	name?: string;
@@ -44,7 +45,9 @@ export function ChartExportPreview({
 }: ChartExportPreviewProps) {
 	const name = branding.name || DEFAULT_APP_NAME;
 	const isWhitelabel = branding.isWhitelabel && branding.name !== DEFAULT_APP_NAME;
-	const domain = isWhitelabel ? branding.parentUrl?.replace(/^https?:\/\//, "").replace(/\/$/, "") || "" : "elmohq.com";
+	const domain = isWhitelabel
+		? branding.parentUrl?.replace(/^https?:\/\//, "").replace(/\/$/, "") || ""
+		: "selenasystems.com";
 	const hasCustomIcon = branding.icon && branding.icon !== DEFAULT_APP_ICON;
 
 	return (
@@ -107,9 +110,7 @@ export function ChartExportPreview({
 							{name}
 						</span>
 					) : (
-						<span className="font-titan-one font-normal lowercase text-blue-600" style={{ fontSize: 24 }}>
-							elmo
-						</span>
+						<SelenaWordmark className="text-[#181614]" />
 					)}
 				</div>
 				<span style={{ fontSize: 18 }} className="text-gray-400 font-medium">

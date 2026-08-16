@@ -133,7 +133,7 @@ export function EmailPasswordLogin({
 	}
 
 	return (
-		<FullPageCard title="Sign in" subtitle={isDemo ? undefined : "Enter your email and password to continue"}>
+		<FullPageCard title="Welcome back" subtitle={isDemo ? undefined : "Sign in to your AI Visibility workspace"}>
 			{isCloud && (
 				<div className="space-y-4 w-full pb-4">
 					<Button
