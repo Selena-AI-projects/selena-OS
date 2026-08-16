@@ -11,7 +11,7 @@ changes are already on origin or staging.
 
 - App branch: `release/selena-visibility-mvp`.
 - App origin and HEAD before this scoped change: `62267e4573fd5706e7ff8bf5e5598f70d31e4aa2`.
-- App scoped commit after this change: `6d0a6d83`.
+- App scoped commits after this change: `6d0a6d83`, `acfba5ac`.
 - Site branch: `release/ai-visibility-master-correction`.
 - Site origin and HEAD before this scoped change: `baf3e6ebf16ff5d338c09af7f36a23218511a61c`.
 - Site scoped commit after this change: `ccd0205`.
