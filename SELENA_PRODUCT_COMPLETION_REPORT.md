@@ -6,16 +6,36 @@ This section supersedes the release-status wording below for the current
 Master Correction release. The historical RC6 deployment evidence remains
 below as an immutable record; it is not evidence for the current deployment.
 
+### Acceptance follow-up
+
+Status: `MASTER CORRECTION — STAGING ACCEPTED / PRODUCTION OWNER GATE REQUIRED`.
+
+The three outstanding acceptance gates are now closed:
+
+- `/app/academy` is the canonical protected learning boundary. `/app/learn`
+  is a compatibility redirect to `/app/academy`; no course purchase or learner
+  entitlement is activated by this boundary.
+- A live, read-only comparison of the same public URL was completed against
+  the current Cloudflare Agent Readiness checker. The evidence record maps all
+  15 observed Cloudflare checks to Selena rules with zero unmapped checks,
+  evidence gaps, fix/verification gaps or false N/A findings. The two numeric
+  scores are intentionally not combined.
+- Real browser viewport acceptance passed at `390×844` and `768×1024` for the
+  mobile menu, forms, Pricing, Check report, Lab, redirects, horizontal
+  overflow and application console errors.
+
 ### Current repository state
 
 - App branch: `release/selena-visibility-mvp`.
 - App origin and HEAD before this scoped change: `62267e4573fd5706e7ff8bf5e5598f70d31e4aa2`.
-- App scoped commits after this change: `6d0a6d83`, `acfba5ac`, `42a56a55`.
+- App scoped commits after this change: `6d0a6d83`, `acfba5ac`, `42a56a55`,
+  `b4bef979`.
 - Documentation follow-up commit: `7a04cac8` (OSS provenance and MIT notice).
-- Final report-only commit: `ce16dec0`.
+- Previous report-only commit: `ce16dec0`.
 - Site branch: `release/ai-visibility-master-correction`.
 - Site origin and HEAD before this scoped change: `baf3e6ebf16ff5d338c09af7f36a23218511a61c`.
-- Site scoped commit after this change: `ccd02056ceb4d458e0cf3534b5c8b9acc5d88c8a`.
+- Site scoped commits after this change: `ccd02056ceb4d458e0cf3534b5c8b9acc5d88c8a`,
+  `98e45e9` (live benchmark record and acceptance evidence).
 - The scoped commits are pushed to their release branches and deployed only to
   staging/preview. No production promotion was performed.
 - User-owned `elmo-source/tmp/` is intentionally excluded from the scope.
@@ -49,7 +69,7 @@ below as an immutable record; it is not evidence for the current deployment.
 
 ### Current quality evidence
 
-- Site: 140 unit tests, typecheck, ESLint, Next production build,
+- Site: 141 unit tests, typecheck, ESLint, Next production build,
   `git diff --check` and `npx impeccable detect` passed.
 - App web: 242 unit tests, typecheck, production build and changed-scope
   Biome lint passed. Selena contracts: 15 tests and typecheck passed.
@@ -60,12 +80,14 @@ below as an immutable record; it is not evidence for the current deployment.
 - Local route smoke: `/`, `/check`, `/pricing`, `/visibility`, `/lab`,
   `/ai-systems`, Russian equivalents and AI Systems detail routes returned
   200; retired report sample returned 404; legacy API report returned 410.
-- Railway staging web deployment `e57379ed-fa37-459a-b68b-eeaa75d6a305` and
-  worker deployment `3a4b5de6-e359-4526-82f5-e40f78138b3d` reached terminal
-  `SUCCESS` on app commit `42a56a5501699f39b30b56ce2dc7b13463c2e1f5`. Both
-  used the tracked `railway.json` Dockerfile configuration. Image digests:
-  web `sha256:e7d42db40cada8ada28fa0f09320c87cc484786ecb746ac492f59e94b68d6c33`;
-  worker `sha256:1eec597308713aff360a464f122f318fa403ec1dd8fb81022786c6019ef17ce5`.
+- Railway staging web deployment `0ab00cff-cccc-42f7-b271-dedc359194bd` and
+  worker deployment `00fce7c7-6530-4691-af4d-378849f89915` reached terminal
+  `SUCCESS` on app commit `b4bef97983af496809d99a856c81a4e050524baf`. Both
+  used the tracked `/railway.json` Dockerfile configuration with
+  `docker/Dockerfile`. Image digests: web
+  `sha256:9cd310913017462b33a96ecddddb4b6cdb1a3556826ee7365cce257b5bc6f7ad`;
+  worker
+  `sha256:b8df08c89ca6bfb374bbf736ffc352387a17b979419a9e36807b3fbd84b24c72`.
 - The final docs/provenance head `7a04cac844ae21b26a298a745e1be1be7f190a1e`
   also reached terminal `SUCCESS`: web deployment
   `0e80f112-21d9-45fc-a9c0-781b087ae5b3` with image digest
@@ -75,18 +97,18 @@ below as an immutable record; it is not evidence for the current deployment.
 - Staging health: Railway web domain `web-staging-4a8f.up.railway.app` and
   `app.selenasystems.com` returned HTTP 200 for `/api/setup-status`; worker
   logs reported `SCHEDULE_MAINTENANCE_ENABLED=false` and readiness. `/app/selena`
-  and the canonical `/app/academy` boundary are protected by login; the old
-  `/app/learn` path is a compatibility redirect to `/app/academy`. No
-  provider/payment/measurement action was started.
-- Public-site preview deployment `dpl_E8W3A8P6fYH8ebYqbucvLZdUNiKu` is
+  and `/app/academy` redirect unauthenticated users to login with the expected
+  return path; `/app/learn` redirects to `/app/academy`; `/selena` redirects
+  to the public `/check`. No provider/payment/measurement action was started.
+- Public-site preview deployment `dpl_CBApVtnNoE7kqWHG1U7nJkuaaj3d` is
   `Ready` at
-  `https://selena-ai-company-ker17hbs7-yulaboober.vercel.app` for the site
+  `https://selena-ai-company-pjq7c6kap-yulaboober.vercel.app` for the site
   release branch. Browser route smoke passed for English/Russian check,
   pricing, visibility, Lab and AI Systems routes; legacy redirects and the
   retired sample report boundary were verified, with zero application console
-  errors observed. The browser surface exposed a fixed desktop viewport, so
-  device-emulation/mobile-layout PASS is not claimed; viewport meta and
-  responsive CSS remain present and local quality gates passed.
+  errors observed. Real viewport acceptance passed at `390×844` and
+  `768×1024`; there was no horizontal overflow and the mobile navigation,
+  forms, Check report, Pricing, Lab and redirects worked at both sizes.
 
 ### Release and owner boundary
 
@@ -100,8 +122,26 @@ below as an immutable record; it is not evidence for the current deployment.
 - Controlled parity is PASS. A live read-only Cloudflare comparison on the
   same public URL is recorded in the site repository; numeric scores are not
   combined because the scoring denominators differ.
+- Live benchmark scores are recorded separately for traceability only:
+  Cloudflare Agent Readiness `21/100`; Selena Public Readiness `36/100` with
+  `100%` evidence coverage. These are not the same metric and are not ranked
+  against each other.
 - The safe public-site rollback target remains the owner-locked published
   artifact `07d6fe9`; the app's existing immutable RC6 tags remain available.
+
+## Central Memory provenance — Master Correction acceptance follow-up
+
+- Owner acceptance-correction source: record
+  `cce50628-154d-459b-ac95-20bf568233de`, source version
+  `e52f304f-5aef-49fd-bcbf-94c1a69a4b8d`, content hash
+  `6e210cb64c85124d692b106c487f0aecba6511fb9ca4bc0cdca1d4d5cfe65a38`.
+- Live Cloudflare benchmark source: record
+  `f339ff45-4d07-4f32-8dec-211fef244718`, source version
+  `f5a06a9e-ae36-488e-94db-818b257a0259`, content hash
+  `2171553c7d0e3ce486dd43a87ac0e14cc22d536d0cc3fc888e4ec7305c67941c`.
+- The pre-existing Master Correction source, reconciliation source, OSS
+  source records and earlier drafts remain unchanged. No Central Memory
+  record was confirmed, superseded or revoked in this follow-up.
 
 ## RC6 v1.2 Public Readiness continuation — 2026-08-15
 
