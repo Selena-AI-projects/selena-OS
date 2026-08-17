@@ -1,10 +1,21 @@
 # Selena AI Visibility — owner operating guide
 
+## Deployment mode
+
+Selena deployments must run `DEPLOYMENT_MODE=local` (the Dockerfile default,
+also recorded in the operational runbook). The upstream `cloud` mode enables
+Stripe billing and a plan picker with the upstream product's own plans and
+prices, which do not match the published Selena catalog — never switch a
+customer-facing Selena deployment to `cloud` mode.
+
 ## Before accepting a paid order
 
 - Set package prices in the admin pricing configuration.
 - Until real prices and payment activation are supplied, keep checkout in
   `REQUEST_QUOTE` or payment test mode.
+- Payment endpoints refuse to record a payment until `SELENA_PAYMENTS_ENABLED`
+  is explicitly set to `true`; a recorded test payment moves the order to
+  `PAID_REVIEW_REQUIRED`, never directly to `APPROVED`.
 - Confirm brand, domain, region, languages, scenarios and expected cardinality.
 - Review the configuration lock, quote expiry, budget and provider status.
 
