@@ -121,3 +121,4 @@ export function calculateQuote(input: QuoteCreate, pricing: QuotePricing) {
 export * from "./recommendation";
 export * from "./payment";
 export * from "./catalog";
+export * from "./local-discovery";
