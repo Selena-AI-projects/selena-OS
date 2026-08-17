@@ -155,6 +155,13 @@
       "when": 1786728600000,
       "tag": "0021_selena_local_discovery_entities",
       "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1786729200000,
+      "tag": "0022_selena_manual_pilot",
+      "breakpoints": true
     }
   ]
 }
