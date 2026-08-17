@@ -1,4 +1,5 @@
 import {
+	type AnyPgColumn,
 	boolean,
 	index,
 	integer,
@@ -409,6 +410,28 @@ export const svRecommendationActions = pgTable("sv_recommendation_actions", {
 export const svRecommendationTasks = pgTable("sv_recommendation_tasks", {
 	id: text("id").notNull(), organizationId: text("organization_id").notNull().references(() => organization.id), runId: uuid("run_id").notNull().references(() => svRecommendationRuns.id), recommendationId: text("recommendation_id").notNull(), title: text("title").notNull(), horizon: text("horizon").notNull(), owner: text("owner").notNull(), steps: text("steps").array().notNull(), evidenceIds: text("evidence_ids").array().notNull(), verificationPlan: text("verification_plan").array().notNull(),
 }, (table) => ({ pk: uniqueIndex("sv_recommendation_tasks_run_id_unique").on(table.runId, table.id), orgIdx: index("sv_recommendation_tasks_org_idx").on(table.organizationId) })).enableRLS();
+
+// Local AI discovery (RC7): entity hierarchies and business locations are
+// client-confirmed configuration only — the backend never resolves them
+// against Google surfaces.
+export const svEntityKindEnum = pgEnum("sv_entity_kind", ["MASTER_BRAND", "SUBBRAND", "CONCEPT", "LOCATION_BRAND"]);
+export const svParentRelationEnum = pgEnum("sv_parent_relation", ["SUBBRAND_OF", "CONCEPT_WITHIN", "LOCATION_OF", "UNSPECIFIED"]);
+export const svEntityConfirmationEnum = pgEnum("sv_entity_confirmation", ["PROPOSED", "CLIENT_CONFIRMED", "ANALYST_CONFIRMED", "REJECTED"]);
+export const svGeoPrecisionEnum = pgEnum("sv_geo_precision", ["CITY", "ADDRESS", "COORDINATE", "UNKNOWN"]);
+export const svReferenceOriginEnum = pgEnum("sv_reference_origin", ["USER_PROVIDED", "PUBLIC_SITE", "ANALYST_ENTERED"]);
+export const svLocationRoleEnum = pgEnum("sv_location_role", ["PRIMARY", "SECONDARY", "WITHIN"]);
+export const svLocationConfirmationEnum = pgEnum("sv_location_confirmation", ["PROPOSED", "CONFIRMED", "REJECTED"]);
+export const svEntities = pgTable("sv_entities", {
+	id: uuid("id").defaultRandom().primaryKey().notNull(), organizationId: text("organization_id").notNull().references(() => organization.id), projectId: uuid("project_id").notNull().references(() => svProjects.id), parentEntityId: uuid("parent_entity_id").references((): AnyPgColumn => svEntities.id), entityKind: svEntityKindEnum("entity_kind").notNull(), parentRelation: svParentRelationEnum("parent_relation"), confirmationStatus: svEntityConfirmationEnum("confirmation_status").notNull().default("PROPOSED"), name: text("name").notNull(), aliases: text("aliases").array().notNull().default([]), prelaunch: boolean("prelaunch").notNull().default(false), createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(), updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => ({ orgProjectIdx: index("sv_entities_org_project_idx").on(table.organizationId, table.projectId) })).enableRLS();
+export const svBusinessLocations = pgTable("sv_business_locations", {
+	id: uuid("id").defaultRandom().primaryKey().notNull(), organizationId: text("organization_id").notNull().references(() => organization.id), entityId: uuid("entity_id").notNull().references(() => svEntities.id), displayName: text("display_name").notNull(), countryCode: text("country_code").notNull(), adminArea: text("admin_area"), locality: text("locality"), addressText: text("address_text"), timezone: text("timezone"), latitude: numeric("latitude", { precision: 9, scale: 6 }), longitude: numeric("longitude", { precision: 9, scale: 6 }), geoPrecision: svGeoPrecisionEnum("geo_precision").notNull().default("UNKNOWN"),
+	// Opaque user-supplied strings kept for human cross-checking only: the RC7
+	// MANUAL_ONLY policy forbids the backend from ever resolving them through
+	// Google Maps / Places, so they must never feed an external lookup.
+	googleMapsUrlReference: text("google_maps_url_reference"), googlePlaceIdReference: text("google_place_id_reference"),
+	referenceOrigin: svReferenceOriginEnum("reference_origin").notNull().default("USER_PROVIDED"), locationRole: svLocationRoleEnum("location_role").notNull().default("PRIMARY"), confirmationStatus: svLocationConfirmationEnum("confirmation_status").notNull().default("PROPOSED"), createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(), updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => ({ entityIdx: index("sv_business_locations_entity_idx").on(table.entityId), orgIdx: index("sv_business_locations_org_idx").on(table.organizationId) })).enableRLS();
 
 export type SvProject = typeof svProjects.$inferSelect;
 export type NewSvProject = typeof svProjects.$inferInsert;

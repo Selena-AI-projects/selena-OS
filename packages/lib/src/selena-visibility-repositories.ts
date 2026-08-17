@@ -1,6 +1,7 @@
 import { and, desc, eq } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import * as schema from "./db/schema";
+import { detectEntityCycle, validateEntityParent } from "./selena-entities";
 
 export type SelenaRepositoryContext = {
 	actorId: string;
@@ -234,6 +235,100 @@ export function createSelenaRepositories(db: Db) {
 				return (
 					await db
 						.insert(schema.svScenarios)
+						.values({ ...value, organizationId: ctx.tenantId })
+						.returning()
+				)[0];
+			},
+		},
+		entities: {
+			list: (ctx: SelenaRepositoryContext, projectId: string) =>
+				db
+					.select()
+					.from(schema.svEntities)
+					.where(and(eq(schema.svEntities.projectId, projectId), eq(schema.svEntities.organizationId, ctx.tenantId)))
+					.orderBy(desc(schema.svEntities.createdAt)),
+			create: async (
+				ctx: SelenaRepositoryContext,
+				value: Omit<typeof schema.svEntities.$inferInsert, "organizationId">,
+			) => {
+				writable(ctx);
+				await assertProjectOwned(ctx, value.projectId);
+				const parent = value.parentEntityId
+					? (
+							await db
+								.select({
+									id: schema.svEntities.id,
+									organizationId: schema.svEntities.organizationId,
+									projectId: schema.svEntities.projectId,
+								})
+								.from(schema.svEntities)
+								.where(eq(schema.svEntities.id, value.parentEntityId))
+								.limit(1)
+						)[0]
+					: undefined;
+				validateEntityParent({ ...value, organizationId: ctx.tenantId }, parent);
+				if (value.parentEntityId) {
+					const siblings = await db
+						.select({ id: schema.svEntities.id, parentEntityId: schema.svEntities.parentEntityId })
+						.from(schema.svEntities)
+						.where(
+							and(
+								eq(schema.svEntities.projectId, value.projectId),
+								eq(schema.svEntities.organizationId, ctx.tenantId),
+							),
+						);
+					detectEntityCycle(siblings, {
+						id: value.id ?? globalThis.crypto.randomUUID(),
+						parentEntityId: value.parentEntityId,
+					});
+				}
+				return (
+					await db
+						.insert(schema.svEntities)
+						.values({ ...value, organizationId: ctx.tenantId })
+						.returning()
+				)[0];
+			},
+			setConfirmation: async (
+				ctx: SelenaRepositoryContext,
+				entityId: string,
+				status: (typeof schema.svEntityConfirmationEnum.enumValues)[number],
+			) => {
+				writable(ctx);
+				const [entity] = await db
+					.update(schema.svEntities)
+					.set({ confirmationStatus: status, updatedAt: new Date() })
+					.where(and(eq(schema.svEntities.id, entityId), eq(schema.svEntities.organizationId, ctx.tenantId)))
+					.returning();
+				if (!entity) throw new Error("Not found: entity is outside AuthContext tenant");
+				return entity;
+			},
+		},
+		locations: {
+			list: (ctx: SelenaRepositoryContext, entityId: string) =>
+				db
+					.select()
+					.from(schema.svBusinessLocations)
+					.where(
+						and(
+							eq(schema.svBusinessLocations.entityId, entityId),
+							eq(schema.svBusinessLocations.organizationId, ctx.tenantId),
+						),
+					),
+			create: async (
+				ctx: SelenaRepositoryContext,
+				value: Omit<typeof schema.svBusinessLocations.$inferInsert, "organizationId">,
+			) => {
+				writable(ctx);
+				const [entity] = await db
+					.select({ id: schema.svEntities.id })
+					.from(schema.svEntities)
+					.where(and(eq(schema.svEntities.id, value.entityId), eq(schema.svEntities.organizationId, ctx.tenantId)))
+					.limit(1);
+				if (!entity) throw new Error("Not found: entity is outside AuthContext tenant");
+				return (
+					await db
+						.insert(schema.svBusinessLocations)
 						.values({ ...value, organizationId: ctx.tenantId })
 						.returning()
 				)[0];

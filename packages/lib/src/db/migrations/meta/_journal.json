@@ -148,6 +148,13 @@
       "when": 1786728000000,
       "tag": "0020_selena_website_snapshots",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1786728600000,
+      "tag": "0021_selena_local_discovery_entities",
+      "breakpoints": true
     }
   ]
 }

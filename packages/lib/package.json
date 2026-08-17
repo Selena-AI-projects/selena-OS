@@ -47,6 +47,7 @@
 		,"./public-provider-gates": "./src/public-provider-gates.ts"
 		,"./recommendation-persistence": "./src/recommendation-persistence.ts"
 		,"./recommendation-engine": "./src/recommendation-engine.ts"
+		,"./selena-entities": "./src/selena-entities.ts"
 	},
 	"dependencies": {
 		"@ai-sdk/anthropic": "^4.0.27",
