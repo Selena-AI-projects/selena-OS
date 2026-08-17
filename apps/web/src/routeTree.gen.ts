@@ -83,7 +83,12 @@ import { Route as ApiV1SelenaProjectsIndexRouteImport } from './routes/api/v1/se
 import { Route as ApiV1SelenaQuotesIndexRouteImport } from './routes/api/v1/selena/quotes/index'
 import { Route as ApiV1SelenaReadinessVerifyRouteImport } from './routes/api/v1/selena/readiness/verify'
 import { Route as ApiV1SelenaScenariosIndexRouteImport } from './routes/api/v1/selena/scenarios/index'
+import { Route as ApiV1SelenaPilotCyclesIndexRouteImport } from './routes/api/v1/selena/pilot/cycles/index'
+import { Route as ApiV1SelenaPilotObservationsIndexRouteImport } from './routes/api/v1/selena/pilot/observations/index'
 import { Route as ApiV1SelenaReadinessScansScanIdRouteImport } from './routes/api/v1/selena/readiness/scans/$scanId'
+import { Route as ApiV1SelenaPilotObservationsObservationIdReviewRouteImport } from './routes/api/v1/selena/pilot/observations/$observationId/review'
+import { Route as ApiV1SelenaPilotCyclesCycleIdTasksIndexRouteImport } from './routes/api/v1/selena/pilot/cycles/$cycleId/tasks/index'
+import { Route as ApiV1SelenaPilotCyclesCycleIdTasksGenerateRouteImport } from './routes/api/v1/selena/pilot/cycles/$cycleId/tasks/generate'
 import { Route as ApiV1SelenaReadinessScansScanIdFixesFindingIdRouteImport } from './routes/api/v1/selena/readiness/scans/$scanId/fixes/$findingId'
 
 const IndexRoute = IndexRouteImport.update({
@@ -479,10 +484,40 @@ const ApiV1SelenaScenariosIndexRoute =
     path: '/api/v1/selena/scenarios/',
     getParentRoute: () => rootRouteImport,
   } as any)
+const ApiV1SelenaPilotCyclesIndexRoute =
+  ApiV1SelenaPilotCyclesIndexRouteImport.update({
+    id: '/api/v1/selena/pilot/cycles/',
+    path: '/api/v1/selena/pilot/cycles/',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiV1SelenaPilotObservationsIndexRoute =
+  ApiV1SelenaPilotObservationsIndexRouteImport.update({
+    id: '/api/v1/selena/pilot/observations/',
+    path: '/api/v1/selena/pilot/observations/',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiV1SelenaReadinessScansScanIdRoute =
   ApiV1SelenaReadinessScansScanIdRouteImport.update({
     id: '/api/v1/selena/readiness/scans/$scanId',
     path: '/api/v1/selena/readiness/scans/$scanId',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiV1SelenaPilotObservationsObservationIdReviewRoute =
+  ApiV1SelenaPilotObservationsObservationIdReviewRouteImport.update({
+    id: '/api/v1/selena/pilot/observations/$observationId/review',
+    path: '/api/v1/selena/pilot/observations/$observationId/review',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiV1SelenaPilotCyclesCycleIdTasksIndexRoute =
+  ApiV1SelenaPilotCyclesCycleIdTasksIndexRouteImport.update({
+    id: '/api/v1/selena/pilot/cycles/$cycleId/tasks/',
+    path: '/api/v1/selena/pilot/cycles/$cycleId/tasks/',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiV1SelenaPilotCyclesCycleIdTasksGenerateRoute =
+  ApiV1SelenaPilotCyclesCycleIdTasksGenerateRouteImport.update({
+    id: '/api/v1/selena/pilot/cycles/$cycleId/tasks/generate',
+    path: '/api/v1/selena/pilot/cycles/$cycleId/tasks/generate',
     getParentRoute: () => rootRouteImport,
   } as any)
 const ApiV1SelenaReadinessScansScanIdFixesFindingIdRoute =
@@ -567,7 +602,12 @@ export interface FileRoutesByFullPath {
   '/api/v1/selena/quotes/': typeof ApiV1SelenaQuotesIndexRoute
   '/api/v1/selena/scenarios/': typeof ApiV1SelenaScenariosIndexRoute
   '/api/v1/selena/readiness/scans/$scanId': typeof ApiV1SelenaReadinessScansScanIdRouteWithChildren
+  '/api/v1/selena/pilot/cycles/': typeof ApiV1SelenaPilotCyclesIndexRoute
+  '/api/v1/selena/pilot/observations/': typeof ApiV1SelenaPilotObservationsIndexRoute
+  '/api/v1/selena/pilot/observations/$observationId/review': typeof ApiV1SelenaPilotObservationsObservationIdReviewRoute
+  '/api/v1/selena/pilot/cycles/$cycleId/tasks/generate': typeof ApiV1SelenaPilotCyclesCycleIdTasksGenerateRoute
   '/api/v1/selena/readiness/scans/$scanId/fixes/$findingId': typeof ApiV1SelenaReadinessScansScanIdFixesFindingIdRoute
+  '/api/v1/selena/pilot/cycles/$cycleId/tasks/': typeof ApiV1SelenaPilotCyclesCycleIdTasksIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -640,7 +680,12 @@ export interface FileRoutesByTo {
   '/api/v1/selena/quotes': typeof ApiV1SelenaQuotesIndexRoute
   '/api/v1/selena/scenarios': typeof ApiV1SelenaScenariosIndexRoute
   '/api/v1/selena/readiness/scans/$scanId': typeof ApiV1SelenaReadinessScansScanIdRouteWithChildren
+  '/api/v1/selena/pilot/cycles': typeof ApiV1SelenaPilotCyclesIndexRoute
+  '/api/v1/selena/pilot/observations': typeof ApiV1SelenaPilotObservationsIndexRoute
+  '/api/v1/selena/pilot/observations/$observationId/review': typeof ApiV1SelenaPilotObservationsObservationIdReviewRoute
+  '/api/v1/selena/pilot/cycles/$cycleId/tasks/generate': typeof ApiV1SelenaPilotCyclesCycleIdTasksGenerateRoute
   '/api/v1/selena/readiness/scans/$scanId/fixes/$findingId': typeof ApiV1SelenaReadinessScansScanIdFixesFindingIdRoute
+  '/api/v1/selena/pilot/cycles/$cycleId/tasks': typeof ApiV1SelenaPilotCyclesCycleIdTasksIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -719,7 +764,12 @@ export interface FileRoutesById {
   '/api/v1/selena/quotes/': typeof ApiV1SelenaQuotesIndexRoute
   '/api/v1/selena/scenarios/': typeof ApiV1SelenaScenariosIndexRoute
   '/api/v1/selena/readiness/scans/$scanId': typeof ApiV1SelenaReadinessScansScanIdRouteWithChildren
+  '/api/v1/selena/pilot/cycles/': typeof ApiV1SelenaPilotCyclesIndexRoute
+  '/api/v1/selena/pilot/observations/': typeof ApiV1SelenaPilotObservationsIndexRoute
+  '/api/v1/selena/pilot/observations/$observationId/review': typeof ApiV1SelenaPilotObservationsObservationIdReviewRoute
+  '/api/v1/selena/pilot/cycles/$cycleId/tasks/generate': typeof ApiV1SelenaPilotCyclesCycleIdTasksGenerateRoute
   '/api/v1/selena/readiness/scans/$scanId/fixes/$findingId': typeof ApiV1SelenaReadinessScansScanIdFixesFindingIdRoute
+  '/api/v1/selena/pilot/cycles/$cycleId/tasks/': typeof ApiV1SelenaPilotCyclesCycleIdTasksIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -798,7 +848,12 @@ export interface FileRouteTypes {
     | '/api/v1/selena/quotes/'
     | '/api/v1/selena/scenarios/'
     | '/api/v1/selena/readiness/scans/$scanId'
+    | '/api/v1/selena/pilot/cycles/'
+    | '/api/v1/selena/pilot/observations/'
+    | '/api/v1/selena/pilot/observations/$observationId/review'
+    | '/api/v1/selena/pilot/cycles/$cycleId/tasks/generate'
     | '/api/v1/selena/readiness/scans/$scanId/fixes/$findingId'
+    | '/api/v1/selena/pilot/cycles/$cycleId/tasks/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -871,7 +926,12 @@ export interface FileRouteTypes {
     | '/api/v1/selena/quotes'
     | '/api/v1/selena/scenarios'
     | '/api/v1/selena/readiness/scans/$scanId'
+    | '/api/v1/selena/pilot/cycles'
+    | '/api/v1/selena/pilot/observations'
+    | '/api/v1/selena/pilot/observations/$observationId/review'
+    | '/api/v1/selena/pilot/cycles/$cycleId/tasks/generate'
     | '/api/v1/selena/readiness/scans/$scanId/fixes/$findingId'
+    | '/api/v1/selena/pilot/cycles/$cycleId/tasks'
   id:
     | '__root__'
     | '/'
@@ -949,7 +1009,12 @@ export interface FileRouteTypes {
     | '/api/v1/selena/quotes/'
     | '/api/v1/selena/scenarios/'
     | '/api/v1/selena/readiness/scans/$scanId'
+    | '/api/v1/selena/pilot/cycles/'
+    | '/api/v1/selena/pilot/observations/'
+    | '/api/v1/selena/pilot/observations/$observationId/review'
+    | '/api/v1/selena/pilot/cycles/$cycleId/tasks/generate'
     | '/api/v1/selena/readiness/scans/$scanId/fixes/$findingId'
+    | '/api/v1/selena/pilot/cycles/$cycleId/tasks/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -994,6 +1059,11 @@ export interface RootRouteChildren {
   ApiV1SelenaQuotesIndexRoute: typeof ApiV1SelenaQuotesIndexRoute
   ApiV1SelenaScenariosIndexRoute: typeof ApiV1SelenaScenariosIndexRoute
   ApiV1SelenaReadinessScansScanIdRoute: typeof ApiV1SelenaReadinessScansScanIdRouteWithChildren
+  ApiV1SelenaPilotCyclesIndexRoute: typeof ApiV1SelenaPilotCyclesIndexRoute
+  ApiV1SelenaPilotObservationsIndexRoute: typeof ApiV1SelenaPilotObservationsIndexRoute
+  ApiV1SelenaPilotObservationsObservationIdReviewRoute: typeof ApiV1SelenaPilotObservationsObservationIdReviewRoute
+  ApiV1SelenaPilotCyclesCycleIdTasksGenerateRoute: typeof ApiV1SelenaPilotCyclesCycleIdTasksGenerateRoute
+  ApiV1SelenaPilotCyclesCycleIdTasksIndexRoute: typeof ApiV1SelenaPilotCyclesCycleIdTasksIndexRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -1516,11 +1586,46 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiV1SelenaScenariosIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/v1/selena/pilot/cycles/': {
+      id: '/api/v1/selena/pilot/cycles/'
+      path: '/api/v1/selena/pilot/cycles'
+      fullPath: '/api/v1/selena/pilot/cycles/'
+      preLoaderRoute: typeof ApiV1SelenaPilotCyclesIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/v1/selena/pilot/observations/': {
+      id: '/api/v1/selena/pilot/observations/'
+      path: '/api/v1/selena/pilot/observations'
+      fullPath: '/api/v1/selena/pilot/observations/'
+      preLoaderRoute: typeof ApiV1SelenaPilotObservationsIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/v1/selena/readiness/scans/$scanId': {
       id: '/api/v1/selena/readiness/scans/$scanId'
       path: '/api/v1/selena/readiness/scans/$scanId'
       fullPath: '/api/v1/selena/readiness/scans/$scanId'
       preLoaderRoute: typeof ApiV1SelenaReadinessScansScanIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/v1/selena/pilot/observations/$observationId/review': {
+      id: '/api/v1/selena/pilot/observations/$observationId/review'
+      path: '/api/v1/selena/pilot/observations/$observationId/review'
+      fullPath: '/api/v1/selena/pilot/observations/$observationId/review'
+      preLoaderRoute: typeof ApiV1SelenaPilotObservationsObservationIdReviewRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/v1/selena/pilot/cycles/$cycleId/tasks/': {
+      id: '/api/v1/selena/pilot/cycles/$cycleId/tasks/'
+      path: '/api/v1/selena/pilot/cycles/$cycleId/tasks'
+      fullPath: '/api/v1/selena/pilot/cycles/$cycleId/tasks/'
+      preLoaderRoute: typeof ApiV1SelenaPilotCyclesCycleIdTasksIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/v1/selena/pilot/cycles/$cycleId/tasks/generate': {
+      id: '/api/v1/selena/pilot/cycles/$cycleId/tasks/generate'
+      path: '/api/v1/selena/pilot/cycles/$cycleId/tasks/generate'
+      fullPath: '/api/v1/selena/pilot/cycles/$cycleId/tasks/generate'
+      preLoaderRoute: typeof ApiV1SelenaPilotCyclesCycleIdTasksGenerateRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/v1/selena/readiness/scans/$scanId/fixes/$findingId': {
@@ -1719,6 +1824,15 @@ const rootRouteChildren: RootRouteChildren = {
   ApiV1SelenaScenariosIndexRoute: ApiV1SelenaScenariosIndexRoute,
   ApiV1SelenaReadinessScansScanIdRoute:
     ApiV1SelenaReadinessScansScanIdRouteWithChildren,
+  ApiV1SelenaPilotCyclesIndexRoute: ApiV1SelenaPilotCyclesIndexRoute,
+  ApiV1SelenaPilotObservationsIndexRoute:
+    ApiV1SelenaPilotObservationsIndexRoute,
+  ApiV1SelenaPilotObservationsObservationIdReviewRoute:
+    ApiV1SelenaPilotObservationsObservationIdReviewRoute,
+  ApiV1SelenaPilotCyclesCycleIdTasksGenerateRoute:
+    ApiV1SelenaPilotCyclesCycleIdTasksGenerateRoute,
+  ApiV1SelenaPilotCyclesCycleIdTasksIndexRoute:
+    ApiV1SelenaPilotCyclesCycleIdTasksIndexRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

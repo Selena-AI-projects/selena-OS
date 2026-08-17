@@ -57,16 +57,17 @@ Selena env flags intentionally live outside `ENV_REGISTRY` (precedent:
 | No external calls | Observations use only the existing crawl output; the Maps-link rule reuses the URL regexes from `checks/actionReadiness.ts` against already-fetched HTML |
 | Mandatory disclaimer + CTA behind flag | `localAi` copy block in both locales; CTA rendered only when `LOCAL_AI_DISCOVERY_ENABLED` (new entry in `lib/diagnostics/flags.ts`, default off) is set server-side into the report |
 
-### Phase E — manual pilot workflow (app) — planned, not yet implemented
+### Phase E — manual pilot workflow (app)
 
-Mapping decided in advance from the discovery pass:
-
-| Logical requirement | Planned landing place |
+| Logical requirement | Actual implementation |
 |---|---|
-| Lock extension `localAiDiscovery` block | `sv_configuration_locks.snapshot` is already jsonb — additive block validated by a new zod schema in contracts; old locks never rewritten |
-| Manual capture tasks outside the provider queue | New `sv_capture_tasks` (+ status enum modeled on `svOrderStatusEnum`); pg-boss queues (`process-prompt`, `generate-report`, `analyze-brand`) are not touched |
-| Observations/evidence | Reuse the evidence contract (`accessClass: UPLOADED`, `kind: MAPS` already reserved in `packages/selena-visibility-contracts/src/recommendation.ts`); new observation tables with `context_hash`, `ordering_state`, `content_sha256` |
-| Zero provider execution proof | `usage_events` has exactly one writer (`apps/worker/src/jobs/process-prompt.ts`); `sv_runs`/`sv_run_permits` have no TS writer at all — the manual path cannot touch them by construction |
+| Lock extension `localAiDiscovery` block (§7.4) + observer context (§7.3) | `localAiDiscoveryLockBlockSchema` / `observerContextSchema` (strict — Google account/email/device identifier fields are unrepresentable) and `contextHash` (sha256 over sorted condition keys, `capturedAt` excluded) in `packages/selena-visibility-contracts/src/local-discovery.ts`; old locks never rewritten |
+| Manual capture tasks outside the provider queue | `sv_pilot_cycles` + `sv_capture_tasks` (matrix unique index `pilotCycleId, scenarioId, contextHash, repeatIndex`); pure planner `planCaptureTasks` in `packages/lib/src/selena-manual-pilot.ts`; pg-boss queues untouched |
+| Observations/evidence/mentions | `sv_local_observations` (1:1 per task, versioned corrections via `supersedes_observation_id`), `sv_observation_mentions`, `sv_observation_evidence_assets` (opaque `private_object_reference`, never fetched), `sv_audit_events`; migration `0022_selena_manual_pilot.sql` (additive) |
+| Cardinality | `expectedObservations` = scenarios × contexts × repeats (entities never multiply); `assertObservationCardinality` blocks observation expected+1 both at planning and transactionally on submit |
+| §10 metrics | Pure functions in contracts (`entityInclusionRate`, `familyPresenceRate`, `explicitAveragePosition`, `repeatStability`, `visibleSourceRate`, `factualErrorRate`); UNKNOWN/`SURFACE_UNAVAILABLE`/`SOURCE_NOT_EXPOSED` excluded from denominators, parent mention ≠ child mention, `UNRESOLVED` never counts |
+| Zero provider execution proof | Repository writers in `selena-visibility-repositories.ts` only touch `sv_pilot_*`/observation tables; invariant test in `packages/lib/src/selena-manual-pilot.test.ts` greps the pilot modules for queue/scheduler/usage/fetch markers |
+| API | `/api/v1/selena/pilot/*` routes behind `assertManualPilotAllowed` (flags off ⇒ plain 404 before auth, feature hidden); api-key auth + idempotency key in every mutating body + audit event per mutation |
 | Roles | No `analyst` role exists; pilot admin surface will gate on the existing admin checks until an analyst role is introduced (owner gate) |
 
 ### Known repo facts RC7 relies on
@@ -74,8 +75,8 @@ Mapping decided in advance from the discovery pass:
 - Upload/object-storage infrastructure does not exist; evidence starts as
   text/reference records per the existing contract. Binary asset storage is an
   owner decision (`BLOB_READ_WRITE_TOKEN` is declared in turbo.json but unused).
-- There is no persisted audit-event table; `sv_audit_events` is part of the
-  Phase E scope if persisted audit is required before pilot activation.
+- `sv_audit_events` (added in Phase E) is the persisted audit trail for
+  manual-pilot mutations; earlier domains still have no audit table.
 - `apps/web` has no i18n framework; the Selena workspace localizes via the
   local `tr(locale, en, ru)` helper in `routes/_authed/app/selena.tsx`.
 - PDF/XLSX rendering is the offline, provider-blind `tools/selena_export.py`;
