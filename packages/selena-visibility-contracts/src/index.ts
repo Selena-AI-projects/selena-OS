@@ -122,3 +122,4 @@ export * from "./recommendation";
 export * from "./payment";
 export * from "./catalog";
 export * from "./local-discovery";
+export * from "./measurement-scope";
