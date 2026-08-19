@@ -17,7 +17,9 @@ import { Label } from "@workspace/ui/components/label";
 import { useEffect, useMemo, useState } from "react";
 import { SelenaWordmark } from "@/components/selena-wordmark";
 import { useAuth } from "@/hooks/use-auth";
+import { validateWebsiteUrl } from "@/lib/brand-website";
 import { resetPostHog } from "@/lib/posthog";
+import { humanizeSelenaError } from "@/lib/selena-workspace-errors";
 import { createSelenaProjectFn, getSelenaWorkspaceFn } from "../../../server/selena-client";
 import { confirmSelenaProfileFn } from "../../../server/selena-onboarding";
 import { collectSelenaWebsiteFn } from "../../../server/selena-website-collector";
@@ -31,6 +33,7 @@ export const Route = createFileRoute("/_authed/app/selena")({
 type WorkspaceData = Awaited<ReturnType<typeof getSelenaWorkspaceFn>>;
 type WorkspaceProject = WorkspaceData["projects"][number];
 type WorkspaceLocale = "en" | "ru";
+type ActionScope = "project" | "profile" | "website" | "";
 
 const emptyProjectForm = { name: "", category: "", country: "ID", region: "", languages: "en" };
 const emptyProfileForm = {
@@ -49,7 +52,10 @@ function SelenaWorkspace() {
 	const [showCreate, setShowCreate] = useState(projects.length === 0);
 	const [projectForm, setProjectForm] = useState(emptyProjectForm);
 	const [profileForm, setProfileForm] = useState(emptyProfileForm);
-	const [pendingAction, setPendingAction] = useState<"project" | "profile" | "website" | "">("");
+	const [pendingAction, setPendingAction] = useState<ActionScope>("");
+	// Feedback is rendered beside the control that produced it: a single banner
+	// at the top of the page sits off-screen when the customer is at the button.
+	const [feedbackScope, setFeedbackScope] = useState<ActionScope>("");
 	const [notice, setNotice] = useState("");
 	const [error, setError] = useState("");
 	const [locale, setLocale] = useState<WorkspaceLocale>("en");
@@ -102,9 +108,13 @@ function SelenaWorkspace() {
 		await router.invalidate();
 	};
 
+	const onProfileNormalized = (patch: Partial<typeof emptyProfileForm>) =>
+		setProfileForm((current) => ({ ...current, ...patch }));
+
 	const createProject = async (event: React.FormEvent) => {
 		event.preventDefault();
 		setPendingAction("project");
+		setFeedbackScope("project");
 		setError("");
 		setNotice("");
 		try {
@@ -132,13 +142,15 @@ function SelenaWorkspace() {
 			await refreshWorkspace();
 		} catch (cause) {
 			setError(
-				cause instanceof Error
-					? cause.message
-					: tr(
-							locale,
-							"We could not create this project. Please try again.",
-							"Не удалось создать проект. Попробуйте ещё раз.",
-						),
+				humanizeSelenaError(
+					cause,
+					locale,
+					tr(
+						locale,
+						"We could not create this project. Please try again.",
+						"Не удалось создать проект. Попробуйте ещё раз.",
+					),
+				),
 			);
 		} finally {
 			setPendingAction("");
@@ -148,25 +160,48 @@ function SelenaWorkspace() {
 	const saveProfile = async (event: React.FormEvent) => {
 		event.preventDefault();
 		if (!selectedProject) return;
-		setPendingAction("profile");
+		setFeedbackScope("profile");
 		setError("");
 		setNotice("");
+
+		// Owners type "korafoodhall.com". The profile schema needs a full URL, so
+		// complete it here and show the completed value back in the field rather
+		// than rejecting the form over a missing scheme.
+		const primary = validateWebsiteUrl(profileForm.primaryDomain);
+		if (!primary.isValid) {
+			setError(
+				tr(
+					locale,
+					"«Primary website»: enter the full address, for example https://example.com",
+					"«Основной сайт»: укажите полный адрес, например https://example.com",
+				),
+			);
+			return;
+		}
+		const publicProfiles: string[] = [];
+		for (const input of splitList(profileForm.publicProfiles)) {
+			const link = validateWebsiteUrl(input);
+			if (!link.isValid) {
+				setError(
+					locale === "ru"
+						? `«Ссылки на публичные профили»: адрес «${input}» не распознан. Укажите полный адрес, например https://instagram.com/username`
+						: `«Public profile links»: we could not read «${input}». Enter the full address, for example https://instagram.com/username`,
+				);
+				return;
+			}
+			publicProfiles.push(link.formattedUrl);
+		}
+		onProfileNormalized({ primaryDomain: primary.formattedUrl, publicProfiles: publicProfiles.join(", ") });
+
+		setPendingAction("profile");
 		try {
 			await confirmSelenaProfileFn({
 				data: {
 					projectId: selectedProject.project.id,
 					brandName: profileForm.brandName.trim(),
-					primaryDomain: profileForm.primaryDomain.trim(),
-					publicProfiles: profileForm.publicProfiles
-						.split(",")
-						.map((url) => url.trim())
-						.filter(Boolean)
-						.map((url) => ({ platform: "public", url })),
-					competitorSnapshot: profileForm.competitors
-						.split(",")
-						.map((name) => name.trim())
-						.filter(Boolean)
-						.map((name) => ({ name, domains: [] })),
+					primaryDomain: primary.formattedUrl,
+					publicProfiles: publicProfiles.map((url) => ({ platform: "public", url })),
+					competitorSnapshot: splitList(profileForm.competitors).map((name) => ({ name, domains: [] })),
 					scenarioSnapshot: profileForm.scenarios
 						.split("\n")
 						.map((line) => parseScenario(line, selectedProject.project.languages[0] ?? "en"))
@@ -183,13 +218,15 @@ function SelenaWorkspace() {
 			await refreshWorkspace();
 		} catch (cause) {
 			setError(
-				cause instanceof Error
-					? cause.message
-					: tr(
-							locale,
-							"We could not save the brand profile. Please try again.",
-							"Не удалось сохранить профиль бренда. Попробуйте ещё раз.",
-						),
+				humanizeSelenaError(
+					cause,
+					locale,
+					tr(
+						locale,
+						"We could not save the brand profile. Please try again.",
+						"Не удалось сохранить профиль бренда. Попробуйте ещё раз.",
+					),
+				),
 			);
 		} finally {
 			setPendingAction("");
@@ -199,6 +236,7 @@ function SelenaWorkspace() {
 	const collectWebsite = async () => {
 		if (!selectedProject) return;
 		setPendingAction("website");
+		setFeedbackScope("website");
 		setError("");
 		setNotice("");
 		try {
@@ -211,13 +249,15 @@ function SelenaWorkspace() {
 			await refreshWorkspace();
 		} catch (cause) {
 			setError(
-				cause instanceof Error
-					? cause.message
-					: tr(
-							locale,
-							"We could not review the confirmed website. Check the address and try again.",
-							"Не удалось проверить подтверждённый сайт. Проверьте адрес и попробуйте ещё раз.",
-						),
+				humanizeSelenaError(
+					cause,
+					locale,
+					tr(
+						locale,
+						"We could not review the confirmed website. Check the address and try again.",
+						"Не удалось проверить подтверждённый сайт. Проверьте адрес и попробуйте ещё раз.",
+					),
+				),
 			);
 		} finally {
 			setPendingAction("");
@@ -339,6 +379,7 @@ function SelenaWorkspace() {
 							locale={locale}
 							form={projectForm}
 							pending={pendingAction === "project"}
+							feedback={feedbackScope === "project" ? { notice, error } : undefined}
 							onChange={setProjectForm}
 							onSubmit={createProject}
 							onCancel={projects.length > 0 ? () => setShowCreate(false) : undefined}
@@ -348,14 +389,13 @@ function SelenaWorkspace() {
 					{!showCreate && selectedProject && (
 						<>
 							<ProjectOverview project={selectedProject} locale={locale} />
-							{notice && <StatusMessage tone="success">{notice}</StatusMessage>}
-							{error && <StatusMessage tone="error">{error}</StatusMessage>}
 							<SetupProgress project={selectedProject} locale={locale} />
 							<BrandProfileForm
 								locale={locale}
 								project={selectedProject}
 								form={profileForm}
 								pending={pendingAction === "profile"}
+								feedback={feedbackScope === "profile" ? { notice, error } : undefined}
 								onChange={setProfileForm}
 								onSubmit={saveProfile}
 							/>
@@ -363,6 +403,7 @@ function SelenaWorkspace() {
 								locale={locale}
 								project={selectedProject}
 								pending={pendingAction === "website"}
+								feedback={feedbackScope === "website" ? { notice, error } : undefined}
 								onCollect={collectWebsite}
 							/>
 							<ResultsPanel project={selectedProject} locale={locale} />
@@ -446,6 +487,7 @@ function CreateProjectForm({
 	locale,
 	form,
 	pending,
+	feedback,
 	onChange,
 	onSubmit,
 	onCancel,
@@ -453,6 +495,7 @@ function CreateProjectForm({
 	locale: WorkspaceLocale;
 	form: typeof emptyProjectForm;
 	pending: boolean;
+	feedback?: Feedback;
 	onChange: (value: typeof emptyProjectForm) => void;
 	onSubmit: (event: React.FormEvent) => void;
 	onCancel?: () => void;
@@ -520,6 +563,7 @@ function CreateProjectForm({
 						onChange={(event) => onChange({ ...form, languages: event.target.value.toLowerCase() })}
 					/>
 				</Field>
+				<FormFeedback feedback={feedback} className="sm:col-span-2" />
 				<div className="flex items-end gap-3">
 					<Button type="submit" className="selena-primary-button min-h-11" disabled={pending}>
 						{pending ? tr(locale, "Creating…", "Создаём…") : tr(locale, "Create project", "Создать проект")}{" "}
@@ -541,6 +585,7 @@ function BrandProfileForm({
 	project,
 	form,
 	pending,
+	feedback,
 	onChange,
 	onSubmit,
 }: {
@@ -548,6 +593,7 @@ function BrandProfileForm({
 	project: WorkspaceProject;
 	form: typeof emptyProfileForm;
 	pending: boolean;
+	feedback?: Feedback;
 	onChange: (value: typeof emptyProfileForm) => void;
 	onSubmit: (event: React.FormEvent) => void;
 }) {
@@ -586,19 +632,29 @@ function BrandProfileForm({
 					<Input
 						id="primary-domain"
 						required
-						type="url"
+						inputMode="url"
+						autoComplete="url"
+						autoCapitalize="none"
+						spellCheck={false}
 						value={form.primaryDomain}
 						onChange={(event) => onChange({ ...form, primaryDomain: event.target.value })}
-						placeholder="https://example.com"
+						placeholder="example.com"
 					/>
 				</Field>
 				<Field
 					label={tr(locale, "Public profile links", "Ссылки на публичные профили")}
-					hint={tr(locale, "Optional, comma separated", "Необязательно, через запятую")}
+					hint={tr(
+						locale,
+						"Optional. Google Maps, Instagram, TripAdvisor — comma separated",
+						"Необязательно. Google Maps, Instagram, TripAdvisor — через запятую",
+					)}
 					htmlFor="public-profiles"
 				>
 					<Input
 						id="public-profiles"
+						inputMode="url"
+						autoCapitalize="none"
+						spellCheck={false}
 						value={form.publicProfiles}
 						onChange={(event) => onChange({ ...form, publicProfiles: event.target.value })}
 						placeholder={tr(locale, "Instagram or other public profile", "Instagram или другой публичный профиль")}
@@ -636,6 +692,7 @@ function BrandProfileForm({
 						/>
 					</Field>
 				</div>
+				<FormFeedback feedback={feedback} className="sm:col-span-2" />
 				<div className="sm:col-span-2">
 					<Button type="submit" className="selena-primary-button min-h-11" disabled={pending}>
 						{pending
@@ -654,11 +711,13 @@ function WebsiteEvidence({
 	locale,
 	project,
 	pending,
+	feedback,
 	onCollect,
 }: {
 	locale: WorkspaceLocale;
 	project: WorkspaceProject;
 	pending: boolean;
+	feedback?: Feedback;
 	onCollect: () => void;
 }) {
 	return (
@@ -712,6 +771,7 @@ function WebsiteEvidence({
 					)}
 				</p>
 			)}
+			<FormFeedback feedback={feedback} className="mt-5" />
 		</section>
 	);
 }
@@ -885,6 +945,18 @@ function Field({
 	);
 }
 
+type Feedback = { notice: string; error: string };
+
+function FormFeedback({ feedback, className }: { feedback?: Feedback; className?: string }) {
+	if (!feedback?.notice && !feedback?.error) return null;
+	return (
+		<div className={`space-y-3 ${className ?? ""}`}>
+			{feedback.notice && <StatusMessage tone="success">{feedback.notice}</StatusMessage>}
+			{feedback.error && <StatusMessage tone="error">{feedback.error}</StatusMessage>}
+		</div>
+	);
+}
+
 function StatusMessage({ tone, children }: { tone: "success" | "error"; children: React.ReactNode }) {
 	return (
 		<p
@@ -906,6 +978,14 @@ function WorkspaceSkeleton() {
 			</div>
 		</div>
 	);
+}
+
+/** Comma is what the hints ask for, but the box above takes one per line. */
+function splitList(value: string): string[] {
+	return value
+		.split(/[\n,]/)
+		.map((item) => item.trim())
+		.filter(Boolean);
 }
 
 function readObjectString(value: unknown, key: string): string {
