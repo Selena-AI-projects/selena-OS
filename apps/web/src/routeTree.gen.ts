@@ -33,6 +33,7 @@ import { Route as AuthedAppBrandRouteImport } from './routes/_authed/app/$brand'
 import { Route as AuthedAppAcademyRouteImport } from './routes/_authed/app/academy'
 import { Route as AuthedAppNewRouteImport } from './routes/_authed/app/new'
 import { Route as AuthedAppSelenaRouteImport } from './routes/_authed/app/selena'
+import { Route as AuthedAppSelenaAdminRouteImport } from './routes/_authed/app/selena-admin'
 import { Route as AuthedReportsIndexRouteImport } from './routes/_authed/reports/index'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
 import { Route as ApiManifestIndexRouteImport } from './routes/api/manifest/index'
@@ -209,6 +210,11 @@ const AuthedAppNewRoute = AuthedAppNewRouteImport.update({
 const AuthedAppSelenaRoute = AuthedAppSelenaRouteImport.update({
   id: '/selena',
   path: '/selena',
+  getParentRoute: () => AuthedAppRoute,
+} as any)
+const AuthedAppSelenaAdminRoute = AuthedAppSelenaAdminRouteImport.update({
+  id: '/selena-admin',
+  path: '/selena-admin',
   getParentRoute: () => AuthedAppRoute,
 } as any)
 const AuthedReportsIndexRoute = AuthedReportsIndexRouteImport.update({
@@ -549,6 +555,7 @@ export interface FileRoutesByFullPath {
   '/app/academy': typeof AuthedAppAcademyRoute
   '/app/new': typeof AuthedAppNewRoute
   '/app/selena': typeof AuthedAppSelenaRoute
+  '/app/selena-admin': typeof AuthedAppSelenaAdminRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/admin/': typeof AuthedAdminIndexRoute
   '/app/': typeof AuthedAppIndexRoute
@@ -627,6 +634,7 @@ export interface FileRoutesByTo {
   '/app/academy': typeof AuthedAppAcademyRoute
   '/app/new': typeof AuthedAppNewRoute
   '/app/selena': typeof AuthedAppSelenaRoute
+  '/app/selena-admin': typeof AuthedAppSelenaAdminRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/admin': typeof AuthedAdminIndexRoute
   '/app': typeof AuthedAppIndexRoute
@@ -711,6 +719,7 @@ export interface FileRoutesById {
   '/_authed/app/academy': typeof AuthedAppAcademyRoute
   '/_authed/app/new': typeof AuthedAppNewRoute
   '/_authed/app/selena': typeof AuthedAppSelenaRoute
+  '/_authed/app/selena-admin': typeof AuthedAppSelenaAdminRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/_authed/admin/': typeof AuthedAdminIndexRoute
   '/_authed/app/': typeof AuthedAppIndexRoute
@@ -795,6 +804,7 @@ export interface FileRouteTypes {
     | '/app/academy'
     | '/app/new'
     | '/app/selena'
+    | '/app/selena-admin'
     | '/api/auth/$'
     | '/admin/'
     | '/app/'
@@ -873,6 +883,7 @@ export interface FileRouteTypes {
     | '/app/academy'
     | '/app/new'
     | '/app/selena'
+    | '/app/selena-admin'
     | '/api/auth/$'
     | '/admin'
     | '/app'
@@ -956,6 +967,7 @@ export interface FileRouteTypes {
     | '/_authed/app/academy'
     | '/_authed/app/new'
     | '/_authed/app/selena'
+    | '/_authed/app/selena-admin'
     | '/api/auth/$'
     | '/_authed/admin/'
     | '/_authed/app/'
@@ -1234,6 +1246,13 @@ declare module '@tanstack/react-router' {
       path: '/selena'
       fullPath: '/app/selena'
       preLoaderRoute: typeof AuthedAppSelenaRouteImport
+      parentRoute: typeof AuthedAppRoute
+    }
+    '/_authed/app/selena-admin': {
+      id: '/_authed/app/selena-admin'
+      path: '/selena-admin'
+      fullPath: '/app/selena-admin'
+      preLoaderRoute: typeof AuthedAppSelenaAdminRouteImport
       parentRoute: typeof AuthedAppRoute
     }
     '/_authed/reports/': {
@@ -1706,6 +1725,7 @@ interface AuthedAppRouteChildren {
   AuthedAppAcademyRoute: typeof AuthedAppAcademyRoute
   AuthedAppNewRoute: typeof AuthedAppNewRoute
   AuthedAppSelenaRoute: typeof AuthedAppSelenaRoute
+  AuthedAppSelenaAdminRoute: typeof AuthedAppSelenaAdminRoute
   AuthedAppIndexRoute: typeof AuthedAppIndexRoute
 }
 
@@ -1714,6 +1734,7 @@ const AuthedAppRouteChildren: AuthedAppRouteChildren = {
   AuthedAppAcademyRoute: AuthedAppAcademyRoute,
   AuthedAppNewRoute: AuthedAppNewRoute,
   AuthedAppSelenaRoute: AuthedAppSelenaRoute,
+  AuthedAppSelenaAdminRoute: AuthedAppSelenaAdminRoute,
   AuthedAppIndexRoute: AuthedAppIndexRoute,
 }
 

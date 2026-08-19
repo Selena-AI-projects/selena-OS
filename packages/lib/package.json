@@ -50,6 +50,7 @@
 		,"./selena-entities": "./src/selena-entities.ts"
 		,"./selena-manual-pilot": "./src/selena-manual-pilot.ts"
 		,"./selena-dispatch": "./src/selena-dispatch.ts"
+		,"./selena-preflight": "./src/selena-preflight.ts"
 	},
 	"dependencies": {
 		"@ai-sdk/anthropic": "^4.0.27",

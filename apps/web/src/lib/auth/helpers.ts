@@ -25,6 +25,12 @@ export function isAdmin(session: SessionLike): boolean {
 	return session.user.role === "admin";
 }
 
+export async function requireAdmin() {
+	const session = await requireAuthSession();
+	if (!isAdmin(session)) throw new Error("Unauthorized: Admin access required");
+	return session;
+}
+
 export function hasReportAccess(session: SessionLike): boolean {
 	// Report generation is disabled entirely in deployments that don't support
 	// it (cloud), so the per-user flag is ignored there.
