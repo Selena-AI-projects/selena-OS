@@ -1,7 +1,7 @@
 import { z } from "zod";
 // Type-only import: a value import would create a circular module evaluation
 // with index.ts, which re-exports this file.
-import type { SystemChannel } from "./index";
+import type { SystemChannel } from "./index.js";
 
 const measurementChannels = ["VISITOR", "API"] as const satisfies readonly SystemChannel[];
 
