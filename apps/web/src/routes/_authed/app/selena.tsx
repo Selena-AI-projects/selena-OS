@@ -894,7 +894,7 @@ function ResultsPanel({ project, locale }: { project: WorkspaceProject; locale: 
 								: `${project.measurement.completedRuns} of ${project.measurement.expectedRuns} answers checked`}
 						</p>
 					) : (
-						<a href="https://www.selenasystems.com/en/contact" className="selena-text-button mt-4 inline-flex">
+						<a href={visibilityPlansUrl(locale)} className="selena-text-button mt-4 inline-flex">
 							{tr(locale, "Choose a visibility plan", "Выбрать план проверки")} <IconArrowRight className="size-4" />
 						</a>
 					)}
@@ -902,6 +902,16 @@ function ResultsPanel({ project, locale }: { project: WorkspaceProject; locale: 
 			</div>
 		</section>
 	);
+}
+
+/**
+ * The plan ladder, not the AI-audit brief: someone who just finished a free
+ * website review is buying a visibility measurement, and the audit form asks
+ * about a different product entirely.
+ */
+function visibilityPlansUrl(locale: WorkspaceLocale): string {
+	const path = locale === "ru" ? "/ru/visibility" : "/visibility";
+	return `https://www.selenasystems.com${path}#plans`;
 }
 
 function ChannelSummary({ title, systems, description }: { title: string; systems: string; description: string }) {
