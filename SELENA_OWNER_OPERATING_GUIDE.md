@@ -8,6 +8,29 @@ Stripe billing and a plan picker with the upstream product's own plans and
 prices, which do not match the published Selena catalog — never switch a
 customer-facing Selena deployment to `cloud` mode.
 
+## Spend guards before approving runs
+
+Two environment variables decide whether the admin queue will let an order be
+approved. Both are deliberate stops, not formalities.
+
+`SCHEDULE_MAINTENANCE_ENABLED` must stay `false` on any deployment that runs
+commercial orders. Unset means enabled, so the safe state is the explicit one.
+While recurring maintenance is on, a commercial order cannot be approved: the
+background scheduler and an order-scoped dispatch would both drive provider
+calls for the same work, which doubles spend and breaks cardinality.
+
+`SELENA_PROVIDER_BUDGET_USD` is the ceiling for a single order's worst-case
+cost, not a wallet balance — no provider balance is ever read. Its job is to
+catch a scope typo before the first paid call: an order that suddenly costs ten
+times the usual amount cannot be approved. A starting value of `25` leaves
+roughly a fourfold margin over the current per-order estimates while still
+stopping an order-of-magnitude mistake. Re-tune it against the first real
+provider invoice.
+
+Neither variable replaces a hard spend limit configured in the provider
+accounts themselves. Set those too: they are the only guard that survives a
+failure outside this application.
+
 ## Before accepting a paid order
 
 - Set package prices in the admin pricing configuration.
