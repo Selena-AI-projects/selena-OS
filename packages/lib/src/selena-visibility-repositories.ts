@@ -1,6 +1,7 @@
 import {
 	type ObservationReviewDecision,
 	type OrderingState,
+	assertCardinality,
 	assertMentionMatch,
 	assertObservationCardinality,
 	assertObservationSubmission,
@@ -9,11 +10,14 @@ import {
 	localAiDiscoveryLockBlockSchema,
 	observationReviewDecisions,
 	observerContextSchema,
+	parseMeasurementScope,
 	resolveExplicitPosition,
 } from "@workspace/selena-visibility-contracts";
 import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import * as schema from "./db/schema";
+import { type ControlledCycleState, assertDirectDispatchAllowed } from "./run-policy";
+import { assertLockExpectedRuns, assertQcDecision, planOrderDispatch } from "./selena-dispatch";
 import { detectEntityCycle, validateEntityParent } from "./selena-entities";
 import { observationContentSha256, planCaptureTasks } from "./selena-manual-pilot";
 
@@ -69,6 +73,35 @@ export function createSelenaRepositories(db: Db) {
 			.limit(1);
 		if (!order) throw new Error("Not found: order is outside AuthContext tenant");
 	};
+	const getOrderOwned = async (ctx: SelenaRepositoryContext, orderId: string) => {
+		const [order] = await db
+			.select()
+			.from(schema.svOrders)
+			.where(and(eq(schema.svOrders.id, orderId), eq(schema.svOrders.organizationId, ctx.tenantId)))
+			.limit(1);
+		if (!order) throw new Error("Not found: order is outside AuthContext tenant");
+		return order;
+	};
+	const getLockOwned = async (ctx: SelenaRepositoryContext, lockId: string) => {
+		const [lock] = await db
+			.select()
+			.from(schema.svConfigurationLocks)
+			.where(
+				and(eq(schema.svConfigurationLocks.id, lockId), eq(schema.svConfigurationLocks.organizationId, ctx.tenantId)),
+			)
+			.limit(1);
+		if (!lock) throw new Error("Not found: configuration lock is outside AuthContext tenant");
+		return lock;
+	};
+	const latestQcRecordForOrder = async (ctx: SelenaRepositoryContext, orderId: string) =>
+		(
+			await db
+				.select()
+				.from(schema.svQcRecords)
+				.where(and(eq(schema.svQcRecords.orderId, orderId), eq(schema.svQcRecords.organizationId, ctx.tenantId)))
+				.orderBy(desc(schema.svQcRecords.createdAt))
+				.limit(1)
+		)[0];
 	// Every manual-pilot mutation leaves an audit row; on transactional paths
 	// the row commits or rolls back together with the mutation it describes.
 	const recordAudit = async (
@@ -421,6 +454,140 @@ export function createSelenaRepositories(db: Db) {
 						.values({ ...value, organizationId: ctx.tenantId })
 						.returning()
 				)[0];
+			},
+		},
+		// Order dispatch mints run permits: permission records that a later,
+		// separate executor may consume. Nothing here touches consumedAt, an
+		// adapter, a queue, or the network — planning an order can never run it.
+		dispatch: {
+			listPermits: async (ctx: SelenaRepositoryContext, orderId: string) => {
+				await assertOrderOwned(ctx, orderId);
+				const cycleIds = (
+					await db
+						.select({ id: schema.svCycles.id })
+						.from(schema.svCycles)
+						.where(and(eq(schema.svCycles.orderId, orderId), eq(schema.svCycles.organizationId, ctx.tenantId)))
+				).map((cycle) => cycle.id);
+				if (cycleIds.length === 0) return [];
+				return db
+					.select()
+					.from(schema.svRunPermits)
+					.where(
+						and(
+							inArray(schema.svRunPermits.cycleId, cycleIds),
+							eq(schema.svRunPermits.organizationId, ctx.tenantId),
+						),
+					);
+			},
+			createPermits: async (
+				ctx: SelenaRepositoryContext,
+				orderId: string,
+				opts?: {
+					// Injectable so tests can exercise emergency-stop/maintenance gates;
+					// the default state is the safe one (no stop, no maintenance).
+					cycleState?: Partial<Omit<ControlledCycleState, "cohortId" | "expectedJobs" | "expectedProviderCalls">>;
+					expiresAt?: Date;
+				},
+			) => {
+				writable(ctx);
+				const order = await getOrderOwned(ctx, orderId);
+				// QUEUED is accepted only as the replay of a dispatch that already
+				// succeeded; every other non-APPROVED status must not mint permits.
+				if (order.status !== "APPROVED" && order.status !== "QUEUED")
+					throw new Error("SELENA_ORDER_NOT_APPROVED");
+				const lock = await getLockOwned(ctx, order.lockId);
+				const scope = parseMeasurementScope(lock.snapshot);
+				if (!scope) throw new Error("SELENA_LOCK_SCOPE_MISSING");
+				const expected = assertLockExpectedRuns(scope, lock.expectedRuns);
+				const state: ControlledCycleState = {
+					activeMaintenanceJobs: 0,
+					activeCohortJobs: 0,
+					cohortId: orderId,
+					expectedJobs: expected,
+					// Zero by construction: permit minting performs no provider calls.
+					expectedProviderCalls: 0,
+					seenCohortIds: new Set<string>(),
+					globalEmergencyStop: false,
+					orderStopped: false,
+					...opts?.cycleState,
+				};
+				assertDirectDispatchAllowed(state);
+				const planned = planOrderDispatch({ orderId, lockVersion: lock.version, scope });
+				// Unconsumed permission must lapse on its own rather than linger as a
+				// standing authorization; one day comfortably covers a QUEUED order.
+				const expiresAt = opts?.expiresAt ?? new Date(Date.now() + 24 * 60 * 60 * 1000);
+				return db.transaction(async (tx) => {
+					const [existingCycle] = await tx
+						.select()
+						.from(schema.svCycles)
+						.where(
+							and(
+								eq(schema.svCycles.orderId, orderId),
+								eq(schema.svCycles.lockId, order.lockId),
+								eq(schema.svCycles.organizationId, ctx.tenantId),
+							),
+						)
+						.orderBy(desc(schema.svCycles.createdAt))
+						.limit(1);
+					const cycle =
+						existingCycle ??
+						(
+							await tx
+								.insert(schema.svCycles)
+								.values({
+									organizationId: ctx.tenantId,
+									orderId,
+									lockId: order.lockId,
+									status: "QUEUED",
+									expectedRuns: expected,
+								})
+								.returning()
+						)[0];
+					// The dispatch-key unique index makes replays idempotent: a second
+					// call inserts nothing and can never mint a duplicate permit.
+					const inserted = await tx
+						.insert(schema.svRunPermits)
+						.values(
+							planned.map((permit) => ({
+								organizationId: ctx.tenantId,
+								cycleId: cycle.id,
+								dispatchKey: permit.dispatchKey,
+								channel: permit.channel,
+								scenarioId: permit.scenarioId,
+								expiresAt,
+							})),
+						)
+						.onConflictDoNothing({ target: schema.svRunPermits.dispatchKey })
+						.returning();
+					const permits = await tx
+						.select()
+						.from(schema.svRunPermits)
+						.where(
+							and(eq(schema.svRunPermits.cycleId, cycle.id), eq(schema.svRunPermits.organizationId, ctx.tenantId)),
+						);
+					// assertCardinality blocks minting "one more" at its boundary; the
+					// complete permit set legitimately sits at exactly expectedRuns, so
+					// the overflow boundary for the stored total is expected + 1. An
+					// undercount means planned keys were claimed by another cycle.
+					assertCardinality(permits.length, expected + 1);
+					if (permits.length !== expected) throw new Error("SELENA_PERMIT_CARDINALITY_MISMATCH");
+					await tx
+						.update(schema.svCycles)
+						.set({ createdRuns: permits.length, updatedAt: new Date() })
+						.where(eq(schema.svCycles.id, cycle.id));
+					if (order.status === "APPROVED")
+						await tx
+							.update(schema.svOrders)
+							.set({ status: "QUEUED", updatedAt: new Date() })
+							.where(and(eq(schema.svOrders.id, orderId), eq(schema.svOrders.organizationId, ctx.tenantId)));
+					await recordAudit(tx, ctx, "ORDER_DISPATCH_PLANNED", "sv_orders", orderId, {
+						orderId,
+						cycleId: cycle.id,
+						created: inserted.length,
+						expected,
+					});
+					return { cycleId: cycle.id, created: inserted.length, expected, permits };
+				});
 			},
 		},
 		// RC7 Phase E — manual pilot. These writers are the only path into the
@@ -784,6 +951,58 @@ export function createSelenaRepositories(db: Db) {
 				});
 				return asset;
 			},
+		},
+		// Human QC sign-off ledger: assertExpertVerified's storage. Publication
+		// gates read the latest record per order, so a later rejection revokes an
+		// earlier approval without rewriting history.
+		qcRecords: {
+			create: async (
+				ctx: SelenaRepositoryContext,
+				input: {
+					orderId: string;
+					cycleId?: string | null;
+					reviewer?: string;
+					reviewedAt: string | Date;
+					scope: string;
+					decision: string;
+					notes?: string | null;
+				},
+			) => {
+				writable(ctx);
+				assertQcDecision(input.decision);
+				await assertOrderOwned(ctx, input.orderId);
+				if (input.cycleId) {
+					const [cycle] = await db
+						.select({ id: schema.svCycles.id, orderId: schema.svCycles.orderId })
+						.from(schema.svCycles)
+						.where(and(eq(schema.svCycles.id, input.cycleId), eq(schema.svCycles.organizationId, ctx.tenantId)))
+						.limit(1);
+					if (!cycle || cycle.orderId !== input.orderId)
+						throw new Error("Not found: cycle is outside AuthContext tenant");
+				}
+				const [record] = await db
+					.insert(schema.svQcRecords)
+					.values({
+						organizationId: ctx.tenantId,
+						orderId: input.orderId,
+						cycleId: input.cycleId ?? null,
+						reviewer: input.reviewer ?? ctx.actorId,
+						reviewedAt: new Date(input.reviewedAt),
+						scope: input.scope,
+						decision: input.decision,
+						notes: input.notes ?? null,
+					})
+					.returning();
+				await recordAudit(db, ctx, "QC_RECORD_CREATED", "sv_qc_records", record.id, {
+					orderId: input.orderId,
+					cycleId: input.cycleId ?? null,
+					decision: input.decision,
+				});
+				return record;
+			},
+			latestForOrder: latestQcRecordForOrder,
+			hasApprovedQcRecord: async (ctx: SelenaRepositoryContext, orderId: string) =>
+				(await latestQcRecordForOrder(ctx, orderId))?.decision === "approved",
 		},
 	};
 }

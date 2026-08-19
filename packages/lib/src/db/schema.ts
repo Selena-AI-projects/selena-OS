@@ -466,6 +466,13 @@ export const svAuditEvents = pgTable("sv_audit_events", {
 	id: uuid("id").defaultRandom().primaryKey().notNull(), organizationId: text("organization_id").notNull().references(() => organization.id), actorId: text("actor_id").notNull(), event: text("event").notNull(), subjectKind: text("subject_kind").notNull(), subjectId: text("subject_id").notNull(), details: jsonb("details").notNull().default({}), at: timestamp("at", { withTimezone: true }).defaultNow().notNull(),
 }, (table) => ({ orgAtIdx: index("sv_audit_events_org_at_idx").on(table.organizationId, table.at) })).enableRLS();
 
+// Human expert sign-off per order (assertExpertVerified's storage): decision
+// is free text validated in code ("approved" | "rejected") so new review
+// outcomes never need a migration.
+export const svQcRecords = pgTable("sv_qc_records", {
+	id: uuid("id").defaultRandom().primaryKey().notNull(), organizationId: text("organization_id").notNull().references(() => organization.id), orderId: uuid("order_id").notNull().references(() => svOrders.id), cycleId: uuid("cycle_id").references(() => svCycles.id), reviewer: text("reviewer").notNull(), reviewedAt: timestamp("reviewed_at", { withTimezone: true }).notNull(), scope: text("scope").notNull(), decision: text("decision").notNull(), notes: text("notes"), createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => ({ orgOrderIdx: index("sv_qc_records_org_order_idx").on(table.organizationId, table.orderId) })).enableRLS();
+
 export type SvProject = typeof svProjects.$inferSelect;
 export type NewSvProject = typeof svProjects.$inferInsert;
 export type SvScenario = typeof svScenarios.$inferSelect;
