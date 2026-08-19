@@ -706,8 +706,8 @@ function BrandProfileForm({
 			<div className="mt-5 flex flex-col gap-3 rounded-xl border border-[#e6ddd1] bg-[#fbf7f1] p-4 sm:flex-row sm:items-center sm:justify-between">
 				<p className="text-sm leading-6 text-[#6e6258]">
 					{locale === "ru"
-						? `Не уверены, кого писать в конкурентах? Мы прочитаем сайт и предложим до ${SUGGESTION_LIMITS.competitors} конкурентов и ${SUGGESTION_LIMITS.questions} вопросов — как черновик, который вы поправите.`
-						: `Not sure who to list as competitors? We read the site and propose up to ${SUGGESTION_LIMITS.competitors} competitors and ${SUGGESTION_LIMITS.questions} questions — a draft for you to edit.`}
+						? `Не уверены, кого писать в конкурентах? Мы прочитаем сайт и предложим до ${SUGGESTION_LIMITS.competitors} конкурентов и ${SUGGESTION_LIMITS.questions} вопросов. Это черновик: он заменит содержимое полей «Конкуренты» и «Вопросы клиентов», дальше правите вы.`
+						: `Not sure who to list as competitors? We read the site and propose up to ${SUGGESTION_LIMITS.competitors} competitors and ${SUGGESTION_LIMITS.questions} questions. It is a draft: it replaces what is in Competitors and Customer questions, and you edit from there.`}
 				</p>
 				<Button
 					type="button"
