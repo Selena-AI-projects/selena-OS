@@ -31,6 +31,30 @@ Neither variable replaces a hard spend limit configured in the provider
 accounts themselves. Set those too: they are the only guard that survives a
 failure outside this application.
 
+## Turning measurement on
+
+Execution ships inert and stays inert until two separate decisions are made.
+
+`SELENA_MEASUREMENT_ENABLED=false` is the safe state, and unset means off. While
+it is not exactly `true`, the measurement worker records nothing, reads nothing
+and calls no adapter — a permit that is queued by mistake is simply dropped.
+
+`SELENA_MEASUREMENT_ADAPTER=noop` selects which adapter executes a permit. Only
+adapters that hold no credentials and perform no provider call — `noop`,
+`stub` — can be selected this way. Naming a live provider adapter is refused
+even after it is registered in the worker: turning on real spend is a code
+change the owner makes deliberately, alongside supplying credentials, and can
+never be the side effect of setting one variable. Until then the noop adapter
+records every run as `INVALID`, so an accidental run cannot produce something
+that reads like a real measurement.
+
+`SELENA_EMERGENCY_STOP=true` blocks execution at the point a provider would be
+contacted, including for runs that are already claimed.
+
+Measurement jobs are never scheduled. A run starts from an explicit action on a
+specific permit, and a claimed permit is spent: it cannot be retried into a
+second provider call.
+
 ## Before accepting a paid order
 
 - Set package prices in the admin pricing configuration.

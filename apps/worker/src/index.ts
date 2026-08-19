@@ -65,6 +65,13 @@ async function main() {
 		retryBackoff: true,
 		expireInSeconds: 60 * 30, // 30 minute timeout
 	});
+	// Never scheduled: a commercial measurement starts from an explicit admin
+	// action. Retries are off because a claimed permit is spent — a retry could
+	// only produce a second provider call for work authorized once.
+	await boss.createQueue("selena-measure", {
+		retryLimit: 0,
+		expireInSeconds: 60 * 15,
+	});
 	if (process.env.DEPLOYMENT_MODE === "whitelabel") {
 		await boss.createQueue("sync-auth0-memberships", {
 			retryLimit: 3,
