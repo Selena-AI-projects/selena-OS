@@ -169,6 +169,13 @@
       "when": 1786729800000,
       "tag": "0023_selena_dispatch_qc",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1786730400000,
+      "tag": "0024_selena_run_outcomes",
+      "breakpoints": true
     }
   ]
 }

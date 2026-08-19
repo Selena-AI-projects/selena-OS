@@ -51,6 +51,7 @@
 		,"./selena-manual-pilot": "./src/selena-manual-pilot.ts"
 		,"./selena-dispatch": "./src/selena-dispatch.ts"
 		,"./selena-preflight": "./src/selena-preflight.ts"
+		,"./selena-run-executor": "./src/selena-run-executor.ts"
 	},
 	"dependencies": {
 		"@ai-sdk/anthropic": "^4.0.27",

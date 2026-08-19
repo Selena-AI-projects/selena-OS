@@ -1,6 +1,7 @@
 import {
 	type ObservationReviewDecision,
 	type OrderingState,
+	type RunOutcome,
 	assertCardinality,
 	assertMentionMatch,
 	assertObservationCardinality,
@@ -12,6 +13,7 @@ import {
 	observerContextSchema,
 	parseMeasurementScope,
 	resolveExplicitPosition,
+	runOutcomeSchema,
 } from "@workspace/selena-visibility-contracts";
 import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
@@ -587,6 +589,150 @@ export function createSelenaRepositories(db: Db) {
 						expected,
 					});
 					return { cycleId: cycle.id, created: inserted.length, expected, permits };
+				});
+			},
+		},
+		// Execution of a permit. Claiming spends the permission and opens a run
+		// row; completing records the adapter's validated outcome. No provider
+		// transport lives here — the adapter is injected in the executor.
+		runs: {
+			claim: async (ctx: SelenaRepositoryContext, permitId: string, opts?: { now?: Date }) => {
+				writable(ctx);
+				const now = opts?.now ?? new Date();
+				return db.transaction(async (tx) => {
+					const [permit] = await tx
+						.select()
+						.from(schema.svRunPermits)
+						.where(and(eq(schema.svRunPermits.id, permitId), eq(schema.svRunPermits.organizationId, ctx.tenantId)))
+						.for("update");
+					if (!permit) throw new Error("Not found: run permit is outside AuthContext tenant");
+					const [cycle] = await tx
+						.select()
+						.from(schema.svCycles)
+						.where(and(eq(schema.svCycles.id, permit.cycleId), eq(schema.svCycles.organizationId, ctx.tenantId)))
+						.limit(1);
+					if (!cycle) throw new Error("Not found: cycle is outside AuthContext tenant");
+					const runFor = async (dispatchKey: string) =>
+						(
+							await tx
+								.select()
+								.from(schema.svRuns)
+								.where(
+									and(eq(schema.svRuns.dispatchKey, dispatchKey), eq(schema.svRuns.organizationId, ctx.tenantId)),
+								)
+								.limit(1)
+						)[0];
+					// A replay returns the run that already exists rather than failing,
+					// and returns the permit as it stands — already consumed, which is
+					// what stops the executor from spending it a second time.
+					if (permit.consumedAt) {
+						const existing = await runFor(permit.dispatchKey);
+						if (!existing) throw new Error("SELENA_PERMIT_CONSUMED_WITHOUT_RUN");
+						return { permit, run: existing, cycle, claimed: false };
+					}
+					await tx
+						.update(schema.svRunPermits)
+						.set({ consumedAt: now, status: "consumed" })
+						.where(eq(schema.svRunPermits.id, permitId));
+					await tx
+						.insert(schema.svRuns)
+						.values({
+							organizationId: ctx.tenantId,
+							cycleId: permit.cycleId,
+							permitId: permit.id,
+							dispatchKey: permit.dispatchKey,
+							channel: permit.channel,
+							scenarioId: permit.scenarioId,
+							status: "RUNNING",
+							startedAt: now,
+						})
+						.onConflictDoNothing({ target: schema.svRuns.dispatchKey });
+					const run = await runFor(permit.dispatchKey);
+					if (!run) throw new Error("SELENA_RUN_CLAIM_FAILED");
+					await recordAudit(tx, ctx, "RUN_CLAIMED", "sv_runs", run.id, {
+						permitId,
+						cycleId: permit.cycleId,
+						dispatchKey: permit.dispatchKey,
+					});
+					// The permit object predates the consumedAt write above: the
+					// executor re-checks this snapshot before an adapter may see it.
+					return { permit, run, cycle, claimed: true };
+				});
+			},
+			complete: async (
+				ctx: SelenaRepositoryContext,
+				runId: string,
+				outcome: RunOutcome,
+				opts?: { now?: Date },
+			) => {
+				writable(ctx);
+				const parsed = runOutcomeSchema.parse(outcome);
+				const now = opts?.now ?? new Date();
+				return db.transaction(async (tx) => {
+					const [run] = await tx
+						.select()
+						.from(schema.svRuns)
+						.where(and(eq(schema.svRuns.id, runId), eq(schema.svRuns.organizationId, ctx.tenantId)))
+						.for("update");
+					if (!run) throw new Error("Not found: run is outside AuthContext tenant");
+					if (run.dispatchKey !== parsed.dispatchKey) throw new Error("SELENA_DISPATCH_KEY_MISMATCH");
+					// Terminal already: recording twice would double the cycle counter
+					// and could push a cycle past its expected cardinality.
+					if (run.finishedAt) return run;
+					const [completed] = await tx
+						.update(schema.svRuns)
+						.set({
+							status: parsed.status,
+							validity: parsed.validity,
+							invalidReason: parsed.invalidReason ?? null,
+							costUsd: parsed.costUsd === undefined ? null : String(parsed.costUsd),
+							rawResponseReference: parsed.rawResponseReference ?? null,
+							canonicalPayload: parsed,
+							finishedAt: now,
+						})
+						.where(eq(schema.svRuns.id, runId))
+						.returning();
+					const [cycle] = await tx
+						.select()
+						.from(schema.svCycles)
+						.where(and(eq(schema.svCycles.id, run.cycleId), eq(schema.svCycles.organizationId, ctx.tenantId)))
+						.for("update");
+					if (!cycle) throw new Error("Not found: cycle is outside AuthContext tenant");
+					// Failed and invalid runs count as finished: they are terminal, and
+					// a cycle that never reaches its expected count never reaches QC.
+					const completedRuns = cycle.completedRuns + 1;
+					const cycleDone = completedRuns >= cycle.expectedRuns;
+					await tx
+						.update(schema.svCycles)
+						.set({
+							completedRuns,
+							status: cycleDone ? "QC_REQUIRED" : "RUNNING",
+							updatedAt: new Date(),
+						})
+						.where(eq(schema.svCycles.id, cycle.id));
+					if (cycleDone)
+						// Human QC is the only exit from a finished cycle; the order is
+						// moved only from states that are still mid-flight, so a
+						// cancelled or already delivered order is never revived.
+						await tx
+							.update(schema.svOrders)
+							.set({ status: "QC_REQUIRED", updatedAt: new Date() })
+							.where(
+								and(
+									eq(schema.svOrders.id, cycle.orderId),
+									eq(schema.svOrders.organizationId, ctx.tenantId),
+									inArray(schema.svOrders.status, ["QUEUED", "RUNNING", "ANALYZING"]),
+								),
+							);
+					await recordAudit(tx, ctx, "RUN_COMPLETED", "sv_runs", runId, {
+						cycleId: cycle.id,
+						dispatchKey: parsed.dispatchKey,
+						status: parsed.status,
+						validity: parsed.validity,
+						completedRuns,
+						expectedRuns: cycle.expectedRuns,
+					});
+					return completed;
 				});
 			},
 		},
