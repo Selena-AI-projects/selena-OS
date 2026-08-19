@@ -3,7 +3,13 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { type MeasurementScope, expectedRunsFromScope, measurementScopeSchema } from "@workspace/selena-visibility-contracts";
 import { describe, expect, it } from "vitest";
-import { assertLockExpectedRuns, assertQcDecision, planOrderDispatch } from "./selena-dispatch";
+import {
+	assertLockExpectedRuns,
+	assertQcDecision,
+	type DispatchablePermit,
+	planOrderDispatch,
+	selectEnqueueablePermits,
+} from "./selena-dispatch";
 
 const orderId = "00000000-0000-4000-8000-000000000001";
 const scenarioA = "00000000-0000-4000-8000-00000000000a";
@@ -80,6 +86,41 @@ describe("assertQcDecision", () => {
 		expect(() => assertQcDecision("APPROVED")).toThrow("QC_DECISION_INVALID");
 		expect(() => assertQcDecision("maybe")).toThrow("QC_DECISION_INVALID");
 		expect(() => assertQcDecision("")).toThrow("QC_DECISION_INVALID");
+	});
+});
+
+describe("selectEnqueueablePermits", () => {
+	const now = new Date("2026-02-01T12:00:00.000Z");
+	const permit = (overrides: Partial<DispatchablePermit> & { id: string }): DispatchablePermit => ({
+		dispatchKey: `key-${overrides.id}`,
+		consumedAt: null,
+		expiresAt: new Date(now.getTime() + 60_000),
+		...overrides,
+	});
+
+	it("keeps only permits that are still unspent and still valid", () => {
+		const fresh = permit({ id: "fresh" });
+		const consumed = permit({ id: "consumed", consumedAt: new Date(now.getTime() - 60_000) });
+		const expired = permit({ id: "expired", expiresAt: new Date(now.getTime() - 1) });
+		const selected = selectEnqueueablePermits([fresh, consumed, expired], now);
+		expect(selected.map((entry) => entry.id)).toEqual(["fresh"]);
+	});
+
+	it("treats a permit expiring exactly now as expired, matching the executor", () => {
+		const boundary = permit({ id: "boundary", expiresAt: now });
+		expect(selectEnqueueablePermits([boundary], now)).toEqual([]);
+	});
+
+	it("selects nothing once every permit of a cycle has been consumed", () => {
+		const consumed = [1, 2, 3].map((index) =>
+			permit({ id: `spent-${index}`, consumedAt: new Date(now.getTime() - 1000) }),
+		);
+		expect(selectEnqueueablePermits(consumed, now)).toEqual([]);
+	});
+
+	it("preserves the caller's permit objects so the dispatch key survives selection", () => {
+		const one = permit({ id: "one", dispatchKey: "order:scenario:chatgpt:0:1" });
+		expect(selectEnqueueablePermits([one], now)[0]).toBe(one);
 	});
 });
 

@@ -64,3 +64,20 @@ export type QcDecision = (typeof qcDecisions)[number];
 export function assertQcDecision(value: string): asserts value is QcDecision {
 	if (!qcDecisions.includes(value as QcDecision)) throw new Error("QC_DECISION_INVALID");
 }
+
+/** The permit fields that decide whether it may still be dispatched. */
+export type DispatchablePermit = {
+	id: string;
+	dispatchKey: string;
+	consumedAt: Date | null;
+	expiresAt: Date;
+};
+
+/**
+ * The permits an order-scoped dispatch may still act on. A consumed permit is
+ * spent and an expired one has lost its authorization; the executor refuses
+ * both, so selecting them here would only enqueue work that must fail.
+ */
+export function selectEnqueueablePermits<T extends DispatchablePermit>(permits: readonly T[], now: Date): T[] {
+	return permits.filter((permit) => permit.consumedAt === null && permit.expiresAt.getTime() > now.getTime());
+}

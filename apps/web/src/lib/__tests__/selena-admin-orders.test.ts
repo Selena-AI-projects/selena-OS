@@ -61,14 +61,46 @@ describe("selena order approval gate", () => {
 	});
 });
 
+/** The body of one exported server fn, up to the next export. */
+function serverFnSource(name: string): string {
+	const start = adminOrdersSource.indexOf(`export const ${name}`);
+	expect(start, `${name} is missing`).toBeGreaterThan(-1);
+	const end = adminOrdersSource.indexOf("\nexport const ", start + 1);
+	return adminOrdersSource.slice(start, end === -1 ? undefined : end);
+}
+
 describe("admin order layer zero provider surface invariant", () => {
-	// Approving an order issues permission records; it must not be able to
-	// queue, schedule, or call anything.
-	const forbidden = ["boss", "job-scheduler", "fetch(", "http://", "https://"];
+	// The operator screen may hand work to the worker's queue, but it must not
+	// be able to reach a provider itself.
+	const forbidden = ["job-scheduler", "fetch(", "http://", "https://"];
 
 	it("keeps the admin order module free of provider-execution code", () => {
 		for (const marker of forbidden) {
 			expect(adminOrdersSource.includes(marker), `selena-admin-orders.ts must not contain "${marker}"`).toBe(false);
 		}
+	});
+
+	it("keeps approval free of queueing, so minting permission never starts work", () => {
+		const approve = serverFnSource("approveSelenaOrderFn");
+		for (const marker of ["boss", "enqueue"]) {
+			expect(approve.includes(marker), `approveSelenaOrderFn must not contain "${marker}"`).toBe(false);
+		}
+	});
+});
+
+describe("run enqueue gate", () => {
+	const enqueue = serverFnSource("enqueueSelenaOrderRunsFn");
+
+	it("refuses to queue an order that approval has not moved to QUEUED", () => {
+		expect(enqueue).toContain("SELENA_ORDER_NOT_QUEUED");
+	});
+
+	it("hands the execution flag to the enqueue decision instead of reading the queue first", () => {
+		expect(enqueue).toContain("measurementConfigFromEnv(process.env)");
+		expect(enqueue.indexOf("measurementConfigFromEnv")).toBeLessThan(enqueue.indexOf("enqueueOrderRuns("));
+	});
+
+	it("records what it queued so a run can be traced back to the operator who started it", () => {
+		expect(enqueue).toContain('"RUNS_ENQUEUED"');
 	});
 });

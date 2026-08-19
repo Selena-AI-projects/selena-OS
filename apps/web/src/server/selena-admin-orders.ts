@@ -16,16 +16,20 @@ import { isMaintenanceEnabled } from "@workspace/lib/run-policy";
 import { qcDecisions } from "@workspace/lib/selena-dispatch";
 import { assertApprovable, evaluatePreflight, type PreflightEvaluation } from "@workspace/lib/selena-preflight";
 import { createSelenaRepositories, type SelenaRepositoryContext } from "@workspace/lib/selena-visibility-repositories";
-import { parseMeasurementScope } from "@workspace/selena-visibility-contracts";
+import { measurementConfigFromEnv, parseMeasurementScope } from "@workspace/selena-visibility-contracts";
 import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { z } from "zod";
 import { isAdmin, requireAdmin, requireAuthSession } from "@/lib/auth/helpers";
+import { getBoss } from "@/lib/boss-client";
+import { enqueueOrderRuns } from "@/lib/selena-run-enqueue";
 import { resolveSessionAuthContext } from "../lib/selena-auth-context";
 
 // Operator surface for the order pipeline: read the preflight, approve (which
-// mints run permits and nothing else), stop, and record a QC decision. No
-// provider is ever contacted here — approval is a permission record, and a
-// separate executor that this layer does not start would be what consumes it.
+// mints run permits and nothing else), enqueue those permits, stop, and record
+// a QC decision. No provider is ever contacted here: approval is a permission
+// record, enqueueing is a queue write, and the executor that consumes a permit
+// lives in the worker. Approval and enqueue stay separate actions so minting
+// permission never starts spending on its own.
 
 const repositories = createSelenaRepositories(db);
 
@@ -302,6 +306,54 @@ export const approveSelenaOrderFn = createServerFn({ method: "POST" })
 			expected: dispatch.expected,
 			replay: false,
 		};
+	});
+
+export const enqueueSelenaOrderRunsFn = createServerFn({ method: "POST" })
+	.validator(orderIdSchema.extend({ idempotencyKey: z.string().min(1).max(200).optional() }))
+	.handler(async ({ data }) => {
+		const context = await requireAdminContext();
+		if (data.idempotencyKey) {
+			const prior = await findPriorAudit(context, "RUNS_ENQUEUED", data.orderId, data.idempotencyKey);
+			if (prior) {
+				const details = prior.details as Record<string, unknown>;
+				return {
+					orderId: data.orderId,
+					enqueued: (details.enqueued as number | undefined) ?? 0,
+					skipped: (details.skipped as number | undefined) ?? 0,
+					duplicates: (details.duplicates as number | undefined) ?? 0,
+					reason: null,
+					replay: true,
+				};
+			}
+		}
+		const order = await getOwnedOrder(context, data.orderId);
+		// QUEUED is the state approval leaves an order in: permits exist and none
+		// of them has been handed to the queue yet.
+		if (order.status !== "QUEUED") throw new Error("SELENA_ORDER_NOT_QUEUED");
+		const permits = await repositories.dispatch.listPermits(context, data.orderId);
+		const config = measurementConfigFromEnv(process.env);
+		const result = await enqueueOrderRuns({
+			permits,
+			config,
+			organizationId: context.tenantId,
+			actorId: context.actorId,
+			now: new Date(),
+			send: async (payload, options) => {
+				const boss = await getBoss();
+				return boss.send("selena-measure", payload, { singletonKey: options.singletonKey });
+			},
+		});
+		await recordAdminAudit(context, "RUNS_ENQUEUED", data.orderId, {
+			orderId: data.orderId,
+			enqueued: result.enqueued,
+			skipped: result.skipped,
+			duplicates: result.duplicates,
+			reason: result.reason,
+			// A refused enqueue is deliberately not replayable: once the owner
+			// turns execution on, the same key must still be able to queue the run.
+			idempotencyKey: result.reason === null ? (data.idempotencyKey ?? null) : null,
+		});
+		return { orderId: data.orderId, ...result, replay: false };
 	});
 
 export const stopSelenaOrderFn = createServerFn({ method: "POST" })

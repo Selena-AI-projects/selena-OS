@@ -8,6 +8,7 @@ import { Textarea } from "@workspace/ui/components/textarea";
 import { useCallback, useEffect, useState } from "react";
 import {
 	approveSelenaOrderFn,
+	enqueueSelenaOrderRunsFn,
 	getSelenaAdminAccessFn,
 	getSelenaAdminOrderQueueFn,
 	getSelenaOrderPreflightFn,
@@ -27,6 +28,7 @@ export const Route = createFileRoute("/_authed/app/selena-admin")({
 type QueueOrder = Awaited<ReturnType<typeof getSelenaAdminOrderQueueFn>>[number];
 type Preflight = Awaited<ReturnType<typeof getSelenaOrderPreflightFn>>;
 type AdminLocale = "en" | "ru";
+type AdminAction = "approve" | "enqueue" | "stop" | "qc";
 
 const emptyQcForm = { reviewer: "", scope: "", decision: "approved" as "approved" | "rejected", notes: "" };
 
@@ -37,7 +39,10 @@ function SelenaAdminOrders() {
 	const [selectedOrderId, setSelectedOrderId] = useState(orders[0]?.id ?? "");
 	const [preflight, setPreflight] = useState<Preflight | null>(null);
 	const [preflightPending, setPreflightPending] = useState(false);
-	const [pendingAction, setPendingAction] = useState<"approve" | "stop" | "qc" | "">("");
+	const [pendingAction, setPendingAction] = useState<AdminAction | "">("");
+	// Sticks until the next action: a refused enqueue must not read as a run
+	// that started somewhere the operator cannot see.
+	const [measurementDisabled, setMeasurementDisabled] = useState(false);
 	const [stopReason, setStopReason] = useState("");
 	const [qcForm, setQcForm] = useState(emptyQcForm);
 	const [notice, setNotice] = useState("");
@@ -82,10 +87,11 @@ function SelenaAdminOrders() {
 		return created;
 	};
 
-	const runAction = async (action: "approve" | "stop" | "qc", operation: () => Promise<string>) => {
+	const runAction = async (action: AdminAction, operation: () => Promise<string>) => {
 		setPendingAction(action);
 		setNotice("");
 		setError("");
+		setMeasurementDisabled(false);
 		try {
 			setNotice(await operation());
 			await router.invalidate();
@@ -107,6 +113,28 @@ function SelenaAdminOrders() {
 				locale,
 				`Approved. ${result.created} run permits issued of ${result.expected}; order is ${result.status}.`,
 				`Заказ одобрен. Выпущено разрешений: ${result.created} из ${result.expected}; статус заказа: ${result.status}.`,
+			);
+		});
+	};
+
+	const enqueue = () => {
+		if (!selectedOrder) return;
+		void runAction("enqueue", async () => {
+			const result = await enqueueSelenaOrderRunsFn({
+				data: { orderId: selectedOrder.id, idempotencyKey: idempotencyKey("enqueue", selectedOrder.id) },
+			});
+			if (result.reason === "SELENA_MEASUREMENT_DISABLED") {
+				setMeasurementDisabled(true);
+				return tr(locale, "Nothing was queued.", "В очередь ничего не поставлено.");
+			}
+			const duplicates =
+				result.duplicates > 0
+					? tr(locale, ` ${result.duplicates} were already queued.`, ` Уже стояли в очереди: ${result.duplicates}.`)
+					: "";
+			return tr(
+				locale,
+				`Queued ${result.enqueued} run(s); ${result.skipped} permit(s) skipped as consumed or expired.${duplicates}`,
+				`Поставлено в очередь прогонов: ${result.enqueued}; пропущено разрешений (потрачены или истекли): ${result.skipped}.${duplicates}`,
 			);
 		});
 	};
@@ -157,8 +185,8 @@ function SelenaAdminOrders() {
 					<p className="mt-2 max-w-2xl text-sm text-muted-foreground">
 						{tr(
 							locale,
-							"Preflight, approve, stop and QC. Approving issues run permits only — no measurement is executed from this screen.",
-							"Preflight, одобрение, остановка и QC. Одобрение выпускает только разрешения на прогоны — измерение с этого экрана не запускается.",
+							"Preflight, approve, queue, stop and QC. Approving issues run permits; queueing hands them to the worker — no measurement is executed from this screen.",
+							"Preflight, одобрение, постановка в очередь, остановка и QC. Одобрение выпускает разрешения на прогоны, постановка в очередь передаёт их воркеру — измерение с этого экрана не запускается.",
 						)}
 					</p>
 				</div>
@@ -184,6 +212,15 @@ function SelenaAdminOrders() {
 			{error && (
 				<p className="rounded-md border border-destructive/40 bg-destructive/5 px-4 py-3 text-sm text-destructive">
 					{error}
+				</p>
+			)}
+			{measurementDisabled && (
+				<p className="rounded-md border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+					{tr(
+						locale,
+						"Execution is off: SELENA_MEASUREMENT_ENABLED is not enabled. No job was queued and no run has started.",
+						"Исполнение выключено: SELENA_MEASUREMENT_ENABLED не включён. Ни одна джоба не поставлена в очередь, прогон не начался.",
+					)}
 				</p>
 			)}
 
@@ -313,6 +350,16 @@ function SelenaAdminOrders() {
 								</Button>
 								<Button
 									type="button"
+									variant="secondary"
+									onClick={enqueue}
+									disabled={selectedOrder.status !== "QUEUED" || pendingAction !== ""}
+								>
+									{pendingAction === "enqueue"
+										? tr(locale, "Queueing…", "Ставим в очередь…")
+										: tr(locale, "Queue runs", "Поставить прогоны в очередь")}
+								</Button>
+								<Button
+									type="button"
 									variant="outline"
 									onClick={() => void loadPreflight(selectedOrder.id)}
 									disabled={preflightPending}
@@ -320,6 +367,15 @@ function SelenaAdminOrders() {
 									{tr(locale, "Re-check", "Проверить снова")}
 								</Button>
 							</div>
+							{selectedOrder.status !== "QUEUED" && (
+								<p className="text-xs text-muted-foreground">
+									{tr(
+										locale,
+										"Runs can only be queued once the order is QUEUED, which approval does.",
+										"Прогоны можно поставить в очередь только когда заказ в статусе QUEUED — в него переводит одобрение.",
+									)}
+								</p>
+							)}
 							{preflight && !preflight.ok && (
 								<p className="text-xs text-muted-foreground">
 									{tr(
