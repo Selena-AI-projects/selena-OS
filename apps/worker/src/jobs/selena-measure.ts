@@ -21,6 +21,10 @@ export interface SelenaMeasureData {
 // owner decision: it needs credentials this deployment does not hold, and the
 // execution contract refuses any adapter outside its inert allowlist even when
 // one is registered here.
+//
+// The OpenRouter API View adapter is built and tested but deliberately absent
+// from this registry; "Turning measurement on" in SELENA_OWNER_OPERATING_GUIDE.md
+// is the wiring, the credentials and the allowlist edit it takes to select it.
 const ADAPTERS: MeasurementAdapterRegistry = { noop: createNoopMeasurementAdapter() };
 
 /**
