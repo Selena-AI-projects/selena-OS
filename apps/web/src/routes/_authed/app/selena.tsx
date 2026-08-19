@@ -19,9 +19,15 @@ import { SelenaWordmark } from "@/components/selena-wordmark";
 import { useAuth } from "@/hooks/use-auth";
 import { validateWebsiteUrl } from "@/lib/brand-website";
 import { resetPostHog } from "@/lib/posthog";
+import { SUGGESTION_LIMITS } from "@/lib/selena-suggestion";
 import { humanizeSelenaError } from "@/lib/selena-workspace-errors";
 import { createSelenaProjectFn, getSelenaWorkspaceFn } from "../../../server/selena-client";
-import { confirmSelenaProfileFn } from "../../../server/selena-onboarding";
+import {
+	cancelSelenaProfileSuggestionFn,
+	confirmSelenaProfileFn,
+	getSelenaProfileSuggestionFn,
+	startSelenaProfileSuggestionFn,
+} from "../../../server/selena-onboarding";
 import { collectSelenaWebsiteFn } from "../../../server/selena-website-collector";
 
 export const Route = createFileRoute("/_authed/app/selena")({
@@ -34,6 +40,10 @@ type WorkspaceData = Awaited<ReturnType<typeof getSelenaWorkspaceFn>>;
 type WorkspaceProject = WorkspaceData["projects"][number];
 type WorkspaceLocale = "en" | "ru";
 type ActionScope = "project" | "profile" | "website" | "";
+
+/** How long to keep polling a suggestion before calling it stuck. */
+const SUGGESTION_POLL_MS = 4000;
+const SUGGESTION_TIMEOUT_MS = 180_000;
 
 const emptyProjectForm = { name: "", category: "", country: "ID", region: "", languages: "en" };
 const emptyProfileForm = {
@@ -56,6 +66,7 @@ function SelenaWorkspace() {
 	// Feedback is rendered beside the control that produced it: a single banner
 	// at the top of the page sits off-screen when the customer is at the button.
 	const [feedbackScope, setFeedbackScope] = useState<ActionScope>("");
+	const [suggesting, setSuggesting] = useState(false);
 	const [notice, setNotice] = useState("");
 	const [error, setError] = useState("");
 	const [locale, setLocale] = useState<WorkspaceLocale>("en");
@@ -110,6 +121,74 @@ function SelenaWorkspace() {
 
 	const onProfileNormalized = (patch: Partial<typeof emptyProfileForm>) =>
 		setProfileForm((current) => ({ ...current, ...patch }));
+
+	// Research runs in the worker (roughly a minute), so the page polls for it.
+	const suggestProfile = async () => {
+		if (!selectedProject || suggesting) return;
+		const website = validateWebsiteUrl(profileForm.primaryDomain);
+		if (!website.isValid) {
+			setFeedbackScope("profile");
+			setError(
+				tr(
+					locale,
+					"Enter the primary website first — the suggestion is read from it.",
+					"Сначала укажите основной сайт — подбор читает именно его.",
+				),
+			);
+			return;
+		}
+		const projectId = selectedProject.project.id;
+		setFeedbackScope("profile");
+		setError("");
+		setNotice("");
+		setSuggesting(true);
+		try {
+			await startSelenaProfileSuggestionFn({ data: { projectId, website: website.formattedUrl } });
+			const deadline = Date.now() + SUGGESTION_TIMEOUT_MS;
+			while (Date.now() < deadline) {
+				await new Promise((resolve) => setTimeout(resolve, SUGGESTION_POLL_MS));
+				const result = await getSelenaProfileSuggestionFn({ data: { projectId } });
+				if (result.status === "failed") throw new Error(result.error);
+				if (result.status === "done") {
+					onProfileNormalized({
+						primaryDomain: website.formattedUrl,
+						competitors: result.competitors,
+						scenarios: result.questions,
+					});
+					setNotice(
+						tr(
+							locale,
+							"Suggested competitors and questions. Edit anything that does not fit, then confirm.",
+							"Конкуренты и вопросы предложены. Поправьте всё, что не подходит, и подтвердите профиль.",
+						),
+					);
+					return;
+				}
+			}
+			await cancelSelenaProfileSuggestionFn({ data: { projectId } }).catch(() => {});
+			setError(
+				tr(
+					locale,
+					"The suggestion is taking too long. Fill the lists in by hand, or try again later.",
+					"Подбор занимает слишком долго. Заполните списки вручную или попробуйте позже.",
+				),
+			);
+		} catch (cause) {
+			setError(
+				humanizeSelenaError(
+					cause,
+					locale,
+					tr(
+						locale,
+						"We could not suggest competitors and questions. Fill them in by hand.",
+						"Не удалось подобрать конкурентов и вопросы. Заполните их вручную.",
+					),
+				),
+			);
+		} finally {
+			setSuggesting(false);
+		}
+	};
 
 	const createProject = async (event: React.FormEvent) => {
 		event.preventDefault();
@@ -396,8 +475,10 @@ function SelenaWorkspace() {
 								form={profileForm}
 								pending={pendingAction === "profile"}
 								feedback={feedbackScope === "profile" ? { notice, error } : undefined}
+								suggesting={suggesting}
 								onChange={setProfileForm}
 								onSubmit={saveProfile}
+								onSuggest={suggestProfile}
 							/>
 							<WebsiteEvidence
 								locale={locale}
@@ -586,16 +667,20 @@ function BrandProfileForm({
 	form,
 	pending,
 	feedback,
+	suggesting,
 	onChange,
 	onSubmit,
+	onSuggest,
 }: {
 	locale: WorkspaceLocale;
 	project: WorkspaceProject;
 	form: typeof emptyProfileForm;
 	pending: boolean;
 	feedback?: Feedback;
+	suggesting: boolean;
 	onChange: (value: typeof emptyProfileForm) => void;
 	onSubmit: (event: React.FormEvent) => void;
+	onSuggest: () => void;
 }) {
 	return (
 		<section className="selena-section" aria-labelledby="brand-profile-title">
@@ -617,6 +702,25 @@ function BrandProfileForm({
 						<IconCheck className="size-4" /> {tr(locale, "Saved", "Сохранено")}
 					</span>
 				)}
+			</div>
+			<div className="mt-5 flex flex-col gap-3 rounded-xl border border-[#e6ddd1] bg-[#fbf7f1] p-4 sm:flex-row sm:items-center sm:justify-between">
+				<p className="text-sm leading-6 text-[#6e6258]">
+					{locale === "ru"
+						? `Не уверены, кого писать в конкурентах? Мы прочитаем сайт и предложим до ${SUGGESTION_LIMITS.competitors} конкурентов и ${SUGGESTION_LIMITS.questions} вопросов — как черновик, который вы поправите.`
+						: `Not sure who to list as competitors? We read the site and propose up to ${SUGGESTION_LIMITS.competitors} competitors and ${SUGGESTION_LIMITS.questions} questions — a draft for you to edit.`}
+				</p>
+				<Button
+					type="button"
+					variant="outline"
+					className="min-h-11 shrink-0 border-[#cdbdac] bg-[#fffdf8]"
+					disabled={suggesting || pending}
+					onClick={onSuggest}
+				>
+					<IconSparkles className={suggesting ? "size-4 animate-pulse" : "size-4"} />
+					{suggesting
+						? tr(locale, "Reading the site…", "Читаем сайт…")
+						: tr(locale, "Suggest automatically", "Подобрать автоматически")}
+				</Button>
 			</div>
 			<form onSubmit={onSubmit} className="mt-7 grid gap-5 sm:grid-cols-2">
 				<Field label={tr(locale, "Public brand name", "Публичное название бренда")} htmlFor="brand-name">

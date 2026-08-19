@@ -2,19 +2,21 @@
  * Server-only helpers for the async brand-analysis job.
  *
  * All pg-boss coupling for the onboarding analysis lives here so the server
- * functions in `@/server/onboarding` stay thin (and free of direct db
- * imports). The web app enqueues the work and then polls the job's result
- * *by brand* — the brand id is the org id, so callers prove access to the
- * brand and we never hand a job's output to someone outside that org.
+ * functions that use it stay thin (and free of direct db imports). The web app
+ * enqueues the work and then polls the job's result *by request key* — the id
+ * of whatever the analysis was started for (an Elmo brand, a Selena project).
+ * Callers prove access to that record first, so a job's output never reaches
+ * someone outside the org that asked for it.
  *
  * Reading the result goes straight at pg-boss's `pgboss.job` table rather than
  * `getJobById`, because the client polls by brand (not by an opaque job id it
  * has to round-trip). The columns used here (`name`, `data`, `state`,
  * `output`, `created_on`) are stable across the pinned pg-boss v12 line.
  */
-import { sql } from "drizzle-orm";
+
 import { db } from "@workspace/lib/db/db";
 import { cleanOnboardingUrl, type OnboardingSuggestion } from "@workspace/lib/onboarding";
+import { sql } from "drizzle-orm";
 import { getBoss } from "@/lib/boss-client";
 import { extractDomain } from "@/lib/domain-categories";
 
@@ -34,10 +36,12 @@ export type AnalyzeBrandStatus =
 	| { status: "failed"; error: string };
 
 export interface AnalyzeBrandInput {
-	/** Brand id (== org id) the analysis belongs to. Must be access-checked by the caller. */
-	brandId: string;
+	/** Id the result is read back by. Must be access-checked by the caller. */
+	requestKey: string;
 	website: string;
 	brandName?: string;
+	maxCompetitors?: number;
+	maxPrompts?: number;
 }
 
 interface JobRow {
@@ -47,12 +51,12 @@ interface JobRow {
 	output: unknown;
 }
 
-/** The most recent analyze-brand job for a brand, regardless of state. */
-async function latestJobForBrand(brandId: string): Promise<JobRow | undefined> {
+/** The most recent analyze-brand job for a request key, regardless of state. */
+async function latestJob(requestKey: string): Promise<JobRow | undefined> {
 	const result = await db.execute(sql`
 		SELECT id, state, data, output
 		FROM pgboss.job
-		WHERE name = ${ANALYZE_BRAND_QUEUE} AND data->>'brandId' = ${brandId}
+		WHERE name = ${ANALYZE_BRAND_QUEUE} AND data->>'requestKey' = ${requestKey}
 		ORDER BY created_on DESC
 		LIMIT 1
 	`);
@@ -71,7 +75,7 @@ function analysisKey(website: string): string {
 }
 
 /**
- * Enqueue a brand analysis, deduped by the brand + page it runs for.
+ * Enqueue a brand analysis, deduped by the request key + page it runs for.
  *
  * If an analysis for this page is already in flight we reuse it instead of
  * paying for a second run; once a job reaches a terminal state a fresh analysis
@@ -90,7 +94,7 @@ export async function enqueueAnalyzeBrand(input: AnalyzeBrandInput): Promise<voi
 	const boss = await getBoss();
 	const key = analysisKey(input.website);
 
-	const latest = await latestJobForBrand(input.brandId);
+	const latest = await latestJob(input.requestKey);
 	if (latest && IN_FLIGHT_STATES.has(latest.state) && analysisKey(latest.data?.website ?? "") === key) {
 		return;
 	}
@@ -98,9 +102,9 @@ export async function enqueueAnalyzeBrand(input: AnalyzeBrandInput): Promise<voi
 	await boss.send(ANALYZE_BRAND_QUEUE, input);
 }
 
-/** Poll the status/result of the latest brand-analysis job for a brand. */
-export async function getAnalyzeBrandStatus(brandId: string): Promise<AnalyzeBrandStatus> {
-	const job = await latestJobForBrand(brandId);
+/** Poll the status/result of the latest brand-analysis job for a request key. */
+export async function getAnalyzeBrandStatus(requestKey: string): Promise<AnalyzeBrandStatus> {
+	const job = await latestJob(requestKey);
 
 	// No job yet — the enqueue may not be visible, or the worker hasn't picked
 	// it up. Either way the client should keep polling.
@@ -112,7 +116,7 @@ export async function getAnalyzeBrandStatus(brandId: string): Promise<AnalyzeBra
 	}
 	if (job.state === "failed" || job.state === "cancelled") {
 		console.error("[analyze-brand] job ended without a result", {
-			brandId,
+			requestKey,
 			jobId: job.id,
 			state: job.state,
 		});
@@ -122,12 +126,11 @@ export async function getAnalyzeBrandStatus(brandId: string): Promise<AnalyzeBra
 }
 
 /**
- * Best-effort cancel of an in-flight analysis for a brand. Used when the user
- * backs out of the wizard so the worker doesn't keep grinding on a result
- * nobody is waiting for.
+ * Best-effort cancel of an in-flight analysis. Used when the user backs out so
+ * the worker doesn't keep grinding on a result nobody is waiting for.
  */
-export async function cancelAnalyzeBrand(brandId: string): Promise<void> {
-	const job = await latestJobForBrand(brandId);
+export async function cancelAnalyzeBrand(requestKey: string): Promise<void> {
+	const job = await latestJob(requestKey);
 	if (!job || !IN_FLIGHT_STATES.has(job.state)) {
 		return;
 	}

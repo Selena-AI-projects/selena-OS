@@ -13,13 +13,13 @@
  */
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
-import { requireAuthSession, requireBrandAccess } from "@/lib/auth/helpers";
 import {
+	type AnalyzeBrandStatus,
 	cancelAnalyzeBrand,
 	enqueueAnalyzeBrand,
 	getAnalyzeBrandStatus,
-	type AnalyzeBrandStatus,
 } from "@/lib/analyze-brand-job";
+import { requireAuthSession, requireBrandAccess } from "@/lib/auth/helpers";
 import { saveWizardOnboarding, wizardOnboardingInputSchema } from "@/server/onboarding-core";
 
 /**
@@ -45,7 +45,11 @@ export const startAnalyzeBrandFn = createServerFn({ method: "POST" })
 	.handler(async ({ data }) => {
 		const session = await requireAuthSession();
 		await requireBrandAccess(session.user.id, data.brandId);
-		await enqueueAnalyzeBrand(data);
+		await enqueueAnalyzeBrand({
+			requestKey: data.brandId,
+			website: data.website,
+			...(data.brandName !== undefined && { brandName: data.brandName }),
+		});
 		return { ok: true };
 	});
 
