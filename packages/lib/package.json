@@ -53,6 +53,7 @@
 		,"./selena-preflight": "./src/selena-preflight.ts"
 		,"./selena-run-executor": "./src/selena-run-executor.ts"
 		,"./adapters/openrouter": "./src/adapters/openrouter-measurement-adapter.ts"
+		,"./adapters/brightdata": "./src/adapters/brightdata-measurement-adapter.ts"
 	},
 	"dependencies": {
 		"@ai-sdk/anthropic": "^4.0.27",
