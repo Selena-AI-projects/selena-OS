@@ -67,7 +67,7 @@ run by nobody.
 | Approved QC record publishes order and cycles in one transaction | `CODE_IN_BRANCH` | unit + stub rehearsal |
 | Publication refused while a cycle is still producing runs | `CODE_IN_BRANCH` | unit |
 | Delivery gated by `assertExpertVerified`, read inside the delivering transaction | `CODE_IN_BRANCH` | unit + stub rehearsal |
-| Rejected QC leaves the order in review | `CODE_IN_BRANCH` | stub rehearsal (no state change asserted) |
+| Rejected QC leaves the order in review | `CODE_IN_BRANCH` | stub rehearsal |
 | Raw evidence readable only by the owning organization | `CODE_IN_BRANCH` | stub rehearsal |
 | Signed URL issuance itself (object storage, expiry, audit of the signature) | `NOT_BUILT` | — |
 | Response Explorer screen (addendum §7) | `NOT_BUILT` | — |

@@ -355,6 +355,19 @@ async function main(): Promise<void> {
 		cycleId: dispatch.cycleId,
 		reviewedAt: new Date(),
 		scope: "stub rehearsal",
+		decision: "rejected",
+	});
+	const [rejected] = await db
+		.select()
+		.from(schema.svOrders)
+		.where(and(eq(schema.svOrders.id, order.id), eq(schema.svOrders.organizationId, ORG)));
+	check(rejected?.status === "QC_REQUIRED", "a rejected review leaves the order where the reviewer left it");
+
+	await repositories.qcRecords.create(ctx, {
+		orderId: order.id,
+		cycleId: dispatch.cycleId,
+		reviewedAt: new Date(),
+		scope: "stub rehearsal",
 		decision: "approved",
 	});
 	const [reviewed] = await db
