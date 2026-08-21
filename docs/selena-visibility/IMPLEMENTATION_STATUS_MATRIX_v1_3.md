@@ -41,6 +41,10 @@ run by nobody.
 
 ## Gate A — spend safety (Фаза 0)
 
+Gate A was added to the TZ after Фазы 1–5 had already been built in this
+branch, so it was implemented last. That ordering is worth knowing when reading
+the branch history; it changes nothing about what is gated now.
+
 | Feature | Status | Verified |
 | --- | --- | --- |
 | Global provider stop covers measurement, legacy onboarding and Suggest | `CODE_IN_BRANCH` | unit |
@@ -49,6 +53,7 @@ run by nobody.
 | Approval, the permits it authorizes and its audit row in one transaction | `CODE_IN_BRANCH` | stub rehearsal |
 | New permit per retry | holds by construction — a consumed permit is refused and no retry path exists to reuse one | unit |
 | SSRF guard on the onboarding fetch | `CODE_IN_BRANCH` (from `eff8b55`, not this session) | not re-verified here |
+| Public site claims without a current artifact («8 систем», unconditional PDF/XLSX/CSV, final pricing) | out of scope here — the marketing site is a different repository | — |
 | Collector path carries the same SSRF guard | `CODE_IN_BRANCH` — equivalent guard, checked before every hop and every redirect | read in this session; it is a second implementation of the rule, not the shared one |
 
 ## Evidence Ledger
