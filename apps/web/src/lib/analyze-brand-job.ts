@@ -35,13 +35,27 @@ export type AnalyzeBrandStatus =
 	| { status: "done"; suggestion: OnboardingSuggestion }
 	| { status: "failed"; error: string };
 
+/**
+ * Which product a job belongs to. Both products key jobs by a UUID (Elmo by
+ * brand id, Selena by project id), and a brand name can be shaped like a UUID,
+ * so the raw ids share a namespace. The product prefix keeps one product from
+ * reading or cancelling the other's job by guessing its id.
+ */
+export type AnalyzeBrandProduct = "elmo" | "selena";
+
 export interface AnalyzeBrandInput {
+	product: AnalyzeBrandProduct;
 	/** Id the result is read back by. Must be access-checked by the caller. */
 	requestKey: string;
 	website: string;
 	brandName?: string;
 	maxCompetitors?: number;
 	maxPrompts?: number;
+}
+
+/** The namespaced value actually stored in and queried from the job payload. */
+function namespacedKey(product: AnalyzeBrandProduct, requestKey: string): string {
+	return `${product}:${requestKey}`;
 }
 
 interface JobRow {
@@ -52,11 +66,11 @@ interface JobRow {
 }
 
 /** The most recent analyze-brand job for a request key, regardless of state. */
-async function latestJob(requestKey: string): Promise<JobRow | undefined> {
+async function latestJob(namespaced: string): Promise<JobRow | undefined> {
 	const result = await db.execute(sql`
 		SELECT id, state, data, output
 		FROM pgboss.job
-		WHERE name = ${ANALYZE_BRAND_QUEUE} AND data->>'requestKey' = ${requestKey}
+		WHERE name = ${ANALYZE_BRAND_QUEUE} AND data->>'requestKey' = ${namespaced}
 		ORDER BY created_on DESC
 		LIMIT 1
 	`);
@@ -92,19 +106,27 @@ function analysisKey(website: string): string {
  */
 export async function enqueueAnalyzeBrand(input: AnalyzeBrandInput): Promise<void> {
 	const boss = await getBoss();
-	const key = analysisKey(input.website);
+	const pageKey = analysisKey(input.website);
 
-	const latest = await latestJob(input.requestKey);
-	if (latest && IN_FLIGHT_STATES.has(latest.state) && analysisKey(latest.data?.website ?? "") === key) {
+	const latest = await latestJob(namespacedKey(input.product, input.requestKey));
+	if (latest && IN_FLIGHT_STATES.has(latest.state) && analysisKey(latest.data?.website ?? "") === pageKey) {
 		return;
 	}
 
-	await boss.send(ANALYZE_BRAND_QUEUE, input);
+	// Store the namespaced value so a poll/cancel for one product can never
+	// match the other product's job, even when the raw ids are equal.
+	await boss.send(ANALYZE_BRAND_QUEUE, {
+		...input,
+		requestKey: namespacedKey(input.product, input.requestKey),
+	});
 }
 
 /** Poll the status/result of the latest brand-analysis job for a request key. */
-export async function getAnalyzeBrandStatus(requestKey: string): Promise<AnalyzeBrandStatus> {
-	const job = await latestJob(requestKey);
+export async function getAnalyzeBrandStatus(
+	product: AnalyzeBrandProduct,
+	requestKey: string,
+): Promise<AnalyzeBrandStatus> {
+	const job = await latestJob(namespacedKey(product, requestKey));
 
 	// No job yet — the enqueue may not be visible, or the worker hasn't picked
 	// it up. Either way the client should keep polling.
@@ -116,6 +138,7 @@ export async function getAnalyzeBrandStatus(requestKey: string): Promise<Analyze
 	}
 	if (job.state === "failed" || job.state === "cancelled") {
 		console.error("[analyze-brand] job ended without a result", {
+			product,
 			requestKey,
 			jobId: job.id,
 			state: job.state,
@@ -129,8 +152,8 @@ export async function getAnalyzeBrandStatus(requestKey: string): Promise<Analyze
  * Best-effort cancel of an in-flight analysis. Used when the user backs out so
  * the worker doesn't keep grinding on a result nobody is waiting for.
  */
-export async function cancelAnalyzeBrand(requestKey: string): Promise<void> {
-	const job = await latestJob(requestKey);
+export async function cancelAnalyzeBrand(product: AnalyzeBrandProduct, requestKey: string): Promise<void> {
+	const job = await latestJob(namespacedKey(product, requestKey));
 	if (!job || !IN_FLIGHT_STATES.has(job.state)) {
 		return;
 	}

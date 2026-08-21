@@ -68,6 +68,7 @@ export const startSelenaProfileSuggestionFn = createServerFn({ method: "POST" })
 	.handler(async ({ data }) => {
 		const project = await requireProject(data.projectId);
 		await enqueueAnalyzeBrand({
+			product: "selena",
 			requestKey: data.projectId,
 			website: data.website,
 			brandName: project.name,
@@ -87,7 +88,7 @@ export const getSelenaProfileSuggestionFn = createServerFn({ method: "POST" })
 	.validator(suggestionScopeSchema)
 	.handler(async ({ data }): Promise<SelenaProfileSuggestion> => {
 		const project = await requireProject(data.projectId);
-		const status = await getAnalyzeBrandStatus(data.projectId);
+		const status = await getAnalyzeBrandStatus("selena", data.projectId);
 		if (status.status !== "done") return status;
 		return {
 			status: "done",
@@ -102,6 +103,6 @@ export const cancelSelenaProfileSuggestionFn = createServerFn({ method: "POST" }
 	.validator(suggestionScopeSchema)
 	.handler(async ({ data }) => {
 		await requireProject(data.projectId);
-		await cancelAnalyzeBrand(data.projectId);
+		await cancelAnalyzeBrand("selena", data.projectId);
 		return { ok: true };
 	});
