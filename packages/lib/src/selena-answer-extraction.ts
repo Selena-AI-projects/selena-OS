@@ -15,7 +15,7 @@ import type { RunMeasurement } from "@workspace/selena-visibility-contracts";
  */
 
 export type ExtractionContext = {
-	/** The brand name and every approved spelling variant (§6.1). */
+	/** The canonical brand name first, then every approved spelling variant (§6.1). */
 	brandTerms: string[];
 	/** Approved brand domains; a citation on one of these is an owned citation. */
 	ownedDomains: string[];
@@ -24,6 +24,12 @@ export type ExtractionContext = {
 	language: string;
 	region?: string;
 };
+
+/**
+ * Bumped whenever matching or position rules change, so a re-extraction is
+ * distinguishable from the original observation (addendum §5.3, §14).
+ */
+export const EXTRACTOR_VERSION = "selena-extract/1";
 
 export type ExtractionInput = {
 	answerText: string;
@@ -124,16 +130,9 @@ export function extractMeasurement(input: ExtractionInput): RunMeasurement {
 	const mention = matchesAny(answerText, context.brandTerms);
 
 	// Position exists only where the answer itself ranks options: the 1-based
-	// index of the first enumerated item naming the brand. A brand that appears
-	// only in prose is mentioned but unranked — position stays null rather than
-	// being invented from word order.
-	let position: number | null = null;
-	if (mention) {
-		const items = recommendationItems(answerText);
-		const index = items.findIndex((item) => matchesAny(item, context.brandTerms));
-		if (index >= 0) position = index + 1;
-	}
-
+	// index of the first enumerated item naming the entity. An entity that
+	// appears only in prose is mentioned but unranked — null, never a rank
+	// invented from word order (addendum §3.4).
 	const seenUrls = new Set<string>();
 	const citations: { url: string; domain: string }[] = [];
 	for (const source of sources) {
@@ -144,17 +143,29 @@ export function extractMeasurement(input: ExtractionInput): RunMeasurement {
 		citations.push({ url, domain });
 	}
 
+	const items = recommendationItems(answerText);
+	const ordinalFor = (terms: string[]): number | null => {
+		const index = items.findIndex((item) => matchesAny(item, terms));
+		return index >= 0 ? index + 1 : null;
+	};
+
 	const competitors = context.competitors
-		.filter((competitor) => matchesAny(answerText, competitor.terms.length > 0 ? competitor.terms : [competitor.name]))
-		.map((competitor) => competitor.name);
+		.map((competitor) => ({
+			name: competitor.name,
+			terms: competitor.terms.length > 0 ? competitor.terms : [competitor.name],
+		}))
+		.filter((competitor) => matchesAny(answerText, competitor.terms))
+		.map((competitor) => ({ name: competitor.name, position: ordinalFor(competitor.terms) }));
 
 	return {
 		system,
 		...(model === undefined ? {} : { model }),
 		language: context.language,
 		...(context.region === undefined ? {} : { region: context.region }),
+		extractorVersion: EXTRACTOR_VERSION,
+		brand: context.brandTerms[0] ?? "",
 		mention,
-		position,
+		position: mention ? ordinalFor(context.brandTerms) : null,
 		ownedCitation: citations.some((citation) => isOwnedDomain(citation.domain, context.ownedDomains)),
 		citations,
 		competitors,

@@ -26,15 +26,15 @@ describe("computeLedgerMetrics", () => {
 		expect(metrics.totalRuns).toBe(4);
 		expect(metrics.validRuns).toBe(3);
 		expect(metrics.invalidRate).toBeCloseTo(1 / 4);
-		expect(metrics.mentionRate).toBeCloseTo(2 / 3);
+		expect(metrics.mentionCoverage).toBeCloseTo(2 / 3);
 		// s1×chatgpt mentions on every repeat; s2×chatgpt never does.
 		expect(metrics.stableMentionRate).toBeCloseTo(1 / 2);
 		expect(metrics.ownedCitationRate).toBeCloseTo(1 / 3);
 		expect(metrics.citationCoverage).toBeCloseTo(2 / 3);
-		expect(metrics.averagePosition).toBeCloseTo(2);
+		expect(metrics.averageBrandPosition).toBeCloseTo(2);
 		// 2 brand mentions against 3 competitor appearances.
-		expect(metrics.shareOfVoice.brand).toBeCloseTo(2 / 5);
-		expect(metrics.shareOfVoice.competitors).toEqual([
+		expect(metrics.relativeMentionShare.brand).toBeCloseTo(2 / 5);
+		expect(metrics.relativeMentionShare.competitors).toEqual([
 			{ name: "Rival", mentions: 2, share: 2 / 5 },
 			{ name: "Other", mentions: 1, share: 1 / 5 },
 		]);
@@ -42,9 +42,9 @@ describe("computeLedgerMetrics", () => {
 
 	it("averages position over mentions only and reports null when nothing mentions", () => {
 		const metrics = computeLedgerMetrics([row({}), row({ scenarioId: "s2" })]);
-		expect(metrics.mentionRate).toBe(0);
-		expect(metrics.averagePosition).toBeNull();
-		expect(metrics.shareOfVoice.brand).toBeNull();
+		expect(metrics.mentionCoverage).toBe(0);
+		expect(metrics.averageBrandPosition).toBeNull();
+		expect(metrics.relativeMentionShare.brand).toBeNull();
 	});
 
 	it("keeps unmeasured VALID rows out of evidence denominators instead of scoring them as non-mentions", () => {
@@ -68,7 +68,7 @@ describe("computeLedgerMetrics", () => {
 		const metrics = computeLedgerMetrics(rows);
 		expect(metrics.validRuns).toBe(10);
 		expect(metrics.unmeasuredRuns).toBe(5);
-		expect(metrics.mentionRate).toBe(1);
+		expect(metrics.mentionCoverage).toBe(1);
 		expect(metrics.stableMentionRate).toBe(1);
 		expect(metrics.citationCoverage).toBe(1);
 	});
@@ -77,7 +77,7 @@ describe("computeLedgerMetrics", () => {
 		const metrics = computeLedgerMetrics([row({ validity: null }), row({ mention: true, position: 1 })]);
 		expect(metrics.totalRuns).toBe(1);
 		expect(metrics.invalidRate).toBe(0);
-		expect(metrics.mentionRate).toBe(1);
+		expect(metrics.mentionCoverage).toBe(1);
 	});
 
 	it("reports visitor/API divergence and leaves it null when one side is absent", () => {
@@ -118,8 +118,8 @@ describe("computeLedgerReport", () => {
 				["discovery-1", "discovery"],
 			]),
 		);
-		expect(report.branded?.mentionRate).toBe(1);
-		expect(report.discovery?.mentionRate).toBe(0);
+		expect(report.branded?.mentionCoverage).toBe(1);
+		expect(report.discovery?.mentionCoverage).toBe(0);
 		expect(report.unclassifiedRuns).toBe(1);
 	});
 

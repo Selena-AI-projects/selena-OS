@@ -197,6 +197,13 @@
 			"when": 1786989600000,
 			"tag": "0027_selena_permit_system_id",
 			"breakpoints": true
+		},
+		{
+			"idx": 28,
+			"version": "7",
+			"when": 1787076000000,
+			"tag": "0028_selena_response_mentions",
+			"breakpoints": true
 		}
 	]
 }

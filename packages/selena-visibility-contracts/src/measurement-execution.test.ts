@@ -86,11 +86,13 @@ describe("Selena measurement execution boundary", () => {
 			model: "gpt-5",
 			language: "en",
 			region: "ID",
+			extractorVersion: "selena-extract/1",
+			brand: "KORA Food Hall",
 			mention: true,
 			position: 2,
 			ownedCitation: true,
 			citations: [{ url: "https://example.com/menu", domain: "example.com" }],
-			competitors: ["Rival Cafe"],
+			competitors: [{ name: "Rival Cafe", position: 1 }],
 			factualErrors: [],
 		};
 		const succeeded = {
@@ -127,6 +129,24 @@ describe("Selena measurement execution boundary", () => {
 		// Unknown extraction fields stay out of stored run state.
 		expect(
 			runOutcomeSchema.safeParse({ ...succeeded, measurement: { ...measurement, sentiment: "positive" } }).success,
+		).toBe(false);
+		// Addendum §3.4: an ordinal is 1-based; 0 and fractions are refused.
+		expect(runOutcomeSchema.safeParse({ ...succeeded, measurement: { ...measurement, position: 0 } }).success).toBe(
+			false,
+		);
+		expect(runOutcomeSchema.safeParse({ ...succeeded, measurement: { ...measurement, position: 1.5 } }).success).toBe(
+			false,
+		);
+		expect(
+			runOutcomeSchema.safeParse({
+				...succeeded,
+				measurement: { ...measurement, competitors: [{ name: "Rival Cafe", position: 0 }] },
+			}).success,
+		).toBe(false);
+		// Addendum §5.3: every stored extraction names its extractor.
+		expect(
+			runOutcomeSchema.safeParse({ ...succeeded, measurement: { ...measurement, extractorVersion: undefined } })
+				.success,
 		).toBe(false);
 	});
 });

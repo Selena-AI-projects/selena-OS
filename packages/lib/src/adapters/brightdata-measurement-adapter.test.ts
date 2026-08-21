@@ -424,11 +424,13 @@ describe("Bright Data measurement adapter", () => {
 			system: "chatgpt",
 			language: "en",
 			region: "ID",
+			extractorVersion: "selena-extract/1",
+			brand: "KORA Food Hall",
 			mention: true,
 			position: 1,
 			ownedCitation: true,
 			citations: [{ url: "https://korafoodhall.com/menu", domain: "korafoodhall.com" }],
-			competitors: ["Rival Cafe"],
+			competitors: [{ name: "Rival Cafe", position: 2 }],
 			factualErrors: [],
 		});
 

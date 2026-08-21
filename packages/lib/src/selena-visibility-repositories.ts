@@ -712,6 +712,7 @@ export function createSelenaRepositories(db: Db) {
 							citations: measurement?.citations ?? null,
 							competitors: measurement?.competitors ?? null,
 							factualErrors: measurement?.factualErrors ?? null,
+							extractorVersion: measurement?.extractorVersion ?? null,
 							rawResponseReference: parsed.rawResponseReference ?? null,
 							canonicalPayload: parsed,
 							finishedAt: now,
@@ -750,6 +751,33 @@ export function createSelenaRepositories(db: Db) {
 									inArray(schema.svOrders.status, ["QUEUED", "RUNNING", "ANALYZING"]),
 								),
 							);
+					// Addendum §5.3 (P0-08): the normalized mention rows commit with the
+					// run they were extracted from — one row per entity the answer
+					// named, brand and competitors alike.
+					if (measurement) {
+						const mentionRows = [
+							...(measurement.mention
+								? [{ entityType: "BRAND", name: measurement.brand, ordinalPosition: measurement.position }]
+								: []),
+							...measurement.competitors.map((competitor) => ({
+								entityType: "COMPETITOR",
+								name: competitor.name,
+								ordinalPosition: competitor.position,
+							})),
+						];
+						if (mentionRows.length > 0)
+							await tx.insert(schema.svResponseMentions).values(
+								mentionRows.map((row) => ({
+									organizationId: ctx.tenantId,
+									cycleId: cycle.id,
+									runId,
+									entityType: row.entityType,
+									name: row.name,
+									ordinalPosition: row.ordinalPosition,
+									extractorVersion: measurement.extractorVersion,
+								})),
+							);
+					}
 					// The spend ledger is written with the run it belongs to, so a
 					// committed charge can never exist without its evidence row and
 					// vice versa.

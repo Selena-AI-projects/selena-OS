@@ -1,6 +1,12 @@
 import { runMeasurementSchema } from "@workspace/selena-visibility-contracts";
 import { describe, expect, it } from "vitest";
-import { containsTerm, extractMeasurement, isOwnedDomain, recommendationItems } from "./selena-answer-extraction";
+import {
+	EXTRACTOR_VERSION,
+	containsTerm,
+	extractMeasurement,
+	isOwnedDomain,
+	recommendationItems,
+} from "./selena-answer-extraction";
 
 const context = {
 	brandTerms: ["KORA Food Hall", "KORA"],
@@ -88,6 +94,8 @@ describe("extractMeasurement", () => {
 			system: "chatgpt",
 			language: "en",
 			region: "ID",
+			extractorVersion: "selena-extract/1",
+			brand: "KORA Food Hall",
 			mention: true,
 			position: 2,
 			ownedCitation: true,
@@ -95,7 +103,7 @@ describe("extractMeasurement", () => {
 				{ url: "https://korafoodhall.com/menu", domain: "korafoodhall.com" },
 				{ url: "https://guide.example/best", domain: "guide.example" },
 			],
-			competitors: ["Rival Cafe"],
+			competitors: [{ name: "Rival Cafe", position: 1 }],
 			factualErrors: [],
 		});
 	});
@@ -110,7 +118,7 @@ describe("extractMeasurement", () => {
 		expect(measurement.mention).toBe(true);
 		expect(measurement.position).toBeNull();
 		expect(measurement.ownedCitation).toBe(false);
-		expect(measurement.competitors).toEqual(["Rival Cafe"]);
+		expect(measurement.competitors).toEqual([{ name: "Rival Cafe", position: null }]);
 	});
 
 	it("stays contract-valid when the brand is absent entirely", () => {
@@ -134,7 +142,7 @@ describe("extractMeasurement", () => {
 			system: "chatgpt",
 			context,
 		});
-		expect(measurement.competitors).toEqual(["Other Place"]);
+		expect(measurement.competitors).toEqual([{ name: "Other Place", position: null }]);
 	});
 
 	it("drops sources without a usable url or domain instead of storing blanks", () => {
@@ -149,5 +157,34 @@ describe("extractMeasurement", () => {
 		});
 		expect(measurement.citations).toEqual([]);
 		expect(measurement.ownedCitation).toBe(false);
+	});
+
+	it("gives every named entity its own ordinal from the answer's ranking", () => {
+		const measurement = extractMeasurement({
+			answerText: ["1. Rival Cafe", "2. KORA Food Hall", "3. Other Place"].join("\n"),
+			sources: [],
+			system: "chatgpt",
+			context,
+		});
+		expect(measurement.brand).toBe("KORA Food Hall");
+		expect(measurement.position).toBe(2);
+		expect(measurement.competitors).toEqual([
+			{ name: "Rival Cafe", position: 1 },
+			{ name: "Other Place", position: 3 },
+		]);
+		expect(measurement.extractorVersion).toBe(EXTRACTOR_VERSION);
+	});
+
+	it("keeps a competitor named only in prose unranked", () => {
+		const measurement = extractMeasurement({
+			answerText: "1. KORA Food Hall is the pick. Rival Cafe is also nearby.",
+			sources: [],
+			system: "chatgpt",
+			context,
+		});
+		expect(measurement.position).toBe(1);
+		// The prose sentence is part of item 1, so a naive scan would rank the
+		// competitor first: the ordinal belongs to the item that names it.
+		expect(measurement.competitors).toEqual([{ name: "Rival Cafe", position: 1 }]);
 	});
 });

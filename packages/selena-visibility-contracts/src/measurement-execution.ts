@@ -52,13 +52,20 @@ export const runMeasurementSchema = z
 		model: z.string().min(1).optional(),
 		language: z.string().min(1),
 		region: z.string().min(1).optional(),
+		// Addendum §5.3: every stored extraction names the exact extractor that
+		// produced it, so a backfill with a newer extractor is distinguishable
+		// from the original observation.
+		extractorVersion: z.string().min(1),
+		/** The canonical brand name the extraction matched against. */
+		brand: z.string().min(1),
 		mention: z.boolean(),
 		// Position exists only among mentions (§12: average position is computed
-		// over mentions only), so a non-mention carries null, never 0.
+		// over mentions only), so a non-mention carries null, never 0. Ordinal
+		// from 1; 0 and fractions are refused by construction (addendum §3.4).
 		position: z.number().int().positive().nullable(),
 		ownedCitation: z.boolean(),
 		citations: z.array(z.strictObject({ url: z.string().min(1), domain: z.string().min(1) })),
-		competitors: z.array(z.string().min(1)),
+		competitors: z.array(z.strictObject({ name: z.string().min(1), position: z.number().int().positive().nullable() })),
 		factualErrors: z.array(z.string().min(1)),
 	})
 	.superRefine((m, issues) => {

@@ -139,6 +139,8 @@ describe("Selena permit execution", () => {
 		const measurement = {
 			system: "gemini",
 			language: "en",
+			extractorVersion: "selena-extract/1",
+			brand: "KORA",
 			mention: true,
 			position: null,
 			ownedCitation: false,

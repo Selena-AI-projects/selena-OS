@@ -335,11 +335,13 @@ describe("OpenRouter measurement adapter", () => {
 			system: "claude",
 			model: "anthropic/claude-haiku-4.5",
 			language: "en",
+			extractorVersion: "selena-extract/1",
+			brand: "KORA Food Hall",
 			mention: true,
 			position: null,
 			ownedCitation: false,
 			citations: [],
-			competitors: ["Rival Cafe"],
+			competitors: [{ name: "Rival Cafe", position: null }],
 			factualErrors: [],
 		});
 	});

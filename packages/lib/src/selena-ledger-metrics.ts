@@ -33,14 +33,16 @@ export type LedgerMetrics = {
 	 */
 	unmeasuredRuns: number;
 	invalidRate: number | null;
-	mentionRate: number | null;
+	/** Addendum §6.1: share of measured runs containing the brand. Coverage, deliberately not called Share of Voice. */
+	mentionCoverage: number | null;
 	/** Share of scenario × system groups whose every valid repeat mentions the brand. */
 	stableMentionRate: number | null;
 	ownedCitationRate: number | null;
 	citationCoverage: number | null;
-	/** §12: averaged over mentions only — a non-mention has no position at all. */
-	averagePosition: number | null;
-	shareOfVoice: {
+	/** §12 / addendum §6.3: averaged over mentions only — a non-mention has no position at all. */
+	averageBrandPosition: number | null;
+	/** Addendum §6.2: the brand's share among all tracked-entity mentions. */
+	relativeMentionShare: {
 		brand: number | null;
 		competitors: { name: string; mentions: number; share: number }[];
 	};
@@ -56,7 +58,16 @@ function citationCount(value: unknown): number {
 }
 
 function competitorNames(value: unknown): string[] {
-	return Array.isArray(value) ? value.filter((name): name is string => typeof name === "string") : [];
+	if (!Array.isArray(value)) return [];
+	return value
+		.map((item) =>
+			typeof item === "string"
+				? item
+				: typeof item === "object" && item !== null && typeof (item as { name?: unknown }).name === "string"
+					? (item as { name: string }).name
+					: null,
+		)
+		.filter((name): name is string => name !== null);
 }
 
 function isVisitorChannel(channel: string): boolean {
@@ -116,13 +127,13 @@ export function computeLedgerMetrics(rows: LedgerRow[]): LedgerMetrics {
 		validRuns: valid.length,
 		unmeasuredRuns: valid.length - measured.length,
 		invalidRate: ratio(terminal.length - valid.length, terminal.length),
-		mentionRate: ratio(mentions.length, measured.length),
+		mentionCoverage: ratio(mentions.length, measured.length),
 		stableMentionRate: ratio(stableGroups, groups.size),
 		ownedCitationRate: ratio(measured.filter((row) => row.ownedCitation === true).length, measured.length),
 		citationCoverage: ratio(measured.filter((row) => citationCount(row.citations) > 0).length, measured.length),
-		averagePosition:
+		averageBrandPosition:
 			positions.length === 0 ? null : positions.reduce((sum, position) => sum + position, 0) / positions.length,
-		shareOfVoice: {
+		relativeMentionShare: {
 			brand: ratio(mentions.length, voiceDenominator),
 			competitors: [...competitorMentions.entries()]
 				.map(([name, count]) => ({ name, mentions: count, share: count / voiceDenominator }))
