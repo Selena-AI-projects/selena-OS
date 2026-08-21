@@ -584,13 +584,23 @@ export function createSelenaRepositories(db: Db) {
 					// the default state is the safe one (no stop, no maintenance).
 					cycleState?: Partial<Omit<ControlledCycleState, "cohortId" | "expectedJobs" | "expectedProviderCalls">>;
 					expiresAt?: Date;
+					/**
+					 * Approve the order as part of minting its permits. Passing this
+					 * puts the decision, the permission it grants and the record of
+					 * both in one transaction: an approval that commits without its
+					 * audit row is a decision nobody can prove was taken, and permits
+					 * that commit without the approval are permission nobody gave.
+					 */
+					approval?: { fromStatus: string; auditEvent: string; auditDetails?: Record<string, unknown> };
 				},
 			) => {
 				writable(ctx);
 				const order = await getOrderOwned(ctx, orderId);
 				// QUEUED is accepted only as the replay of a dispatch that already
 				// succeeded; every other non-APPROVED status must not mint permits.
-				if (order.status !== "APPROVED" && order.status !== "QUEUED") throw new Error("SELENA_ORDER_NOT_APPROVED");
+				const approvingFrom = opts?.approval?.fromStatus;
+				if (order.status !== "APPROVED" && order.status !== "QUEUED" && order.status !== approvingFrom)
+					throw new Error("SELENA_ORDER_NOT_APPROVED");
 				const lock = await getLockOwned(ctx, order.lockId);
 				const scope = parseMeasurementScope(lock.snapshot);
 				if (!scope) throw new Error("SELENA_LOCK_SCOPE_MISSING");
@@ -625,6 +635,28 @@ export function createSelenaRepositories(db: Db) {
 				};
 				try {
 					return await db.transaction(async (tx) => {
+						// The order row was read before the lock; approving inside the
+						// transaction moves it, and everything below has to act on where
+						// it is now rather than where it was.
+						let statusInTransaction = order.status;
+						if (opts?.approval && order.status === opts.approval.fromStatus) {
+							const [approved] = await tx
+								.update(schema.svOrders)
+								.set({ status: "APPROVED", updatedAt: new Date() })
+								.where(
+									and(
+										eq(schema.svOrders.id, orderId),
+										eq(schema.svOrders.organizationId, ctx.tenantId),
+										eq(schema.svOrders.status, opts.approval.fromStatus),
+									),
+								)
+								.returning({ id: schema.svOrders.id });
+							// Someone else moved it between the read and the lock; their
+							// decision stands and this one is refused rather than applied
+							// on top of a state it was never evaluated against.
+							if (!approved) throw new Error("SELENA_ORDER_STATUS_CHANGED");
+							statusInTransaction = "APPROVED";
+						}
 						const [existingCycle] = await tx
 							.select()
 							.from(schema.svCycles)
@@ -686,7 +718,7 @@ export function createSelenaRepositories(db: Db) {
 							.update(schema.svCycles)
 							.set({ createdRuns: permits.length, updatedAt: new Date() })
 							.where(eq(schema.svCycles.id, cycle.id));
-						if (order.status === "APPROVED")
+						if (statusInTransaction === "APPROVED")
 							await tx
 								.update(schema.svOrders)
 								.set({ status: "QUEUED", updatedAt: new Date() })
@@ -697,6 +729,17 @@ export function createSelenaRepositories(db: Db) {
 							created: inserted.length,
 							expected,
 						});
+						// Written here rather than at the top so it carries what the
+						// approval actually authorized, and still commits or rolls back
+						// with the permits themselves.
+						if (opts?.approval && order.status === opts.approval.fromStatus)
+							await recordAudit(tx, ctx, opts.approval.auditEvent, "sv_orders", orderId, {
+								...(opts.approval.auditDetails ?? {}),
+								orderId,
+								cycleId: cycle.id,
+								created: inserted.length,
+								expected,
+							});
 						return { cycleId: cycle.id, created: inserted.length, expected, permits };
 					});
 				} catch (error) {

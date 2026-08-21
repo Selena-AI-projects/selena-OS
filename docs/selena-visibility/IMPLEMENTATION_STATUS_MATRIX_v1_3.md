@@ -46,9 +46,10 @@ run by nobody.
 | Global provider stop covers measurement, legacy onboarding and Suggest | `CODE_IN_BRANCH` | unit |
 | Onboarding Suggest refuses to call a paid model unless the budget class is named | `CODE_IN_BRANCH` | unit; refused at the server function and again in the worker |
 | Spend limit on that budget class (a meter, not a gate) | `NOT_BUILT` — the cap that holds is the one on the provider account | — |
-| New permit per retry; approval, permits and audit in one transaction | `NOT_BUILT` | — |
+| Approval, the permits it authorizes and its audit row in one transaction | `CODE_IN_BRANCH` | stub rehearsal |
+| New permit per retry | holds by construction — a consumed permit is refused and no retry path exists to reuse one | unit |
 | SSRF guard on the onboarding fetch | `CODE_IN_BRANCH` (from `eff8b55`, not this session) | not re-verified here |
-| Collector path carries the same SSRF guard | unverified — not checked in this session | — |
+| Collector path carries the same SSRF guard | `CODE_IN_BRANCH` — equivalent guard, checked before every hop and every redirect | read in this session; it is a second implementation of the rule, not the shared one |
 
 ## Evidence Ledger
 

@@ -278,24 +278,15 @@ export const approveSelenaOrderFn = createServerFn({ method: "POST" })
 		// Approval never runs past a blocker: the same evaluation the operator
 		// saw is recomputed here and decides.
 		assertApprovable(preflight);
-		const [approved] = await db
-			.update(svOrders)
-			.set({ status: "APPROVED", updatedAt: new Date() })
-			.where(
-				and(
-					eq(svOrders.id, data.orderId),
-					eq(svOrders.organizationId, context.tenantId),
-					eq(svOrders.status, "PAID_REVIEW_REQUIRED"),
-				),
-			)
-			.returning({ id: svOrders.id });
-		if (!approved) throw new Error("SELENA_ORDER_STATUS_CHANGED");
-		const dispatch = await repositories.dispatch.createPermits(context, data.orderId);
-		await recordAdminAudit(context, "ORDER_APPROVED", data.orderId, {
-			cycleId: dispatch.cycleId,
-			created: dispatch.created,
-			expected: dispatch.expected,
-			idempotencyKey: data.idempotencyKey ?? null,
+		// The status change, the permits it authorizes and the record of the
+		// decision commit together: an approval stored without its audit row is a
+		// decision nobody can prove was taken.
+		const dispatch = await repositories.dispatch.createPermits(context, data.orderId, {
+			approval: {
+				fromStatus: "PAID_REVIEW_REQUIRED",
+				auditEvent: "ORDER_APPROVED",
+				auditDetails: { idempotencyKey: data.idempotencyKey ?? null },
+			},
 		});
 		const order = await getOwnedOrder(context, data.orderId);
 		return {

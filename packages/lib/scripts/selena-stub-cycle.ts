@@ -262,11 +262,26 @@ async function main(): Promise<void> {
 		lockId: lock.id,
 		orderCap: "0",
 	});
-	// Payment and admin approval are a different chain; this rehearsal is about
-	// what happens after an order is approved, so it starts from that state.
-	await db.update(schema.svOrders).set({ status: "APPROVED" }).where(eq(schema.svOrders.id, order.id));
+	// Payment is a different chain; the rehearsal starts where an order has been
+	// paid and is waiting for a human to approve it.
+	await db.update(schema.svOrders).set({ status: "PAID_REVIEW_REQUIRED" }).where(eq(schema.svOrders.id, order.id));
 
-	const dispatch = await repositories.dispatch.createPermits(ctx, order.id);
+	const dispatch = await repositories.dispatch.createPermits(ctx, order.id, {
+		approval: {
+			fromStatus: "PAID_REVIEW_REQUIRED",
+			auditEvent: "ORDER_APPROVED",
+			auditDetails: { idempotencyKey: "stub-cycle" },
+		},
+	});
+	const approvalAudit = await db
+		.select()
+		.from(schema.svAuditEvents)
+		.where(and(eq(schema.svAuditEvents.organizationId, ORG), eq(schema.svAuditEvents.event, "ORDER_APPROVED")));
+	check(approvalAudit.length === 1, "the approval left exactly one audit row");
+	check(
+		(approvalAudit[0]?.details as { cycleId?: string })?.cycleId === dispatch.cycleId,
+		"the audit row names what the approval authorized",
+	);
 	check(dispatch.permits.length === expectedRuns, `planned ${expectedRuns} permits`);
 	check(
 		dispatch.permits.every((permit) => permit.systemId !== null),
