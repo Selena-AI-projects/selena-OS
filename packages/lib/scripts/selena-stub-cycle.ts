@@ -53,7 +53,18 @@ function check(condition: boolean, message: string): void {
 	}
 }
 
+/**
+ * Set SELENA_STUB_KEEP=1 to leave the rehearsal's rows in place — the only
+ * reason to want them is to look at what a cycle actually produces, and the
+ * organization it printed is what to delete afterwards.
+ */
+const KEEP = process.env.SELENA_STUB_KEEP === "1";
+
 async function cleanup(): Promise<void> {
+	if (KEEP) {
+		console.log(`\nKept for inspection: organization ${ORG}`);
+		return;
+	}
 	// Child-first, so every foreign key still resolves while the rows go.
 	const tables = [
 		schema.svAuditEvents,

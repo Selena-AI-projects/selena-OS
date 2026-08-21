@@ -99,8 +99,9 @@ the branch history; it changes nothing about what is gated now.
 | Source Opportunity aggregation by domain, URL, scenario, system, owned vs competitor, evidence run ids | `CODE_IN_BRANCH` | unit + stub rehearsal |
 | Topic axis of the aggregation (§8) | `NOT_BUILT` — depends on `sv_topics`, out of scope for this TZ | — |
 | Recommendation and task refused without evidence ids | `CODE_IN_BRANCH` | unit |
-| `GET /v1/projects/{id}/citation-gaps` | `NOT_BUILT` — repository reader exists, no route | — |
-| Source Opportunity Map screen | `NOT_BUILT` | — |
+| `GET /api/v1/selena/citation-gaps?projectId=` | `CODE_IN_BRANCH` | called against a local server with seeded snapshots: real rows, gap flagged, formula version attached |
+| Source Opportunity Map screen | `CODE_IN_BRANCH` | typechecks and the route resolves; not rendered — an authenticated session could not be forged locally |
+| Tenant API keys usable on `/api/v1/*` | **blocked** — the global deployment middleware gates every `/api/v1/*` path behind `ADMIN_API_KEYS` before any handler runs, so an `sv_api_keys` token alone is refused | verified locally |
 
 ## Manual pilot (RC7 Phase E)
 

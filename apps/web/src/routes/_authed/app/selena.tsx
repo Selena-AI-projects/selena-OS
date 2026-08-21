@@ -9,7 +9,7 @@ import {
 	IconRefresh,
 	IconSparkles,
 } from "@tabler/icons-react";
-import { createFileRoute, useRouter } from "@tanstack/react-router";
+import { createFileRoute, Link, useRouter } from "@tanstack/react-router";
 import { authClient } from "@workspace/lib/auth/client";
 import { Button } from "@workspace/ui/components/button";
 import { Input } from "@workspace/ui/components/input";
@@ -366,6 +366,9 @@ function SelenaWorkspace() {
 						</span>
 					</div>
 					<div className="flex items-center gap-2">
+						<Link to="/app/selena-sources" className="selena-text-button hidden sm:inline-flex">
+							{tr(locale, "Sources", "Источники")}
+						</Link>
 						<a
 							href="https://www.selenasystems.com/visibility"
 							target="_blank"
