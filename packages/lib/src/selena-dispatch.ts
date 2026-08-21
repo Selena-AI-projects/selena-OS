@@ -1,8 +1,9 @@
 import {
-	type MeasurementScope,
-	type SystemChannel,
+	assertExpertVerified,
 	dispatchKey,
 	expectedRunsFromScope,
+	type MeasurementScope,
+	type SystemChannel,
 } from "@workspace/selena-visibility-contracts";
 
 // Permits planned here are database records only: this module must stay free
@@ -63,6 +64,35 @@ export type QcDecision = (typeof qcDecisions)[number];
 
 export function assertQcDecision(value: string): asserts value is QcDecision {
 	if (!qcDecisions.includes(value as QcDecision)) throw new Error("QC_DECISION_INVALID");
+}
+
+/** What a cycle has to look like before its order can be signed off. */
+export type QcReviewableCycle = { id: string; status: string; expectedRuns: number; completedRuns: number };
+
+/**
+ * Whether an approved QC record may publish this order. Approval is the human
+ * step that turns measured runs into a deliverable, so it has to be refused
+ * while the cycle is still producing them: a READY order says the ledger is
+ * complete, and a half-finished cycle would make that untrue.
+ *
+ * READY is accepted as well as QC_REQUIRED because a second approval of the
+ * same order is a replay of a decision already taken, not a new one.
+ */
+export function assertQcApprovable(orderStatus: string, cycles: readonly QcReviewableCycle[]): void {
+	if (orderStatus !== "QC_REQUIRED" && orderStatus !== "READY") throw new Error("SELENA_QC_ORDER_NOT_IN_REVIEW");
+	if (cycles.length === 0) throw new Error("SELENA_QC_NO_CYCLE");
+	if (cycles.some((cycle) => cycle.completedRuns < cycle.expectedRuns)) throw new Error("SELENA_QC_CYCLE_UNFINISHED");
+}
+
+/**
+ * Whether an order may be handed to the client. Delivery is where the Expert
+ * Verified promise is either true or a lie, so the QC record is checked here
+ * rather than assumed from the order having reached READY — every plan goes
+ * through QC_REQUIRED, and nothing else in the pipeline asks for the sign-off.
+ */
+export function assertOrderDeliverable(orderStatus: string, hasApprovedQcRecord: boolean): void {
+	if (orderStatus !== "READY") throw new Error("SELENA_ORDER_NOT_READY");
+	assertExpertVerified(hasApprovedQcRecord);
 }
 
 /** The permit fields that decide whether it may still be dispatched. */

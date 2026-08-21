@@ -20,7 +20,13 @@ import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import * as schema from "./db/schema";
 import { assertDirectDispatchAllowed, type ControlledCycleState } from "./run-policy";
 import { computeCitationGaps } from "./selena-citation-gap";
-import { assertLockExpectedRuns, assertQcDecision, planOrderDispatch } from "./selena-dispatch";
+import {
+	assertLockExpectedRuns,
+	assertOrderDeliverable,
+	assertQcApprovable,
+	assertQcDecision,
+	planOrderDispatch,
+} from "./selena-dispatch";
 import { detectEntityCycle, validateEntityParent } from "./selena-entities";
 import { ownedDomainsFromProfile, parseLockedProfile } from "./selena-extraction-context";
 import type { LedgerMention, LedgerRow } from "./selena-ledger-metrics";
@@ -293,6 +299,38 @@ export function createSelenaRepositories(db: Db) {
 			},
 			list: (ctx: SelenaRepositoryContext) =>
 				db.select().from(schema.svOrders).where(eq(schema.svOrders.organizationId, ctx.tenantId)),
+			/**
+			 * Hand a published order to the client. The QC record is read inside
+			 * the same transaction that flips the status, so an approval cannot be
+			 * withdrawn between the check and the delivery it authorized.
+			 */
+			deliver: async (ctx: SelenaRepositoryContext, orderId: string) => {
+				writable(ctx);
+				return db.transaction(async (tx) => {
+					const [order] = await tx
+						.select()
+						.from(schema.svOrders)
+						.where(and(eq(schema.svOrders.id, orderId), eq(schema.svOrders.organizationId, ctx.tenantId)))
+						.for("update");
+					if (!order) throw new Error("Not found: order is outside AuthContext tenant");
+					// Delivering twice is the same delivery, not a second one.
+					if (order.status === "DELIVERED") return order;
+					const [latestQc] = await tx
+						.select()
+						.from(schema.svQcRecords)
+						.where(and(eq(schema.svQcRecords.orderId, orderId), eq(schema.svQcRecords.organizationId, ctx.tenantId)))
+						.orderBy(desc(schema.svQcRecords.createdAt))
+						.limit(1);
+					assertOrderDeliverable(order.status, latestQc?.decision === "approved");
+					const [delivered] = await tx
+						.update(schema.svOrders)
+						.set({ status: "DELIVERED", updatedAt: new Date() })
+						.where(and(eq(schema.svOrders.id, orderId), eq(schema.svOrders.organizationId, ctx.tenantId)))
+						.returning();
+					await recordAudit(tx, ctx, "ORDER_DELIVERED", "sv_orders", orderId, { qcRecordId: latestQc?.id ?? null });
+					return delivered;
+				});
+			},
 		},
 		profiles: {
 			get: async (ctx: SelenaRepositoryContext, projectId: string) =>
@@ -862,6 +900,30 @@ export function createSelenaRepositories(db: Db) {
 				});
 			},
 			ledgerForCycle,
+			/**
+			 * The one way to reach a run's raw answer. Addendum §7: a client viewer
+			 * never receives an object-storage URL, and tenant authorization is
+			 * checked before a signed URL is issued — this read is that check, so
+			 * whoever mints the URL has to come through here and cannot sign a
+			 * reference it did not return. Every access leaves an audit row.
+			 */
+			rawEvidenceFor: async (ctx: SelenaRepositoryContext, runId: string) => {
+				const [run] = await db
+					.select({
+						runId: schema.svRuns.id,
+						cycleId: schema.svRuns.cycleId,
+						dispatchKey: schema.svRuns.dispatchKey,
+						rawResponseReference: schema.svRuns.rawResponseReference,
+						extractorVersion: schema.svRuns.extractorVersion,
+						finishedAt: schema.svRuns.finishedAt,
+					})
+					.from(schema.svRuns)
+					.where(and(eq(schema.svRuns.id, runId), eq(schema.svRuns.organizationId, ctx.tenantId)))
+					.limit(1);
+				if (!run) throw new Error("Not found: run is outside AuthContext tenant");
+				await recordAudit(db, ctx, "RAW_EVIDENCE_ACCESSED", "sv_runs", runId, { dispatchKey: run.dispatchKey });
+				return run;
+			},
 		},
 		incidents: {
 			list: (ctx: SelenaRepositoryContext, opts?: { status?: "OPEN" | "RESOLVED" }) =>
@@ -1402,25 +1464,70 @@ export function createSelenaRepositories(db: Db) {
 					if (!cycle || cycle.orderId !== input.orderId)
 						throw new Error("Not found: cycle is outside AuthContext tenant");
 				}
-				const [record] = await db
-					.insert(schema.svQcRecords)
-					.values({
-						organizationId: ctx.tenantId,
+				// The sign-off and the publication it authorizes commit together: a
+				// stored approval next to an order still sitting in QC_REQUIRED
+				// reads as a deliverable nobody released, and a released order
+				// with no record behind it is the Expert Verified label without
+				// the expert.
+				return db.transaction(async (tx) => {
+					const [order] = await tx
+						.select()
+						.from(schema.svOrders)
+						.where(and(eq(schema.svOrders.id, input.orderId), eq(schema.svOrders.organizationId, ctx.tenantId)))
+						.for("update");
+					if (!order) throw new Error("Not found: order is outside AuthContext tenant");
+					const [record] = await tx
+						.insert(schema.svQcRecords)
+						.values({
+							organizationId: ctx.tenantId,
+							orderId: input.orderId,
+							cycleId: input.cycleId ?? null,
+							reviewer: input.reviewer ?? ctx.actorId,
+							reviewedAt: new Date(input.reviewedAt),
+							scope: input.scope,
+							decision: input.decision,
+							notes: input.notes ?? null,
+						})
+						.returning();
+					let published = false;
+					if (input.decision === "approved") {
+						const cycles = await tx
+							.select()
+							.from(schema.svCycles)
+							.where(and(eq(schema.svCycles.orderId, input.orderId), eq(schema.svCycles.organizationId, ctx.tenantId)));
+						assertQcApprovable(order.status, cycles);
+						await tx
+							.update(schema.svCycles)
+							.set({ status: "READY", updatedAt: new Date() })
+							.where(
+								and(
+									eq(schema.svCycles.orderId, input.orderId),
+									eq(schema.svCycles.organizationId, ctx.tenantId),
+									eq(schema.svCycles.status, "QC_REQUIRED"),
+								),
+							);
+						await tx
+							.update(schema.svOrders)
+							.set({ status: "READY", updatedAt: new Date() })
+							.where(
+								and(
+									eq(schema.svOrders.id, input.orderId),
+									eq(schema.svOrders.organizationId, ctx.tenantId),
+									eq(schema.svOrders.status, "QC_REQUIRED"),
+								),
+							);
+						published = true;
+					}
+					// A rejection is recorded and the order stays in review: sending
+					// it anywhere else would be a decision the reviewer did not take.
+					await recordAudit(tx, ctx, "QC_RECORD_CREATED", "sv_qc_records", record.id, {
 						orderId: input.orderId,
 						cycleId: input.cycleId ?? null,
-						reviewer: input.reviewer ?? ctx.actorId,
-						reviewedAt: new Date(input.reviewedAt),
-						scope: input.scope,
 						decision: input.decision,
-						notes: input.notes ?? null,
-					})
-					.returning();
-				await recordAudit(db, ctx, "QC_RECORD_CREATED", "sv_qc_records", record.id, {
-					orderId: input.orderId,
-					cycleId: input.cycleId ?? null,
-					decision: input.decision,
+						published,
+					});
+					return record;
 				});
-				return record;
 			},
 			latestForOrder: latestQcRecordForOrder,
 			hasApprovedQcRecord: async (ctx: SelenaRepositoryContext, orderId: string) =>

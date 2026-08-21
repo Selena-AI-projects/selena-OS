@@ -398,6 +398,19 @@ export const stopSelenaOrderFn = createServerFn({ method: "POST" })
 		return { orderId: data.orderId, status: "CANCELLED" as const, stoppedCycles: stopped.length, replay: false };
 	});
 
+/**
+ * Hands a published order to the client. Separate from QC on purpose: the
+ * reviewer decides whether the work is sound, and releasing it is a second,
+ * recorded action that refuses to run without their approval.
+ */
+export const deliverSelenaOrderFn = createServerFn({ method: "POST" })
+	.validator(orderIdSchema)
+	.handler(async ({ data }) => {
+		const context = await requireAdminContext();
+		const delivered = await repositories.orders.deliver(context, data.orderId);
+		return { orderId: data.orderId, status: delivered.status };
+	});
+
 export const recordSelenaQcFn = createServerFn({ method: "POST" })
 	.validator(
 		orderIdSchema.extend({

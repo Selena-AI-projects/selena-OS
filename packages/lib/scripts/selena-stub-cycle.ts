@@ -222,6 +222,49 @@ async function main(): Promise<void> {
 	);
 	const recomputed = await repositories.citationGaps.snapshot(ctx, dispatch.cycleId);
 	check(recomputed.length === snapshots.length, "recomputing the same formula updates rather than duplicates");
+
+	// Delivery is gated on the human sign-off, so prove the gate holds before
+	// proving the door opens.
+	let refused = "";
+	try {
+		await repositories.orders.deliver(ctx, order.id);
+	} catch (error) {
+		refused = error instanceof Error ? error.message : String(error);
+	}
+	check(refused === "SELENA_ORDER_NOT_READY", `delivery before QC is refused (${refused || "not refused"})`);
+
+	await repositories.qcRecords.create(ctx, {
+		orderId: order.id,
+		cycleId: dispatch.cycleId,
+		reviewedAt: new Date(),
+		scope: "stub rehearsal",
+		decision: "approved",
+	});
+	const [reviewed] = await db
+		.select()
+		.from(schema.svOrders)
+		.where(and(eq(schema.svOrders.id, order.id), eq(schema.svOrders.organizationId, ORG)));
+	const [readyCycle] = await db
+		.select()
+		.from(schema.svCycles)
+		.where(and(eq(schema.svCycles.id, dispatch.cycleId), eq(schema.svCycles.organizationId, ORG)));
+	check(reviewed?.status === "READY", "an approved QC record publishes the order in the same transaction");
+	check(readyCycle?.status === "READY", "the reviewed cycle is published with its order");
+
+	const delivered = await repositories.orders.deliver(ctx, order.id);
+	check(delivered.status === "DELIVERED", "a signed-off order can be delivered");
+	const redelivered = await repositories.orders.deliver(ctx, order.id);
+	check(redelivered.status === "DELIVERED", "delivering twice is the same delivery");
+
+	const evidence = await repositories.runs.rawEvidenceFor(ctx, rows[0].runId);
+	check(evidence.rawResponseReference !== null, "raw evidence resolves for the tenant that owns the run");
+	let denied = "";
+	try {
+		await repositories.runs.rawEvidenceFor({ ...ctx, tenantId: "some-other-org" }, rows[0].runId);
+	} catch (error) {
+		denied = error instanceof Error ? error.message : String(error);
+	}
+	check(denied.startsWith("Not found"), `raw evidence is refused to another organization (${denied || "not refused"})`);
 	console.log("\nbranded:", JSON.stringify(report.branded, null, 2));
 	console.log("discovery:", JSON.stringify(report.discovery, null, 2));
 }
