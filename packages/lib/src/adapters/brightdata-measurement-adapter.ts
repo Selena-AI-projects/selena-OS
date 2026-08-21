@@ -96,12 +96,7 @@ export type BrightDataAdapterDeps = {
 	parseAnswer?: (raw: unknown) => BrightDataAnswer | null;
 };
 
-/**
- * Whether a stored cost came from the provider or from the local estimate.
- * RunOutcome is a strict schema with a bare `costUsd`, so this basis cannot be
- * persisted alongside it today; callers that need the distinction must read it
- * here rather than assume a stored number is billed fact.
- */
+/** Whether a cost came from the provider or from the local estimate. */
 export type BrightDataCostBasis = "provider_reported" | "estimated";
 
 class ResponseTooLargeError extends Error {}
@@ -382,7 +377,7 @@ export function createBrightDataAdapter(deps: BrightDataAdapterDeps): SelenaMeas
 			// adapter would let provider-shaped data into stored run state
 			// without the contract changing first. Citations need their own
 			// storage layer, which reads them from the parser above.
-			const { costUsd } = resolveBrightDataCost(answer.costUsd);
+			const { costUsd, basis } = resolveBrightDataCost(answer.costUsd);
 			return {
 				dispatchKey: permit.dispatchKey,
 				status: "SUCCEEDED",
@@ -390,7 +385,9 @@ export function createBrightDataAdapter(deps: BrightDataAdapterDeps): SelenaMeas
 				rawResponseReference: rawResponseReference(answer.providerRequestId, raw),
 				// No tokenUsage: a scraped visitor surface reports no token
 				// accounting, and a zero would read as a measured value.
-				...(costUsd === null ? {} : { costUsd }),
+				...(costUsd === null
+					? {}
+					: { costUsd, costBasis: basis === "provider_reported" ? ("actual" as const) : ("estimated" as const) }),
 			};
 		} finally {
 			clearTimeout(timer);

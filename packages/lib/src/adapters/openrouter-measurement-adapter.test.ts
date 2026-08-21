@@ -111,6 +111,7 @@ describe("OpenRouter measurement adapter", () => {
 			rawResponseReference: "openrouter:gen-01HZY",
 			tokenUsage: { input: 12, output: 34 },
 			costUsd: 0.0042,
+			costBasis: "actual",
 		});
 		expect(() => runOutcomeSchema.parse(outcome)).not.toThrow();
 	});

@@ -118,6 +118,7 @@ describe("Bright Data measurement adapter", () => {
 			validity: "VALID",
 			rawResponseReference: "brightdata:s_01HZY",
 			costUsd: estimateRunCostUsd("brightdata", true),
+			costBasis: "estimated",
 		});
 		// A scraped surface reports no token accounting, so none is claimed.
 		expect(outcome.tokenUsage).toBeUndefined();

@@ -51,12 +51,7 @@ type OpenRouterCompletionResponse = {
 	usage?: OpenRouterUsage | null;
 };
 
-/**
- * Whether a stored cost came from the provider or from the local estimate.
- * RunOutcome is a strict schema with a bare `costUsd`, so this basis cannot be
- * persisted alongside it today; callers that need the distinction must read it
- * here rather than assume a stored number is billed fact.
- */
+/** Whether a cost came from the provider or from the local estimate. */
 export type OpenRouterCostBasis = "provider_reported" | "estimated";
 
 class ResponseTooLargeError extends Error {}
@@ -227,14 +222,16 @@ export function createOpenRouterAdapter(deps: OpenRouterAdapterDeps): SelenaMeas
 			if (typeof content !== "string" || content.trim() === "") return invalidOutcome(permit, "EMPTY_RESPONSE");
 			const usage = data.usage;
 			const tokenUsage = tokenUsageFrom(usage);
-			const { costUsd } = resolveOpenRouterCost(usage);
+			const { costUsd, basis } = resolveOpenRouterCost(usage);
 			return {
 				dispatchKey: permit.dispatchKey,
 				status: "SUCCEEDED",
 				validity: "VALID",
 				rawResponseReference: rawResponseReference(data.id, raw),
 				...(tokenUsage ? { tokenUsage } : {}),
-				...(costUsd === null ? {} : { costUsd }),
+				...(costUsd === null
+					? {}
+					: { costUsd, costBasis: basis === "provider_reported" ? ("actual" as const) : ("estimated" as const) }),
 			};
 		} finally {
 			clearTimeout(timer);
