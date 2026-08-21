@@ -392,4 +392,48 @@ describe("Bright Data measurement adapter", () => {
 			"SELENA_LIVE_ADAPTER_REQUIRES_OWNER_GO",
 		);
 	});
+
+	it("attaches a measurement when an extraction context is supplied, and stays silent without one", async () => {
+		const payload = successPayload({
+			answer_text_markdown: "1. KORA Food Hall\n2. Rival Cafe",
+			citations: [{ url: "https://korafoodhall.com/menu", title: "Menu" }],
+		});
+		const extraction = {
+			brandTerms: ["KORA Food Hall"],
+			ownedDomains: ["korafoodhall.com"],
+			competitors: [{ name: "Rival Cafe", terms: ["Rival Cafe"] }],
+			language: "en",
+			region: "ID",
+		};
+
+		const withContext = await adapterWith(respondWith(jsonResponse(payload)), {
+			resolveExtractionContext: () => extraction,
+		}).execute(permitFor());
+		expect(() => runOutcomeSchema.parse(withContext)).not.toThrow();
+		expect(withContext.measurement).toEqual({
+			system: "chatgpt",
+			language: "en",
+			region: "ID",
+			mention: true,
+			position: 1,
+			ownedCitation: true,
+			citations: [{ url: "https://korafoodhall.com/menu", domain: "korafoodhall.com" }],
+			competitors: ["Rival Cafe"],
+			factualErrors: [],
+		});
+
+		const withoutContext = await adapterWith(respondWith(jsonResponse(payload))).execute(permitFor());
+		expect(withoutContext.measurement).toBeUndefined();
+	});
+
+	it("keeps a paid answer VALID when the extraction context cannot be resolved", async () => {
+		const outcome = await adapterWith(respondWith(jsonResponse(successPayload())), {
+			resolveExtractionContext: () => {
+				throw new Error("LOCK_UNREACHABLE");
+			},
+		}).execute(permitFor());
+		expect(outcome.status).toBe("SUCCEEDED");
+		expect(outcome.validity).toBe("VALID");
+		expect(outcome.measurement).toBeUndefined();
+	});
 });

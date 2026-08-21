@@ -306,4 +306,42 @@ describe("OpenRouter measurement adapter", () => {
 			"SELENA_LIVE_ADAPTER_REQUIRES_OWNER_GO",
 		);
 	});
+
+	it("attaches a measurement under the sold system name, with no sources on API View", async () => {
+		const payload = successPayload({
+			choices: [{ message: { content: "KORA Food Hall is worth a visit; Rival Cafe is louder." } }],
+		});
+		const outcome = await adapterWith(respondWith(jsonResponse(payload)), {
+			system: "claude",
+			resolveExtractionContext: () => ({
+				brandTerms: ["KORA Food Hall"],
+				ownedDomains: ["korafoodhall.com"],
+				competitors: [{ name: "Rival Cafe", terms: ["Rival Cafe"] }],
+				language: "en",
+			}),
+		}).execute(permitFor());
+		expect(() => runOutcomeSchema.parse(outcome)).not.toThrow();
+		expect(outcome.measurement).toEqual({
+			system: "claude",
+			model: "anthropic/claude-haiku-4.5",
+			language: "en",
+			mention: true,
+			position: null,
+			ownedCitation: false,
+			citations: [],
+			competitors: ["Rival Cafe"],
+			factualErrors: [],
+		});
+	});
+
+	it("keeps a paid answer VALID when the extraction context cannot be resolved", async () => {
+		const outcome = await adapterWith(respondWith(jsonResponse(successPayload())), {
+			resolveExtractionContext: () => {
+				throw new Error("LOCK_UNREACHABLE");
+			},
+		}).execute(permitFor());
+		expect(outcome.status).toBe("SUCCEEDED");
+		expect(outcome.validity).toBe("VALID");
+		expect(outcome.measurement).toBeUndefined();
+	});
 });

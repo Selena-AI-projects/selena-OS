@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { type RunOutcome, runOutcomeSchema, type visitorSurfaces } from "@workspace/selena-visibility-contracts";
 import type { SelenaExecutablePermit, SelenaMeasurementAdapter, SelenaMeasurementPermit } from "../selena-measurement";
+import { type ExtractionContext, extractMeasurement } from "../selena-answer-extraction";
 import { estimateRunCostUsd } from "../usage/cost";
 
 // The provider seam for Visitor View: the answer a person is actually shown by
@@ -82,6 +83,12 @@ export type BrightDataAdapterDeps = {
 	 * that owns the permit.
 	 */
 	resolveScenarioText: (permit: SelenaExecutablePermit) => Promise<string> | string;
+	/**
+	 * Brand, competitor and domain terms for extraction, resolved per permit
+	 * like the scenario text. Optional: without it the run is stored with its
+	 * raw response only, and extraction can be re-run from that later.
+	 */
+	resolveExtractionContext?: (permit: SelenaExecutablePermit) => Promise<ExtractionContext> | ExtractionContext;
 	now?: () => Date;
 	timeoutMs?: number;
 	maxResponseBytes?: number;
@@ -372,11 +379,23 @@ export function createBrightDataAdapter(deps: BrightDataAdapterDeps): SelenaMeas
 			}
 			if (!answer) return invalidOutcome(permit, "MALFORMED_RESPONSE");
 			if (answer.answerText.trim() === "") return invalidOutcome(permit, "EMPTY_RESPONSE");
-			// `answer.sources` is deliberately not returned: runOutcomeSchema is a
-			// strict object with no citation field, and widening it from an
-			// adapter would let provider-shaped data into stored run state
-			// without the contract changing first. Citations need their own
-			// storage layer, which reads them from the parser above.
+			// Extraction is an enrichment of a call that already succeeded and was
+			// paid for: a context failure must not turn paid evidence into a
+			// FAILED row. The raw response is stored either way, so a missing
+			// measurement is recoverable offline rather than lost.
+			let measurement: ReturnType<typeof extractMeasurement> | null = null;
+			if (deps.resolveExtractionContext) {
+				try {
+					measurement = extractMeasurement({
+						answerText: answer.answerText,
+						sources: answer.sources,
+						system: deps.system,
+						context: await deps.resolveExtractionContext(permit),
+					});
+				} catch {
+					measurement = null;
+				}
+			}
 			const { costUsd, basis } = resolveBrightDataCost(answer.costUsd);
 			return {
 				dispatchKey: permit.dispatchKey,
@@ -388,6 +407,7 @@ export function createBrightDataAdapter(deps: BrightDataAdapterDeps): SelenaMeas
 				...(costUsd === null
 					? {}
 					: { costUsd, costBasis: basis === "provider_reported" ? ("actual" as const) : ("estimated" as const) }),
+				...(measurement === null ? {} : { measurement }),
 			};
 		} finally {
 			clearTimeout(timer);
