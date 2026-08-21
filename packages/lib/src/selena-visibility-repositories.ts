@@ -679,6 +679,7 @@ export function createSelenaRepositories(db: Db) {
 					// Terminal already: recording twice would double the cycle counter
 					// and could push a cycle past its expected cardinality.
 					if (run.finishedAt) return run;
+					const measurement = parsed.measurement;
 					const [completed] = await tx
 						.update(schema.svRuns)
 						.set({
@@ -686,6 +687,19 @@ export function createSelenaRepositories(db: Db) {
 							validity: parsed.validity,
 							invalidReason: parsed.invalidReason ?? null,
 							costUsd: parsed.costUsd === undefined ? null : String(parsed.costUsd),
+							costBasis: parsed.costBasis ?? null,
+							tokenInput: parsed.tokenUsage?.input ?? null,
+							tokenOutput: parsed.tokenUsage?.output ?? null,
+							system: measurement?.system ?? null,
+							model: measurement?.model ?? null,
+							language: measurement?.language ?? null,
+							region: measurement?.region ?? null,
+							mention: measurement?.mention ?? null,
+							position: measurement?.position ?? null,
+							ownedCitation: measurement?.ownedCitation ?? null,
+							citations: measurement?.citations ?? null,
+							competitors: measurement?.competitors ?? null,
+							factualErrors: measurement?.factualErrors ?? null,
 							rawResponseReference: parsed.rawResponseReference ?? null,
 							canonicalPayload: parsed,
 							finishedAt: now,
