@@ -67,15 +67,21 @@ order, and none of them is an environment variable on its own.
    the run is sold as — use one of the catalog's API View model ids
    (`apiModelIds` in the contracts package), because a run measures the model
    the customer bought.
-3. **Give the adapter a way to read the scenario text.** A permit carries a
-   scenario id, not the question, and the adapter holds no database access on
-   purpose. The repository layer today lists scenarios by family, so add a
-   tenant-scoped `textFor(ctx, scenarioId)` read next to `scenarios.list` in
-   `packages/lib/src/selena-visibility-repositories.ts` and pass it in.
+3. **Give the adapter its two per-permit reads.** A permit carries ids, not the
+   question and not the brand, and the adapter holds no database access on
+   purpose. `createSelenaMeasurementResolvers(db)` in
+   `packages/lib/src/selena-extraction-context.ts` returns both:
+   `resolveScenarioText` and `resolveExtractionContext`. Without the second one
+   the run is still stored and still billed, but with no mention, position or
+   citation extracted from it — the answer reference is kept, so extraction can
+   be re-run later, but no ledger metric moves until it is passed in.
 4. **Register the adapter** in `apps/worker/src/jobs/selena-measure.ts`:
 
    ```ts
    import { createOpenRouterAdapter } from "@workspace/lib/adapters/openrouter";
+   import { createSelenaMeasurementResolvers } from "@workspace/lib/selena-extraction-context";
+
+   const resolvers = createSelenaMeasurementResolvers(db);
 
    const ADAPTERS: MeasurementAdapterRegistry = {
      noop: createNoopMeasurementAdapter(),
@@ -83,10 +89,16 @@ order, and none of them is an environment variable on its own.
        apiKey: process.env.OPENROUTER_API_KEY ?? "",
        model: "anthropic/claude-haiku-4.5",
        fetchImpl: fetch,
-       resolveScenarioText: (permit) => scenarioTextFor(ctx, permit.scenarioId),
+       system: "chatgpt_api",
+       resolveScenarioText: resolvers.resolveScenarioText,
+       resolveExtractionContext: resolvers.resolveExtractionContext,
      }),
    };
    ```
+
+   `system` must be the sold system id the permits were planned with. Evidence
+   attributed to any other system is dropped from the ledger rather than stored
+   under a name the customer did not buy.
 
 5. **Widen the allowlist**, which is the actual owner gate:
    `assertAdapterAllowed` in
@@ -110,9 +122,8 @@ What the adapter does and does not do, so the first invoice holds no surprises:
 - The run row stores a reference to the answer — OpenRouter's generation id, or
   a digest when the response carries none — not the answer itself.
 - `costUsd` is the cost OpenRouter reported for that call when it reports one,
-  and the coarse local per-run estimate otherwise. The stored number does not
-  say which it was, so reconcile against the provider invoice rather than
-  reading it as billed fact.
+  and the coarse local per-run estimate otherwise; `costBasis` says which of the
+  two it was. Neither is a billed fact — reconcile against the provider invoice.
 - A provider HTTP error is recorded as `PROVIDER_HTTP_<code>` and a transport
   failure as `TRANSPORT_ERROR`, with nothing quoted from the provider: error
   bodies and request errors can echo the API key back, and run rows are read by
