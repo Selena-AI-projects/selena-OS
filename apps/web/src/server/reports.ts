@@ -3,17 +3,23 @@
  * Replaces apps/web/src/app/api/reports/route.ts
  */
 import { createServerFn } from "@tanstack/react-start";
-import { z } from "zod";
-import { requireAuthSession, hasReportAccess } from "@/lib/auth/helpers";
-import { cleanOnboardingUrl } from "@workspace/lib/onboarding";
 import { db } from "@workspace/lib/db/db";
-import { reports, type NewReport } from "@workspace/lib/db/schema";
+import { type NewReport, reports } from "@workspace/lib/db/schema";
+import { cleanOnboardingUrl } from "@workspace/lib/onboarding";
 import { desc, eq } from "drizzle-orm";
+import { z } from "zod";
+import { hasReportAccess, isAdmin, requireAuthSession } from "@/lib/auth/helpers";
 import { sendReportJob } from "@/lib/job-scheduler";
 
 async function requireReportAccess() {
 	const session = await requireAuthSession();
 	if (!hasReportAccess(session)) throw new Error("Access denied. Report generator access required.");
+	// These rows carry no owning organization, so the list/detail/raw queries
+	// below return every tenant's report. Until reports gain an organization
+	// column and per-org scoping, treat the generator as a global-operator
+	// capability: a report-enabled non-admin must not read across tenants.
+	if (!isAdmin(session)) throw new Error("Access denied. Report generator access required.");
+	return session;
 }
 
 /**

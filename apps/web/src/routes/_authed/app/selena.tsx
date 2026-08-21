@@ -17,9 +17,17 @@ import { Label } from "@workspace/ui/components/label";
 import { useEffect, useMemo, useState } from "react";
 import { SelenaWordmark } from "@/components/selena-wordmark";
 import { useAuth } from "@/hooks/use-auth";
+import { validateWebsiteUrl } from "@/lib/brand-website";
 import { resetPostHog } from "@/lib/posthog";
+import { SUGGESTION_LIMITS } from "@/lib/selena-suggestion";
+import { humanizeSelenaError } from "@/lib/selena-workspace-errors";
 import { createSelenaProjectFn, getSelenaWorkspaceFn } from "../../../server/selena-client";
-import { confirmSelenaProfileFn } from "../../../server/selena-onboarding";
+import {
+	cancelSelenaProfileSuggestionFn,
+	confirmSelenaProfileFn,
+	getSelenaProfileSuggestionFn,
+	startSelenaProfileSuggestionFn,
+} from "../../../server/selena-onboarding";
 import { collectSelenaWebsiteFn } from "../../../server/selena-website-collector";
 
 export const Route = createFileRoute("/_authed/app/selena")({
@@ -31,6 +39,11 @@ export const Route = createFileRoute("/_authed/app/selena")({
 type WorkspaceData = Awaited<ReturnType<typeof getSelenaWorkspaceFn>>;
 type WorkspaceProject = WorkspaceData["projects"][number];
 type WorkspaceLocale = "en" | "ru";
+type ActionScope = "project" | "profile" | "website" | "";
+
+/** How long to keep polling a suggestion before calling it stuck. */
+const SUGGESTION_POLL_MS = 4000;
+const SUGGESTION_TIMEOUT_MS = 180_000;
 
 const emptyProjectForm = { name: "", category: "", country: "ID", region: "", languages: "en" };
 const emptyProfileForm = {
@@ -49,7 +62,11 @@ function SelenaWorkspace() {
 	const [showCreate, setShowCreate] = useState(projects.length === 0);
 	const [projectForm, setProjectForm] = useState(emptyProjectForm);
 	const [profileForm, setProfileForm] = useState(emptyProfileForm);
-	const [pendingAction, setPendingAction] = useState<"project" | "profile" | "website" | "">("");
+	const [pendingAction, setPendingAction] = useState<ActionScope>("");
+	// Feedback is rendered beside the control that produced it: a single banner
+	// at the top of the page sits off-screen when the customer is at the button.
+	const [feedbackScope, setFeedbackScope] = useState<ActionScope>("");
+	const [suggesting, setSuggesting] = useState(false);
 	const [notice, setNotice] = useState("");
 	const [error, setError] = useState("");
 	const [locale, setLocale] = useState<WorkspaceLocale>("en");
@@ -102,9 +119,81 @@ function SelenaWorkspace() {
 		await router.invalidate();
 	};
 
+	const onProfileNormalized = (patch: Partial<typeof emptyProfileForm>) =>
+		setProfileForm((current) => ({ ...current, ...patch }));
+
+	// Research runs in the worker (roughly a minute), so the page polls for it.
+	const suggestProfile = async () => {
+		if (!selectedProject || suggesting) return;
+		const website = validateWebsiteUrl(profileForm.primaryDomain);
+		if (!website.isValid) {
+			setFeedbackScope("profile");
+			setError(
+				tr(
+					locale,
+					"Enter the primary website first — the suggestion is read from it.",
+					"Сначала укажите основной сайт — подбор читает именно его.",
+				),
+			);
+			return;
+		}
+		const projectId = selectedProject.project.id;
+		setFeedbackScope("profile");
+		setError("");
+		setNotice("");
+		setSuggesting(true);
+		try {
+			await startSelenaProfileSuggestionFn({ data: { projectId, website: website.formattedUrl } });
+			const deadline = Date.now() + SUGGESTION_TIMEOUT_MS;
+			while (Date.now() < deadline) {
+				await new Promise((resolve) => setTimeout(resolve, SUGGESTION_POLL_MS));
+				const result = await getSelenaProfileSuggestionFn({ data: { projectId } });
+				if (result.status === "failed") throw new Error(result.error);
+				if (result.status === "done") {
+					onProfileNormalized({
+						primaryDomain: website.formattedUrl,
+						competitors: result.competitors,
+						scenarios: result.questions,
+					});
+					setNotice(
+						tr(
+							locale,
+							"Suggested competitors and questions. Edit anything that does not fit, then confirm.",
+							"Конкуренты и вопросы предложены. Поправьте всё, что не подходит, и подтвердите профиль.",
+						),
+					);
+					return;
+				}
+			}
+			await cancelSelenaProfileSuggestionFn({ data: { projectId } }).catch(() => {});
+			setError(
+				tr(
+					locale,
+					"The suggestion is taking too long. Fill the lists in by hand, or try again later.",
+					"Подбор занимает слишком долго. Заполните списки вручную или попробуйте позже.",
+				),
+			);
+		} catch (cause) {
+			setError(
+				humanizeSelenaError(
+					cause,
+					locale,
+					tr(
+						locale,
+						"We could not suggest competitors and questions. Fill them in by hand.",
+						"Не удалось подобрать конкурентов и вопросы. Заполните их вручную.",
+					),
+				),
+			);
+		} finally {
+			setSuggesting(false);
+		}
+	};
+
 	const createProject = async (event: React.FormEvent) => {
 		event.preventDefault();
 		setPendingAction("project");
+		setFeedbackScope("project");
 		setError("");
 		setNotice("");
 		try {
@@ -132,13 +221,15 @@ function SelenaWorkspace() {
 			await refreshWorkspace();
 		} catch (cause) {
 			setError(
-				cause instanceof Error
-					? cause.message
-					: tr(
-							locale,
-							"We could not create this project. Please try again.",
-							"Не удалось создать проект. Попробуйте ещё раз.",
-						),
+				humanizeSelenaError(
+					cause,
+					locale,
+					tr(
+						locale,
+						"We could not create this project. Please try again.",
+						"Не удалось создать проект. Попробуйте ещё раз.",
+					),
+				),
 			);
 		} finally {
 			setPendingAction("");
@@ -148,25 +239,48 @@ function SelenaWorkspace() {
 	const saveProfile = async (event: React.FormEvent) => {
 		event.preventDefault();
 		if (!selectedProject) return;
-		setPendingAction("profile");
+		setFeedbackScope("profile");
 		setError("");
 		setNotice("");
+
+		// Owners type "korafoodhall.com". The profile schema needs a full URL, so
+		// complete it here and show the completed value back in the field rather
+		// than rejecting the form over a missing scheme.
+		const primary = validateWebsiteUrl(profileForm.primaryDomain);
+		if (!primary.isValid) {
+			setError(
+				tr(
+					locale,
+					"«Primary website»: enter the full address, for example https://example.com",
+					"«Основной сайт»: укажите полный адрес, например https://example.com",
+				),
+			);
+			return;
+		}
+		const publicProfiles: string[] = [];
+		for (const input of splitList(profileForm.publicProfiles)) {
+			const link = validateWebsiteUrl(input);
+			if (!link.isValid) {
+				setError(
+					locale === "ru"
+						? `«Ссылки на публичные профили»: адрес «${input}» не распознан. Укажите полный адрес, например https://instagram.com/username`
+						: `«Public profile links»: we could not read «${input}». Enter the full address, for example https://instagram.com/username`,
+				);
+				return;
+			}
+			publicProfiles.push(link.formattedUrl);
+		}
+		onProfileNormalized({ primaryDomain: primary.formattedUrl, publicProfiles: publicProfiles.join(", ") });
+
+		setPendingAction("profile");
 		try {
 			await confirmSelenaProfileFn({
 				data: {
 					projectId: selectedProject.project.id,
 					brandName: profileForm.brandName.trim(),
-					primaryDomain: profileForm.primaryDomain.trim(),
-					publicProfiles: profileForm.publicProfiles
-						.split(",")
-						.map((url) => url.trim())
-						.filter(Boolean)
-						.map((url) => ({ platform: "public", url })),
-					competitorSnapshot: profileForm.competitors
-						.split(",")
-						.map((name) => name.trim())
-						.filter(Boolean)
-						.map((name) => ({ name, domains: [] })),
+					primaryDomain: primary.formattedUrl,
+					publicProfiles: publicProfiles.map((url) => ({ platform: "public", url })),
+					competitorSnapshot: splitList(profileForm.competitors).map((name) => ({ name, domains: [] })),
 					scenarioSnapshot: profileForm.scenarios
 						.split("\n")
 						.map((line) => parseScenario(line, selectedProject.project.languages[0] ?? "en"))
@@ -183,13 +297,15 @@ function SelenaWorkspace() {
 			await refreshWorkspace();
 		} catch (cause) {
 			setError(
-				cause instanceof Error
-					? cause.message
-					: tr(
-							locale,
-							"We could not save the brand profile. Please try again.",
-							"Не удалось сохранить профиль бренда. Попробуйте ещё раз.",
-						),
+				humanizeSelenaError(
+					cause,
+					locale,
+					tr(
+						locale,
+						"We could not save the brand profile. Please try again.",
+						"Не удалось сохранить профиль бренда. Попробуйте ещё раз.",
+					),
+				),
 			);
 		} finally {
 			setPendingAction("");
@@ -199,6 +315,7 @@ function SelenaWorkspace() {
 	const collectWebsite = async () => {
 		if (!selectedProject) return;
 		setPendingAction("website");
+		setFeedbackScope("website");
 		setError("");
 		setNotice("");
 		try {
@@ -211,13 +328,15 @@ function SelenaWorkspace() {
 			await refreshWorkspace();
 		} catch (cause) {
 			setError(
-				cause instanceof Error
-					? cause.message
-					: tr(
-							locale,
-							"We could not review the confirmed website. Check the address and try again.",
-							"Не удалось проверить подтверждённый сайт. Проверьте адрес и попробуйте ещё раз.",
-						),
+				humanizeSelenaError(
+					cause,
+					locale,
+					tr(
+						locale,
+						"We could not review the confirmed website. Check the address and try again.",
+						"Не удалось проверить подтверждённый сайт. Проверьте адрес и попробуйте ещё раз.",
+					),
+				),
 			);
 		} finally {
 			setPendingAction("");
@@ -339,6 +458,7 @@ function SelenaWorkspace() {
 							locale={locale}
 							form={projectForm}
 							pending={pendingAction === "project"}
+							feedback={feedbackScope === "project" ? { notice, error } : undefined}
 							onChange={setProjectForm}
 							onSubmit={createProject}
 							onCancel={projects.length > 0 ? () => setShowCreate(false) : undefined}
@@ -348,21 +468,23 @@ function SelenaWorkspace() {
 					{!showCreate && selectedProject && (
 						<>
 							<ProjectOverview project={selectedProject} locale={locale} />
-							{notice && <StatusMessage tone="success">{notice}</StatusMessage>}
-							{error && <StatusMessage tone="error">{error}</StatusMessage>}
 							<SetupProgress project={selectedProject} locale={locale} />
 							<BrandProfileForm
 								locale={locale}
 								project={selectedProject}
 								form={profileForm}
 								pending={pendingAction === "profile"}
+								feedback={feedbackScope === "profile" ? { notice, error } : undefined}
+								suggesting={suggesting}
 								onChange={setProfileForm}
 								onSubmit={saveProfile}
+								onSuggest={suggestProfile}
 							/>
 							<WebsiteEvidence
 								locale={locale}
 								project={selectedProject}
 								pending={pendingAction === "website"}
+								feedback={feedbackScope === "website" ? { notice, error } : undefined}
 								onCollect={collectWebsite}
 							/>
 							<ResultsPanel project={selectedProject} locale={locale} />
@@ -446,6 +568,7 @@ function CreateProjectForm({
 	locale,
 	form,
 	pending,
+	feedback,
 	onChange,
 	onSubmit,
 	onCancel,
@@ -453,6 +576,7 @@ function CreateProjectForm({
 	locale: WorkspaceLocale;
 	form: typeof emptyProjectForm;
 	pending: boolean;
+	feedback?: Feedback;
 	onChange: (value: typeof emptyProjectForm) => void;
 	onSubmit: (event: React.FormEvent) => void;
 	onCancel?: () => void;
@@ -520,6 +644,7 @@ function CreateProjectForm({
 						onChange={(event) => onChange({ ...form, languages: event.target.value.toLowerCase() })}
 					/>
 				</Field>
+				<FormFeedback feedback={feedback} className="sm:col-span-2" />
 				<div className="flex items-end gap-3">
 					<Button type="submit" className="selena-primary-button min-h-11" disabled={pending}>
 						{pending ? tr(locale, "Creating…", "Создаём…") : tr(locale, "Create project", "Создать проект")}{" "}
@@ -541,15 +666,21 @@ function BrandProfileForm({
 	project,
 	form,
 	pending,
+	feedback,
+	suggesting,
 	onChange,
 	onSubmit,
+	onSuggest,
 }: {
 	locale: WorkspaceLocale;
 	project: WorkspaceProject;
 	form: typeof emptyProfileForm;
 	pending: boolean;
+	feedback?: Feedback;
+	suggesting: boolean;
 	onChange: (value: typeof emptyProfileForm) => void;
 	onSubmit: (event: React.FormEvent) => void;
+	onSuggest: () => void;
 }) {
 	return (
 		<section className="selena-section" aria-labelledby="brand-profile-title">
@@ -572,6 +703,25 @@ function BrandProfileForm({
 					</span>
 				)}
 			</div>
+			<div className="mt-5 flex flex-col gap-3 rounded-xl border border-[#e6ddd1] bg-[#fbf7f1] p-4 sm:flex-row sm:items-center sm:justify-between">
+				<p className="text-sm leading-6 text-[#6e6258]">
+					{locale === "ru"
+						? `Не уверены, кого писать в конкурентах? Мы прочитаем сайт и предложим до ${SUGGESTION_LIMITS.competitors} конкурентов и ${SUGGESTION_LIMITS.questions} вопросов. Это черновик: он заменит содержимое полей «Конкуренты» и «Вопросы клиентов», дальше правите вы.`
+						: `Not sure who to list as competitors? We read the site and propose up to ${SUGGESTION_LIMITS.competitors} competitors and ${SUGGESTION_LIMITS.questions} questions. It is a draft: it replaces what is in Competitors and Customer questions, and you edit from there.`}
+				</p>
+				<Button
+					type="button"
+					variant="outline"
+					className="min-h-11 shrink-0 border-[#cdbdac] bg-[#fffdf8]"
+					disabled={suggesting || pending}
+					onClick={onSuggest}
+				>
+					<IconSparkles className={suggesting ? "size-4 animate-pulse" : "size-4"} />
+					{suggesting
+						? tr(locale, "Reading the site…", "Читаем сайт…")
+						: tr(locale, "Suggest automatically", "Подобрать автоматически")}
+				</Button>
+			</div>
 			<form onSubmit={onSubmit} className="mt-7 grid gap-5 sm:grid-cols-2">
 				<Field label={tr(locale, "Public brand name", "Публичное название бренда")} htmlFor="brand-name">
 					<Input
@@ -586,19 +736,29 @@ function BrandProfileForm({
 					<Input
 						id="primary-domain"
 						required
-						type="url"
+						inputMode="url"
+						autoComplete="url"
+						autoCapitalize="none"
+						spellCheck={false}
 						value={form.primaryDomain}
 						onChange={(event) => onChange({ ...form, primaryDomain: event.target.value })}
-						placeholder="https://example.com"
+						placeholder="example.com"
 					/>
 				</Field>
 				<Field
 					label={tr(locale, "Public profile links", "Ссылки на публичные профили")}
-					hint={tr(locale, "Optional, comma separated", "Необязательно, через запятую")}
+					hint={tr(
+						locale,
+						"Optional. Google Maps, Instagram, TripAdvisor — comma separated",
+						"Необязательно. Google Maps, Instagram, TripAdvisor — через запятую",
+					)}
 					htmlFor="public-profiles"
 				>
 					<Input
 						id="public-profiles"
+						inputMode="url"
+						autoCapitalize="none"
+						spellCheck={false}
 						value={form.publicProfiles}
 						onChange={(event) => onChange({ ...form, publicProfiles: event.target.value })}
 						placeholder={tr(locale, "Instagram or other public profile", "Instagram или другой публичный профиль")}
@@ -636,6 +796,7 @@ function BrandProfileForm({
 						/>
 					</Field>
 				</div>
+				<FormFeedback feedback={feedback} className="sm:col-span-2" />
 				<div className="sm:col-span-2">
 					<Button type="submit" className="selena-primary-button min-h-11" disabled={pending}>
 						{pending
@@ -654,11 +815,13 @@ function WebsiteEvidence({
 	locale,
 	project,
 	pending,
+	feedback,
 	onCollect,
 }: {
 	locale: WorkspaceLocale;
 	project: WorkspaceProject;
 	pending: boolean;
+	feedback?: Feedback;
 	onCollect: () => void;
 }) {
 	return (
@@ -712,6 +875,7 @@ function WebsiteEvidence({
 					)}
 				</p>
 			)}
+			<FormFeedback feedback={feedback} className="mt-5" />
 		</section>
 	);
 }
@@ -834,7 +998,7 @@ function ResultsPanel({ project, locale }: { project: WorkspaceProject; locale: 
 								: `${project.measurement.completedRuns} of ${project.measurement.expectedRuns} answers checked`}
 						</p>
 					) : (
-						<a href="https://www.selenasystems.com/en/contact" className="selena-text-button mt-4 inline-flex">
+						<a href={visibilityPlansUrl(locale)} className="selena-text-button mt-4 inline-flex">
 							{tr(locale, "Choose a visibility plan", "Выбрать план проверки")} <IconArrowRight className="size-4" />
 						</a>
 					)}
@@ -842,6 +1006,16 @@ function ResultsPanel({ project, locale }: { project: WorkspaceProject; locale: 
 			</div>
 		</section>
 	);
+}
+
+/**
+ * The plan ladder, not the AI-audit brief: someone who just finished a free
+ * website review is buying a visibility measurement, and the audit form asks
+ * about a different product entirely.
+ */
+function visibilityPlansUrl(locale: WorkspaceLocale): string {
+	const path = locale === "ru" ? "/ru/visibility" : "/visibility";
+	return `https://www.selenasystems.com${path}#plans`;
 }
 
 function ChannelSummary({ title, systems, description }: { title: string; systems: string; description: string }) {
@@ -885,6 +1059,18 @@ function Field({
 	);
 }
 
+type Feedback = { notice: string; error: string };
+
+function FormFeedback({ feedback, className }: { feedback?: Feedback; className?: string }) {
+	if (!feedback?.notice && !feedback?.error) return null;
+	return (
+		<div className={`space-y-3 ${className ?? ""}`}>
+			{feedback.notice && <StatusMessage tone="success">{feedback.notice}</StatusMessage>}
+			{feedback.error && <StatusMessage tone="error">{feedback.error}</StatusMessage>}
+		</div>
+	);
+}
+
 function StatusMessage({ tone, children }: { tone: "success" | "error"; children: React.ReactNode }) {
 	return (
 		<p
@@ -906,6 +1092,14 @@ function WorkspaceSkeleton() {
 			</div>
 		</div>
 	);
+}
+
+/** Comma is what the hints ask for, but the box above takes one per line. */
+function splitList(value: string): string[] {
+	return value
+		.split(/[\n,]/)
+		.map((item) => item.trim())
+		.filter(Boolean);
 }
 
 function readObjectString(value: unknown, key: string): string {

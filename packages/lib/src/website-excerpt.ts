@@ -1,5 +1,6 @@
 import { Readability } from "@mozilla/readability";
 import { parseHTML } from "linkedom";
+import { assertPublicWebsiteTarget, fetchPublicWebsite } from "./website-security";
 
 const MAX_EXCERPT_LINES = 200;
 const JINA_TIMEOUT_MS = 30_000;
@@ -37,7 +38,22 @@ export async function getWebsiteExcerpt(url: string): Promise<string> {
 
 	// Ensure the URL has a scheme so the reader and our own fetch resolve it
 	// consistently.
-	const cleanUrl = url.startsWith("http") ? url : `https://${url}`;
+	const candidate = url.startsWith("http") ? url : `https://${url}`;
+
+	// The address comes from a customer, and both sources act on it from inside
+	// our network: the direct fetch reaches the target itself, and the reader
+	// would hand it to a third party. Refuse a non-public target before either.
+	// Both sources act on this address from inside our network — the direct
+	// fetch reaches the target, and the reader hands it to a third party — so
+	// refuse a non-public host before either. The original string is kept so a
+	// path/query/fragment is preserved through both sources.
+	try {
+		await assertPublicWebsiteTarget(candidate);
+	} catch (error) {
+		console.warn("[website-excerpt] refused a non-public target:", error);
+		return "";
+	}
+	const cleanUrl = candidate;
 
 	const sources = [
 		{ name: "jina", fetch: () => fromJina(cleanUrl) },
@@ -89,20 +105,17 @@ async function fromJina(url: string): Promise<string | null> {
  * can't isolate an article.
  */
 async function fromReadability(url: string): Promise<string | null> {
-	const response = await fetch(url, {
+	const page = await fetchPublicWebsite(url, {
 		headers: {
 			"User-Agent": BROWSER_UA,
 			Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
 		},
-		signal: AbortSignal.timeout(DIRECT_TIMEOUT_MS),
+		timeoutMs: DIRECT_TIMEOUT_MS,
 	});
-	if (!response.ok) {
+	if (!page || page.status < 200 || page.status >= 300) {
 		return null;
 	}
-	if (!(response.headers.get("content-type") ?? "").includes("html")) {
-		return null;
-	}
-	const html = await response.text();
+	const html = page.body;
 	if (!html.trim()) {
 		return null;
 	}

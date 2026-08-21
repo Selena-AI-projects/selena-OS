@@ -1,9 +1,9 @@
-import type { Job } from "pg-boss";
 import { analyzeBrand, type OnboardingSuggestion } from "@workspace/lib/onboarding";
+import type { Job } from "pg-boss";
 
 export interface AnalyzeBrandData {
-	/** Brand id (== org id) the analysis belongs to; the web app reads results back by brand. */
-	brandId: string;
+	/** Id the web app reads the result back by. */
+	requestKey: string;
 	website: string;
 	brandName?: string;
 	maxCompetitors?: number;

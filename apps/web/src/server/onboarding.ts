@@ -13,13 +13,13 @@
  */
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
-import { requireAuthSession, requireBrandAccess } from "@/lib/auth/helpers";
 import {
+	type AnalyzeBrandStatus,
 	cancelAnalyzeBrand,
 	enqueueAnalyzeBrand,
 	getAnalyzeBrandStatus,
-	type AnalyzeBrandStatus,
 } from "@/lib/analyze-brand-job";
+import { requireAuthSession, requireBrandAccess } from "@/lib/auth/helpers";
 import { saveWizardOnboarding, wizardOnboardingInputSchema } from "@/server/onboarding-core";
 
 /**
@@ -45,7 +45,12 @@ export const startAnalyzeBrandFn = createServerFn({ method: "POST" })
 	.handler(async ({ data }) => {
 		const session = await requireAuthSession();
 		await requireBrandAccess(session.user.id, data.brandId);
-		await enqueueAnalyzeBrand(data);
+		await enqueueAnalyzeBrand({
+			product: "elmo",
+			requestKey: data.brandId,
+			website: data.website,
+			...(data.brandName !== undefined && { brandName: data.brandName }),
+		});
 		return { ok: true };
 	});
 
@@ -61,7 +66,7 @@ export const getAnalyzeBrandStatusFn = createServerFn({ method: "POST" })
 	.handler(async ({ data }): Promise<AnalyzeBrandStatus> => {
 		const session = await requireAuthSession();
 		await requireBrandAccess(session.user.id, data.brandId);
-		return getAnalyzeBrandStatus(data.brandId);
+		return getAnalyzeBrandStatus("elmo", data.brandId);
 	});
 
 /** Cancel the in-flight brand-analysis job for a brand (e.g. user backs out). */
@@ -70,7 +75,7 @@ export const cancelAnalyzeBrandFn = createServerFn({ method: "POST" })
 	.handler(async ({ data }) => {
 		const session = await requireAuthSession();
 		await requireBrandAccess(session.user.id, data.brandId);
-		await cancelAnalyzeBrand(data.brandId);
+		await cancelAnalyzeBrand("elmo", data.brandId);
 		return { ok: true };
 	});
 
