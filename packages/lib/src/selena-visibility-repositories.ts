@@ -561,6 +561,9 @@ export function createSelenaRepositories(db: Db) {
 									dispatchKey: permit.dispatchKey,
 									channel: permit.channel,
 									scenarioId: permit.scenarioId,
+									// P0-07: the sold system is fixed at planning time so every
+									// run can be sliced by engine even when extraction never ran.
+									systemId: permit.systemId,
 									expiresAt,
 								})),
 							)
@@ -656,6 +659,7 @@ export function createSelenaRepositories(db: Db) {
 							dispatchKey: permit.dispatchKey,
 							channel: permit.channel,
 							scenarioId: permit.scenarioId,
+							systemId: permit.systemId,
 							status: "RUNNING",
 							startedAt: now,
 						})

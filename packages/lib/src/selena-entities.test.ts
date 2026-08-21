@@ -1,9 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-	detectEntityCycle,
-	lockEligibleEntities,
-	validateEntityParent,
-} from "./selena-entities";
+import { detectEntityCycle, lockEligibleEntities, validateEntityParent } from "./selena-entities";
 
 // RC7 reference fixture: a master brand containing two in-house concepts.
 const org = "org-kora";
@@ -76,15 +72,13 @@ describe("Selena entity hierarchy invariants", () => {
 	});
 
 	it("rejects the KORA -> Two Moons -> KORA cycle", () => {
-		expect(() =>
-			detectEntityCycle(hierarchy, { id: koraFoodHall.id, parentEntityId: twoMoonsSpa.id }),
-		).toThrow("SELENA_ENTITY_CYCLE");
+		expect(() => detectEntityCycle(hierarchy, { id: koraFoodHall.id, parentEntityId: twoMoonsSpa.id })).toThrow(
+			"SELENA_ENTITY_CYCLE",
+		);
 	});
 
 	it("keeps PROPOSED entities out of lock eligibility", () => {
 		expect(lockEligibleEntities(hierarchy).map((entity) => entity.id)).toEqual([koraFoodHall.id, twoMoonsSpa.id]);
-		expect(
-			lockEligibleEntities([{ ...healthyCafe, confirmationStatus: "REJECTED" as const }]),
-		).toEqual([]);
+		expect(lockEligibleEntities([{ ...healthyCafe, confirmationStatus: "REJECTED" as const }])).toEqual([]);
 	});
 });

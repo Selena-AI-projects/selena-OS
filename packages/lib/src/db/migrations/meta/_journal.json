@@ -190,6 +190,13 @@
 			"when": 1786903200000,
 			"tag": "0026_selena_incidents_cost_ledger",
 			"breakpoints": true
+		},
+		{
+			"idx": 27,
+			"version": "7",
+			"when": 1786989600000,
+			"tag": "0027_selena_permit_system_id",
+			"breakpoints": true
 		}
 	]
 }

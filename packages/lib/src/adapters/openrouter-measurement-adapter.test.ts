@@ -18,6 +18,7 @@ function permitFor(overrides: Partial<SelenaExecutablePermit> = {}): SelenaExecu
 		organizationId: "org-1",
 		cycleId: "cycle-1",
 		scenarioId: "scenario-1",
+		systemId: "claude",
 		channel: "API",
 		dispatchKey: "order-1:scenario-1:anthropic/claude-haiku-4.5:0:1",
 		expiresAt: new Date("2026-08-19T11:00:00.000Z"),

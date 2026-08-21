@@ -28,6 +28,7 @@ function permitFor(overrides: Partial<SelenaExecutablePermit> = {}): SelenaExecu
 		organizationId: "org-1",
 		cycleId: "cycle-1",
 		scenarioId: "scenario-1",
+		systemId: "chatgpt",
 		channel: "VISITOR",
 		dispatchKey: "order-1:scenario-1:ChatGPT:0:1",
 		expiresAt: new Date("2026-08-19T11:00:00.000Z"),

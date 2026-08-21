@@ -1,7 +1,11 @@
 import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { type MeasurementScope, expectedRunsFromScope, measurementScopeSchema } from "@workspace/selena-visibility-contracts";
+import {
+	type MeasurementScope,
+	expectedRunsFromScope,
+	measurementScopeSchema,
+} from "@workspace/selena-visibility-contracts";
 import { describe, expect, it } from "vitest";
 import {
 	assertLockExpectedRuns,
