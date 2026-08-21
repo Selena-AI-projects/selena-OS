@@ -55,6 +55,24 @@ Measurement jobs are never scheduled. A run starts from an explicit action on a
 specific permit, and a claimed permit is spent: it cannot be retried into a
 second provider call.
 
+### Rehearsing a cycle without spending anything
+
+`pnpm -C packages/lib rehearse:selena-stub-cycle` runs a whole cycle against a
+local Postgres with no provider behind it: it seeds a project, plans permits the
+way an approved order does, executes every one of them, and then checks that the
+runs, the mention rows and the cost-ledger rows landed together before printing
+the §12 metrics computed over them. It deletes everything it created.
+
+Nothing it writes can be mistaken for a measurement — the model is `stub`, every
+charge is zero, and the answers are synthesized from the permit itself. Run it
+after any change to extraction, storage or the metrics, and read the numbers as
+a proof that the chain is wired, never as evidence about a brand.
+
+The stub adapter is deliberately registered nowhere, so
+`SELENA_MEASUREMENT_ADAPTER=stub` in a deployment fails with
+`SELENA_ADAPTER_NOT_REGISTERED`: a rehearsal is something you run on purpose
+against a scratch database, not a state a live system can drift into.
+
 ### Wiring the OpenRouter adapter for API View
 
 The API View measurement adapter is written and tested, but it is registered

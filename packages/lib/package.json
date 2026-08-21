@@ -8,7 +8,8 @@
 		"test": "vitest run",
 		"compare:onboarding": "tsx scripts/compare-onboarding.ts",
 		"generate:auth-schema": "bash scripts/generate-auth-schema.sh",
-		"verify:membership-dedupe": "tsx scripts/verify-membership-dedupe.ts"
+		"verify:membership-dedupe": "tsx scripts/verify-membership-dedupe.ts",
+		"rehearse:selena-stub-cycle": "tsx scripts/selena-stub-cycle.ts"
 	},
 	"exports": {
 		"./db/db": "./src/db/db.ts",
