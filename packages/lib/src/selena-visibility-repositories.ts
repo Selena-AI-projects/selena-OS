@@ -19,8 +19,10 @@ import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import * as schema from "./db/schema";
 import { assertDirectDispatchAllowed, type ControlledCycleState } from "./run-policy";
+import { computeCitationGaps } from "./selena-citation-gap";
 import { assertLockExpectedRuns, assertQcDecision, planOrderDispatch } from "./selena-dispatch";
 import { detectEntityCycle, validateEntityParent } from "./selena-entities";
+import { ownedDomainsFromProfile, parseLockedProfile } from "./selena-extraction-context";
 import type { LedgerMention, LedgerRow } from "./selena-ledger-metrics";
 import { observationContentSha256, planCaptureTasks } from "./selena-manual-pilot";
 
@@ -156,6 +158,47 @@ export function createSelenaRepositories(db: Db) {
 			.limit(1);
 		if (!observation) throw new Error("Not found: observation is outside AuthContext tenant");
 		return observation;
+	};
+	/**
+	 * Everything §12 is computed from, for one cycle: the terminal run rows and
+	 * the mention rows extracted from them. Read as one pair so a metric can
+	 * never combine the runs of one cycle with the mentions of another.
+	 */
+	const ledgerForCycle = async (
+		ctx: SelenaRepositoryContext,
+		cycleId: string,
+	): Promise<{ rows: LedgerRow[]; mentions: LedgerMention[] }> => {
+		const [rows, mentions] = await Promise.all([
+			db
+				.select({
+					runId: schema.svRuns.id,
+					scenarioId: schema.svRuns.scenarioId,
+					system: schema.svRuns.system,
+					channel: schema.svRuns.channel,
+					validity: schema.svRuns.validity,
+					extractorVersion: schema.svRuns.extractorVersion,
+					ownedCitation: schema.svRuns.ownedCitation,
+					citations: schema.svRuns.citations,
+					finishedAt: schema.svRuns.finishedAt,
+				})
+				.from(schema.svRuns)
+				.where(and(eq(schema.svRuns.cycleId, cycleId), eq(schema.svRuns.organizationId, ctx.tenantId))),
+			db
+				.select({
+					runId: schema.svResponseMentions.runId,
+					entityType: schema.svResponseMentions.entityType,
+					name: schema.svResponseMentions.name,
+					ordinalPosition: schema.svResponseMentions.ordinalPosition,
+				})
+				.from(schema.svResponseMentions)
+				.where(
+					and(
+						eq(schema.svResponseMentions.cycleId, cycleId),
+						eq(schema.svResponseMentions.organizationId, ctx.tenantId),
+					),
+				),
+		]);
+		return { rows, mentions };
 	};
 	return {
 		projects: {
@@ -818,47 +861,7 @@ export function createSelenaRepositories(db: Db) {
 					return completed;
 				});
 			},
-			/**
-			 * Everything §12 is computed from, for one cycle: the terminal run
-			 * rows and the mention rows extracted from them. Read as one pair so
-			 * a metric can never combine the runs of one cycle with the mentions
-			 * of another.
-			 */
-			ledgerForCycle: async (
-				ctx: SelenaRepositoryContext,
-				cycleId: string,
-			): Promise<{ rows: LedgerRow[]; mentions: LedgerMention[] }> => {
-				const [rows, mentions] = await Promise.all([
-					db
-						.select({
-							runId: schema.svRuns.id,
-							scenarioId: schema.svRuns.scenarioId,
-							system: schema.svRuns.system,
-							channel: schema.svRuns.channel,
-							validity: schema.svRuns.validity,
-							extractorVersion: schema.svRuns.extractorVersion,
-							ownedCitation: schema.svRuns.ownedCitation,
-							citations: schema.svRuns.citations,
-						})
-						.from(schema.svRuns)
-						.where(and(eq(schema.svRuns.cycleId, cycleId), eq(schema.svRuns.organizationId, ctx.tenantId))),
-					db
-						.select({
-							runId: schema.svResponseMentions.runId,
-							entityType: schema.svResponseMentions.entityType,
-							name: schema.svResponseMentions.name,
-							ordinalPosition: schema.svResponseMentions.ordinalPosition,
-						})
-						.from(schema.svResponseMentions)
-						.where(
-							and(
-								eq(schema.svResponseMentions.cycleId, cycleId),
-								eq(schema.svResponseMentions.organizationId, ctx.tenantId),
-							),
-						),
-				]);
-				return { rows, mentions };
-			},
+			ledgerForCycle,
 		},
 		incidents: {
 			list: (ctx: SelenaRepositoryContext, opts?: { status?: "OPEN" | "RESOLVED" }) =>
@@ -894,6 +897,116 @@ export function createSelenaRepositories(db: Db) {
 					.from(schema.svCostEvents)
 					.where(and(eq(schema.svCostEvents.cycleId, cycleId), eq(schema.svCostEvents.organizationId, ctx.tenantId)))
 					.orderBy(desc(schema.svCostEvents.createdAt)),
+		},
+		// Addendum §5.4 / §8: the Source Opportunity Map and the Citation Gaps on
+		// it are one aggregation, so every cited source is stored, not only the
+		// ones that qualify as a gap — dropping the rest would make "this source
+		// does turn up alongside the brand" unprovable after the fact.
+		citationGaps: {
+			listForCycle: (ctx: SelenaRepositoryContext, cycleId: string) =>
+				db
+					.select()
+					.from(schema.svCitationGapSnapshots)
+					.where(
+						and(
+							eq(schema.svCitationGapSnapshots.cycleId, cycleId),
+							eq(schema.svCitationGapSnapshots.organizationId, ctx.tenantId),
+						),
+					)
+					.orderBy(desc(schema.svCitationGapSnapshots.competitorCitationCount)),
+			snapshot: async (ctx: SelenaRepositoryContext, cycleId: string) => {
+				writable(ctx);
+				const [context] = await db
+					.select({
+						projectId: schema.svProjects.id,
+						lockId: schema.svCycles.lockId,
+						lockSnapshot: schema.svConfigurationLocks.snapshot,
+					})
+					.from(schema.svCycles)
+					.innerJoin(schema.svOrders, eq(schema.svOrders.id, schema.svCycles.orderId))
+					.innerJoin(schema.svProjects, eq(schema.svProjects.id, schema.svOrders.projectId))
+					.innerJoin(schema.svConfigurationLocks, eq(schema.svConfigurationLocks.id, schema.svCycles.lockId))
+					.where(and(eq(schema.svCycles.id, cycleId), eq(schema.svCycles.organizationId, ctx.tenantId)))
+					.limit(1);
+				if (!context) throw new Error("Not found: cycle is outside AuthContext tenant");
+				// Same precedence as extraction: the lock is what the cycle was sold
+				// against, so a profile edited afterwards cannot redefine which
+				// domains counted as the brand's own while these runs were measured.
+				const [live] = await db
+					.select({
+						brandName: schema.svProjectProfiles.brandName,
+						primaryDomain: schema.svProjectProfiles.primaryDomain,
+						competitorSnapshot: schema.svProjectProfiles.competitorSnapshot,
+					})
+					.from(schema.svProjectProfiles)
+					.where(
+						and(
+							eq(schema.svProjectProfiles.projectId, context.projectId),
+							eq(schema.svProjectProfiles.organizationId, ctx.tenantId),
+						),
+					)
+					.limit(1);
+				const profile = parseLockedProfile(context.lockSnapshot) ?? live;
+				if (!profile) throw new Error("SELENA_PROJECT_PROFILE_NOT_FOUND");
+				const { rows, mentions } = await ledgerForCycle(ctx, cycleId);
+				const report = computeCitationGaps({ rows, mentions, ownedDomains: ownedDomainsFromProfile(profile) });
+				if (report.sources.length === 0) return [];
+				const stored = await db
+					.insert(schema.svCitationGapSnapshots)
+					.values(
+						report.sources.map((source) => ({
+							organizationId: ctx.tenantId,
+							projectId: context.projectId,
+							cycleId,
+							configurationLockId: context.lockId,
+							sourceDomain: source.domain,
+							sourceUrls: source.urls,
+							ownedCitationCount: source.ownedCitationCount,
+							competitorCitationCount: source.competitorCitationCount,
+							competitorNames: source.competitorNames,
+							engineCount: source.engineCount,
+							scenarioCount: source.scenarioCount,
+							repeatStability: source.repeatStability === null ? null : String(source.repeatStability),
+							firstSeen: source.firstSeen,
+							lastSeen: source.lastSeen,
+							gapType: source.gapType,
+							priorityBand: source.priorityBand,
+							formulaVersion: report.formulaVersion,
+							evidenceRunIds: source.evidenceRunIds,
+						})),
+					)
+					// Recomputing the same formula over the same immutable runs must
+					// land on the same row rather than a second opinion beside it.
+					.onConflictDoUpdate({
+						target: [
+							schema.svCitationGapSnapshots.cycleId,
+							schema.svCitationGapSnapshots.sourceDomain,
+							schema.svCitationGapSnapshots.formulaVersion,
+						],
+						set: {
+							sourceUrls: sql`excluded.source_urls`,
+							ownedCitationCount: sql`excluded.owned_citation_count`,
+							competitorCitationCount: sql`excluded.competitor_citation_count`,
+							competitorNames: sql`excluded.competitor_names`,
+							engineCount: sql`excluded.engine_count`,
+							scenarioCount: sql`excluded.scenario_count`,
+							repeatStability: sql`excluded.repeat_stability`,
+							firstSeen: sql`excluded.first_seen`,
+							lastSeen: sql`excluded.last_seen`,
+							gapType: sql`excluded.gap_type`,
+							priorityBand: sql`excluded.priority_band`,
+							evidenceRunIds: sql`excluded.evidence_run_ids`,
+						},
+					})
+					.returning();
+				await recordAudit(db, ctx, "CITATION_GAP_SNAPSHOT", "sv_cycles", cycleId, {
+					formulaVersion: report.formulaVersion,
+					measuredRuns: report.measuredRuns,
+					sources: report.sources.length,
+					gaps: report.gaps.length,
+				});
+				return stored;
+			},
 		},
 		// RC7 Phase E — manual pilot. These writers are the only path into the
 		// sv_pilot_* / sv_local_observations tables and never touch background

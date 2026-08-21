@@ -398,6 +398,17 @@ export const svResponseMentions = pgTable("sv_response_mentions", {
 	id: uuid("id").defaultRandom().primaryKey().notNull(), organizationId: text("organization_id").notNull().references(() => organization.id), cycleId: uuid("cycle_id").notNull().references(() => svCycles.id), runId: uuid("run_id").notNull().references(() => svRuns.id), entityType: text("entity_type").notNull(), name: text("name").notNull(), ordinalPosition: smallint("ordinal_position"), matchMethod: text("match_method").notNull().default("exact_term"), extractorVersion: text("extractor_version").notNull(), createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 }, (table) => ({ runIdx: index("sv_response_mentions_run_idx").on(table.runId), orgCycleIdx: index("sv_response_mentions_org_cycle_idx").on(table.organizationId, table.cycleId) })).enableRLS();
 
+// Addendum §5.4: a derived metric is only reproducible next to the rule that
+// produced it, so each source is stored per cycle with its formula version.
+// The spec's singular sourceUrl is a list here because one source is routinely
+// cited at several of its pages inside one cycle, and §8 aggregates the map by
+// domain and by URL. competitorNames rather than competitorIds: an approved
+// competitor is a name on the confirmed profile and has no id to reference.
+// topicId stays empty until §5.1 topics exist.
+export const svCitationGapSnapshots = pgTable("sv_citation_gap_snapshots", {
+	id: uuid("id").defaultRandom().primaryKey().notNull(), organizationId: text("organization_id").notNull().references(() => organization.id), projectId: uuid("project_id").notNull().references(() => svProjects.id), cycleId: uuid("cycle_id").notNull().references(() => svCycles.id), configurationLockId: uuid("configuration_lock_id").notNull().references(() => svConfigurationLocks.id), topicId: uuid("topic_id"), sourceDomain: text("source_domain").notNull(), sourceUrls: text("source_urls").array().notNull().default([]), ownedCitationCount: integer("owned_citation_count").notNull(), competitorCitationCount: integer("competitor_citation_count").notNull(), competitorNames: text("competitor_names").array().notNull().default([]), engineCount: integer("engine_count").notNull(), scenarioCount: integer("scenario_count").notNull(), repeatStability: numeric("repeat_stability", { precision: 6, scale: 4 }), firstSeen: timestamp("first_seen", { withTimezone: true }), lastSeen: timestamp("last_seen", { withTimezone: true }), gapType: text("gap_type"), priorityBand: text("priority_band").notNull(), formulaVersion: text("formula_version").notNull(), evidenceRunIds: uuid("evidence_run_ids").array().notNull().default([]), createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => ({ cycleSourceUnique: uniqueIndex("sv_citation_gap_cycle_source_unique").on(table.cycleId, table.sourceDomain, table.formulaVersion), orgCycleIdx: index("sv_citation_gap_org_cycle_idx").on(table.organizationId, table.cycleId), projectIdx: index("sv_citation_gap_project_idx").on(table.projectId) })).enableRLS();
+
 // §9.2: an overflow or stop is isolated and recorded, never silently absorbed
 // — a safeguard whose firing leaves no trace is indistinguishable from one
 // that never fired.

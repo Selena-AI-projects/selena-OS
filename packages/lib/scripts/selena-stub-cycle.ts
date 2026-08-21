@@ -58,6 +58,7 @@ async function cleanup(): Promise<void> {
 	const tables = [
 		schema.svAuditEvents,
 		schema.svCostEvents,
+		schema.svCitationGapSnapshots,
 		schema.svResponseMentions,
 		schema.svRuns,
 		schema.svRunPermits,
@@ -207,6 +208,20 @@ async function main(): Promise<void> {
 
 	const report = computeLedgerReport(rows, mentions, scenarioKinds);
 	check(report.unclassifiedRuns === 0, "every run belongs to a classified scenario");
+
+	const snapshots = await repositories.citationGaps.snapshot(ctx, dispatch.cycleId);
+	const gaps = snapshots.filter((snapshot) => snapshot.gapType !== null);
+	check(snapshots.length > 0, `${snapshots.length} source(s) aggregated, ${gaps.length} of them a citation gap`);
+	check(
+		snapshots.every((snapshot) => snapshot.evidenceRunIds.every((runId) => runIds.has(runId))),
+		"every stored source points at runs of this cycle",
+	);
+	check(
+		gaps.every((snapshot) => snapshot.competitorCitationCount > 0 && snapshot.ownedCitationCount === 0),
+		"every gap has competitors on one side and nothing owned on the other",
+	);
+	const recomputed = await repositories.citationGaps.snapshot(ctx, dispatch.cycleId);
+	check(recomputed.length === snapshots.length, "recomputing the same formula updates rather than duplicates");
 	console.log("\nbranded:", JSON.stringify(report.branded, null, 2));
 	console.log("discovery:", JSON.stringify(report.discovery, null, 2));
 }

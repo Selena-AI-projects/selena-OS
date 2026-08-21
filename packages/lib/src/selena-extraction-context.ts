@@ -68,6 +68,16 @@ export function parseLockedProfile(snapshot: unknown): ExtractionProfile | null 
 	return lockedProfileSchema.parse(block);
 }
 
+/**
+ * The domains a citation counts as the brand's own. Only the brand's own site:
+ * a public profile on a shared platform is not owned, and counting it would
+ * mark a citation of any competitor's page there as the brand's own source.
+ */
+export function ownedDomainsFromProfile(profile: ExtractionProfile): string[] {
+	const host = hostOf(profile.primaryDomain);
+	return host === "" ? [] : [host];
+}
+
 export function buildExtractionContext(input: {
 	profile: ExtractionProfile;
 	language: string;
@@ -90,10 +100,7 @@ export function buildExtractionContext(input: {
 		// competitors get the same treatment below — naming a site is naming the
 		// entity, and giving only one side domain matching would bias the share.
 		brandTerms: distinct([brandName, brandHost]),
-		// Only the brand's own domain is owned. A public profile on a shared
-		// platform is not: counting instagram.com as owned would mark a citation
-		// of any competitor's page there as the brand's own source.
-		ownedDomains: brandHost === "" ? [] : [brandHost],
+		ownedDomains: ownedDomainsFromProfile(profile),
 		competitors: snapshot.data
 			.map((competitor) => ({
 				name: competitor.name.trim(),

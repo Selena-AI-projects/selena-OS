@@ -2,7 +2,14 @@ import { runOutcomeSchema } from "@workspace/selena-visibility-contracts";
 import { describe, expect, it } from "vitest";
 import type { ExtractionContext } from "../selena-answer-extraction";
 import type { SelenaExecutablePermit } from "../selena-measurement";
-import { STUB_MODEL, STUB_PROVIDER, createStubMeasurementAdapter, stubAnswer } from "./stub-measurement-adapter";
+import {
+	createStubMeasurementAdapter,
+	STUB_GAP_SOURCE,
+	STUB_MODEL,
+	STUB_PROVIDER,
+	STUB_SOURCE_POOL,
+	stubAnswer,
+} from "./stub-measurement-adapter";
 
 const context: ExtractionContext = {
 	brandTerms: ["KORA Food Hall", "korafoodhall.com"],
@@ -63,6 +70,23 @@ describe("createStubMeasurementAdapter", () => {
 		);
 		expect(mentioning.some(Boolean)).toBe(true);
 		expect(mentioning.some((seen) => !seen)).toBe(true);
+	});
+
+	it("cites a source that is not the brand's own, so the opportunity map has data", async () => {
+		const outcome = await adapter.execute(permitFor());
+		const domains = outcome.measurement?.citations.map((citation) => citation.domain) ?? [];
+		expect(domains.some((domain) => [...STUB_SOURCE_POOL, STUB_GAP_SOURCE].includes(domain))).toBe(true);
+	});
+
+	it("keeps one source to answers that leave the brand out, so the gap path has data", async () => {
+		const outcomes = await Promise.all(
+			Array.from({ length: 40 }, (_, i) => adapter.execute(permitFor({ dispatchKey: `key-${i}` }))),
+		);
+		const gapRuns = outcomes.filter((outcome) =>
+			outcome.measurement?.citations.some((citation) => citation.domain === STUB_GAP_SOURCE),
+		);
+		expect(gapRuns.length).toBeGreaterThan(0);
+		expect(gapRuns.every((outcome) => outcome.measurement?.mention === false)).toBe(true);
 	});
 
 	it("records an unusable context as INVALID instead of measuring nothing into the ledger", async () => {

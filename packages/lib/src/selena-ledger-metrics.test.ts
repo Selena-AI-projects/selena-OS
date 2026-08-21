@@ -10,6 +10,7 @@ const row = (runId: string, overrides: Partial<LedgerRow> = {}): LedgerRow => ({
 	extractorVersion: "selena-extract/1",
 	ownedCitation: false,
 	citations: [],
+	finishedAt: null,
 	...overrides,
 });
 

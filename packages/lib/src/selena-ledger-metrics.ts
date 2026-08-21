@@ -31,6 +31,8 @@ export type LedgerRow = {
 	extractorVersion: string | null;
 	ownedCitation: boolean | null;
 	citations: unknown;
+	/** When the run reached a terminal state; what dates a source's first and last sighting. */
+	finishedAt: Date | null;
 };
 
 export type LedgerMention = {

@@ -54,6 +54,7 @@
 		"./selena-preflight": "./src/selena-preflight.ts",
 		"./selena-run-executor": "./src/selena-run-executor.ts",
 		"./selena-answer-extraction": "./src/selena-answer-extraction.ts",
+		"./selena-citation-gap": "./src/selena-citation-gap.ts",
 		"./selena-extraction-context": "./src/selena-extraction-context.ts",
 		"./selena-ledger-metrics": "./src/selena-ledger-metrics.ts",
 		"./adapters/openrouter": "./src/adapters/openrouter-measurement-adapter.ts",

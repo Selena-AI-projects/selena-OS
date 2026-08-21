@@ -21,6 +21,14 @@ import type { SelenaExecutablePermit, SelenaMeasurementAdapter, SelenaMeasuremen
 
 export const STUB_MODEL = "stub";
 export const STUB_PROVIDER = "stub";
+/** Obviously fictional hosts: a rehearsal must not name a real publication. */
+export const STUB_SOURCE_POOL = ["guide.example", "directory.example", "reviews.example"];
+/**
+ * Cited only by answers that leave the brand out, so a rehearsal exercises the
+ * Citation Gap path. It is a fixture modelling the situation that rule exists
+ * to find — never evidence that any real source behaves this way.
+ */
+export const STUB_GAP_SOURCE = "competitor-guide.example";
 
 export type StubAdapterDeps = {
 	channel?: SelenaMeasurementChannel;
@@ -39,11 +47,14 @@ function permitFraction(dispatchKey: string, salt: string): number {
  * mentions the brand at rank one would leave coverage, position and share
  * untested.
  */
+export function stubNamesBrand(permit: SelenaExecutablePermit, context: ExtractionContext): boolean {
+	return (context.brandTerms[0] ?? "") !== "" && permitFraction(permit.dispatchKey, "mention") < 0.75;
+}
+
 export function stubAnswer(permit: SelenaExecutablePermit, context: ExtractionContext): string {
 	const brand = context.brandTerms[0] ?? "";
 	const names = context.competitors.map((competitor) => competitor.name);
-	const mentionsBrand = brand !== "" && permitFraction(permit.dispatchKey, "mention") < 0.75;
-	if (mentionsBrand)
+	if (stubNamesBrand(permit, context))
 		names.splice(Math.floor(permitFraction(permit.dispatchKey, "rank") * (names.length + 1)), 0, brand);
 	return names.map((name, index) => `${index + 1}. ${name}`).join("\n");
 }
@@ -70,12 +81,18 @@ export function createStubMeasurementAdapter(deps: StubAdapterDeps): SelenaMeasu
 			}
 			const answerText = stubAnswer(permit, context);
 			const ownedDomain = context.ownedDomains[0];
-			// One owned source on part of the runs, so owned citation rate is a
-			// number the rehearsal can check rather than a constant.
-			const sources =
-				ownedDomain === undefined || permitFraction(permit.dispatchKey, "citation") >= 0.5
+			// A third-party source on every run and an owned one on some: the
+			// Source Opportunity Map needs sources that are not the brand's own,
+			// and owned citation rate needs to be a number, not a constant.
+			const thirdParty = stubNamesBrand(permit, context)
+				? STUB_SOURCE_POOL[Math.floor(permitFraction(permit.dispatchKey, "source") * STUB_SOURCE_POOL.length)]
+				: STUB_GAP_SOURCE;
+			const sources = [
+				{ url: `https://${thirdParty}/canggu`, domain: thirdParty },
+				...(ownedDomain === undefined || permitFraction(permit.dispatchKey, "citation") >= 0.5
 					? []
-					: [{ url: `https://${ownedDomain}/`, domain: ownedDomain }];
+					: [{ url: `https://${ownedDomain}/`, domain: ownedDomain }]),
+			];
 			return {
 				dispatchKey: permit.dispatchKey,
 				status: "SUCCEEDED",
