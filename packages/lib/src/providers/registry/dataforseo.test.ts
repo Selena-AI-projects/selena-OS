@@ -137,9 +137,7 @@ describe("dataforseo provider", () => {
 					{
 						status_code: 20000,
 						status_message: "Ok.",
-						result: [
-							{ model_name: "gpt-4.1", items: [{ type: "message", sections: [{ type: "text", text: "Hi." }] }] },
-						],
+						result: [{ model_name: "gpt-4.1", items: [{ type: "message", sections: [{ type: "text", text: "Hi." }] }] }],
 					},
 				],
 			});

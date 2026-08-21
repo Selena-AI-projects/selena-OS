@@ -1,10 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-	assertDirectDispatchAllowed,
-	assertTransportAllowed,
-	cardinalityExceeded,
-	isMaintenanceEnabled,
-} from "./controlled-cycle";
+import { assertDirectDispatchAllowed, assertTransportAllowed, cardinalityExceeded, isMaintenanceEnabled } from "./controlled-cycle";
 
 const base = {
 	activeMaintenanceJobs: 0,
@@ -49,9 +44,7 @@ describe("controlled cycle guards", () => {
 		const events: string[] = [];
 		for (const stop of ["globalEmergencyStop", "orderStopped"] as const) {
 			const state = { ...base, [stop]: true, audit: (event: { type: string }) => events.push(event.type) };
-			expect(() => assertTransportAllowed(state)).toThrow(
-				stop === "globalEmergencyStop" ? "SELENA_GLOBAL_EMERGENCY_STOP" : "SELENA_ORDER_STOPPED",
-			);
+			expect(() => assertTransportAllowed(state)).toThrow(stop === "globalEmergencyStop" ? "SELENA_GLOBAL_EMERGENCY_STOP" : "SELENA_ORDER_STOPPED");
 		}
 		expect(events).toEqual(["GLOBAL_EMERGENCY_STOP", "ORDER_STOPPED"]);
 	});

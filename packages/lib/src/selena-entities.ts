@@ -49,8 +49,11 @@ export function detectEntityCycle(
 	}
 }
 
-export function lockEligibleEntities<T extends { confirmationStatus: SvEntityConfirmationStatus }>(entities: T[]): T[] {
+export function lockEligibleEntities<T extends { confirmationStatus: SvEntityConfirmationStatus }>(
+	entities: T[],
+): T[] {
 	return entities.filter(
-		(entity) => entity.confirmationStatus === "CLIENT_CONFIRMED" || entity.confirmationStatus === "ANALYST_CONFIRMED",
+		(entity) =>
+			entity.confirmationStatus === "CLIENT_CONFIRMED" || entity.confirmationStatus === "ANALYST_CONFIRMED",
 	);
 }

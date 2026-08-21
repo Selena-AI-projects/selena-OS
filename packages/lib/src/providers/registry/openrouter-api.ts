@@ -36,9 +36,7 @@ function extractCitations(data: OpenRouterApiResponse): Citation[] {
 		if (typeof url !== "string" || !url.startsWith("http") || seen.has(url)) return [];
 		seen.add(url);
 		try {
-			return [
-				{ url, title: citation.title, domain: new URL(url).hostname.replace(/^www\./, ""), citationIndex: index },
-			];
+			return [{ url, title: citation.title, domain: new URL(url).hostname.replace(/^www\./, ""), citationIndex: index }];
 		} catch {
 			return [];
 		}
@@ -86,8 +84,7 @@ export const openrouterApi: Provider = {
 		const requestedModel = options?.version;
 		if (!requestedModel) throw new Error("openrouter-api requires a full model ID in SCRAPE_TARGETS");
 		assertModel(requestedModel);
-		if (options?.webSearch)
-			throw new Error("openrouter-api does not support web search; use API View with webSearch=false");
+		if (options?.webSearch) throw new Error("openrouter-api does not support web search; use API View with webSearch=false");
 		const maxTokens = Math.min(getOpenRouterMaxTokens(), options?.maxOutputTokens ?? Number.POSITIVE_INFINITY);
 		const response = await fetch(OPENROUTER_API_URL, {
 			method: "POST",

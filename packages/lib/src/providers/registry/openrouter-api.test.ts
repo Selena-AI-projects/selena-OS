@@ -75,20 +75,14 @@ describe("openrouter-api", () => {
 
 	it("disables reasoning for Qwen", async () => {
 		process.env.OPENROUTER_API_KEY = "test-key";
-		const fetchMock = mockResponse({
-			model: OPENROUTER_API_MODELS[2],
-			choices: [{ message: { content: "CONTROL_OK" } }],
-		});
+		const fetchMock = mockResponse({ model: OPENROUTER_API_MODELS[2], choices: [{ message: { content: "CONTROL_OK" } }] });
 		await openrouterApi.run("qwen", "prompt", { version: OPENROUTER_API_MODELS[2] });
 		expect(JSON.parse(fetchMock.mock.calls[0][1].body).reasoning).toEqual({ effort: "none" });
 	});
 
 	it("preserves a Qwen clipped/null-content response without inventing content", async () => {
 		process.env.OPENROUTER_API_KEY = "test-key";
-		mockResponse({
-			model: OPENROUTER_API_MODELS[2],
-			choices: [{ finish_reason: "length", message: { content: null, reasoning: "thinking" } }],
-		});
+		mockResponse({ model: OPENROUTER_API_MODELS[2], choices: [{ finish_reason: "length", message: { content: null, reasoning: "thinking" } }] });
 		const result = await openrouterApi.run("qwen", "prompt", { version: OPENROUTER_API_MODELS[2] });
 		expect(result.textContent).toBe("");
 		const stored = result.rawOutput as StoredOutput;
@@ -109,11 +103,7 @@ describe("openrouter-api", () => {
 
 	it("preserves missing usage.cost as null", async () => {
 		process.env.OPENROUTER_API_KEY = "test-key";
-		mockResponse({
-			model: OPENROUTER_API_MODELS[4],
-			choices: [{ message: { content: "CONTROL_OK" } }],
-			usage: { total_tokens: 3 },
-		});
+		mockResponse({ model: OPENROUTER_API_MODELS[4], choices: [{ message: { content: "CONTROL_OK" } }], usage: { total_tokens: 3 } });
 		const result = await openrouterApi.run("grok", "prompt", { version: OPENROUTER_API_MODELS[4] });
 		expect((result.rawOutput as StoredOutput).usage_cost).toBeNull();
 	});
