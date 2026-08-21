@@ -54,7 +54,7 @@ the branch history; it changes nothing about what is gated now.
 | New permit per retry | holds by construction — a consumed permit is refused and no retry path exists to reuse one | unit |
 | SSRF guard on the onboarding fetch | `CODE_IN_BRANCH` (from `eff8b55`, not this session) | not re-verified here |
 | Public site claims without a current artifact («8 систем», unconditional PDF/XLSX/CSV, final pricing) | out of scope here — the marketing site is a different repository | — |
-| Collector path carries the same SSRF guard | `CODE_IN_BRANCH` — equivalent guard, checked before every hop and every redirect | read in this session; it is a second implementation of the rule, not the shared one |
+| Collector and onboarding fetch share one SSRF boundary | `CODE_IN_BRANCH` — the collector's private copy of the rule is gone; both call `website-security` | unit |
 
 ## Evidence Ledger
 
