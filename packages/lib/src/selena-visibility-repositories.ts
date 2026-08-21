@@ -15,7 +15,7 @@ import {
 	resolveExplicitPosition,
 	runOutcomeSchema,
 } from "@workspace/selena-visibility-contracts";
-import { and, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNotNull, sql } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import * as schema from "./db/schema";
 import { assertDirectDispatchAllowed, type ControlledCycleState } from "./run-policy";
@@ -914,6 +914,21 @@ export function createSelenaRepositories(db: Db) {
 						),
 					)
 					.orderBy(desc(schema.svCitationGapSnapshots.competitorCitationCount)),
+			listForProject: (ctx: SelenaRepositoryContext, projectId: string, opts?: { gapsOnly?: boolean }) =>
+				db
+					.select()
+					.from(schema.svCitationGapSnapshots)
+					.where(
+						and(
+							eq(schema.svCitationGapSnapshots.projectId, projectId),
+							eq(schema.svCitationGapSnapshots.organizationId, ctx.tenantId),
+							...(opts?.gapsOnly ? [isNotNull(schema.svCitationGapSnapshots.gapType)] : []),
+						),
+					)
+					.orderBy(
+						desc(schema.svCitationGapSnapshots.createdAt),
+						desc(schema.svCitationGapSnapshots.competitorCitationCount),
+					),
 			snapshot: async (ctx: SelenaRepositoryContext, cycleId: string) => {
 				writable(ctx);
 				const [context] = await db
