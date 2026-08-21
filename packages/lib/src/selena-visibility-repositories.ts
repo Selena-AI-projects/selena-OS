@@ -127,6 +127,23 @@ export function createSelenaRepositories(db: Db) {
 			.insert(schema.svAuditEvents)
 			.values({ organizationId: ctx.tenantId, actorId: ctx.actorId, event, subjectKind, subjectId, details });
 	};
+	/**
+	 * §9.2 for the manual pilot: the transaction that hit the boundary rolls
+	 * back, so the incident is written outside it. A safeguard whose firing
+	 * leaves no trace is indistinguishable from one that never fired, and the
+	 * pilot's boundary is reached by a person submitting one observation too
+	 * many — exactly the case somebody has to be able to look up afterwards.
+	 *
+	 * The pilot cycle travels in the detail text: sv_incidents references
+	 * sv_cycles, and a pilot cycle is not one of those.
+	 */
+	const recordPilotOverflow = async (ctx: SelenaRepositoryContext, pilotCycleId: string, reason: string) => {
+		await db.insert(schema.svIncidents).values({
+			organizationId: ctx.tenantId,
+			kind: "PILOT_CARDINALITY_OVERFLOW",
+			detail: `${reason}: pilot cycle ${pilotCycleId}`,
+		});
+	};
 	const lockBlockFor = async (ctx: SelenaRepositoryContext, lockId: string) => {
 		const [lock] = await db
 			.select()
@@ -1153,7 +1170,12 @@ export function createSelenaRepositories(db: Db) {
 				const cycle = await getPilotCycleOwned(ctx, pilotCycleId);
 				const { block } = await lockBlockFor(ctx, cycle.lockId);
 				const planned = planCaptureTasks(block);
-				if (planned.length !== cycle.expectedObservations) throw new Error("OBSERVATION_CARDINALITY_INVALID");
+				if (planned.length !== cycle.expectedObservations) {
+					// The lock and the cycle disagree about how much work was sold;
+					// that is a configuration incident, not a failed request.
+					await recordPilotOverflow(ctx, pilotCycleId, "OBSERVATION_CARDINALITY_INVALID");
+					throw new Error("OBSERVATION_CARDINALITY_INVALID");
+				}
 				const scenarioIds = [...new Set(planned.map((task) => task.scenarioId))];
 				const owned = await db
 					.select({ id: schema.svScenarios.id })
@@ -1250,56 +1272,63 @@ export function createSelenaRepositories(db: Db) {
 					)
 					.limit(1);
 				if (existing) return existing;
-				return db.transaction(async (tx) => {
-					// The counter update and cardinality check share the row lock, so
-					// concurrent submits cannot mint observation expected+1.
-					const [lockedCycle] = await tx
-						.select()
-						.from(schema.svPilotCycles)
-						.where(and(eq(schema.svPilotCycles.id, cycle.id), eq(schema.svPilotCycles.organizationId, ctx.tenantId)))
-						.for("update");
-					assertObservationCardinality(lockedCycle.createdObservations, lockedCycle.expectedObservations);
-					await tx
-						.update(schema.svPilotCycles)
-						.set({ createdObservations: lockedCycle.createdObservations + 1, updatedAt: new Date() })
-						.where(eq(schema.svPilotCycles.id, cycle.id));
-					const [observation] = await tx
-						.insert(schema.svLocalObservations)
-						.values({
-							organizationId: ctx.tenantId,
+				try {
+					return await db.transaction(async (tx) => {
+						// The counter update and cardinality check share the row lock, so
+						// concurrent submits cannot mint observation expected+1.
+						const [lockedCycle] = await tx
+							.select()
+							.from(schema.svPilotCycles)
+							.where(and(eq(schema.svPilotCycles.id, cycle.id), eq(schema.svPilotCycles.organizationId, ctx.tenantId)))
+							.for("update");
+						assertObservationCardinality(lockedCycle.createdObservations, lockedCycle.expectedObservations);
+						await tx
+							.update(schema.svPilotCycles)
+							.set({ createdObservations: lockedCycle.createdObservations + 1, updatedAt: new Date() })
+							.where(eq(schema.svPilotCycles.id, cycle.id));
+						const [observation] = await tx
+							.insert(schema.svLocalObservations)
+							.values({
+								organizationId: ctx.tenantId,
+								captureTaskId: task.id,
+								capturedBy: ctx.actorId,
+								capturedAt: new Date(input.capturedAt),
+								orderingState: input.orderingState ?? "UNKNOWN",
+								transcript: input.transcript,
+								queryText: input.queryText,
+								contentSha256: observationContentSha256(input.transcript),
+							})
+							.returning();
+						if (input.screenshot)
+							await tx.insert(schema.svObservationEvidenceAssets).values({
+								organizationId: ctx.tenantId,
+								observationId: observation.id,
+								assetType: "SCREENSHOT",
+								mimeType: input.screenshot.mimeType,
+								sizeBytes: input.screenshot.sizeBytes,
+								sha256: input.screenshot.sha256,
+								sequenceIndex: 0,
+								privateObjectReference: input.screenshot.privateObjectReference,
+								uploadedBy: ctx.actorId,
+								capturedAt: new Date(input.capturedAt),
+							});
+						await tx
+							.update(schema.svCaptureTasks)
+							.set({ status: "SUBMITTED_FOR_REVIEW", updatedAt: new Date() })
+							.where(eq(schema.svCaptureTasks.id, task.id));
+						await recordAudit(tx, ctx, "OBSERVATION_SUBMITTED", "sv_local_observations", observation.id, {
 							captureTaskId: task.id,
-							capturedBy: ctx.actorId,
-							capturedAt: new Date(input.capturedAt),
-							orderingState: input.orderingState ?? "UNKNOWN",
-							transcript: input.transcript,
-							queryText: input.queryText,
-							contentSha256: observationContentSha256(input.transcript),
-						})
-						.returning();
-					if (input.screenshot)
-						await tx.insert(schema.svObservationEvidenceAssets).values({
-							organizationId: ctx.tenantId,
-							observationId: observation.id,
-							assetType: "SCREENSHOT",
-							mimeType: input.screenshot.mimeType,
-							sizeBytes: input.screenshot.sizeBytes,
-							sha256: input.screenshot.sha256,
-							sequenceIndex: 0,
-							privateObjectReference: input.screenshot.privateObjectReference,
-							uploadedBy: ctx.actorId,
-							capturedAt: new Date(input.capturedAt),
+							pilotCycleId: cycle.id,
+							idempotencyKey: input.idempotencyKey ?? null,
 						});
-					await tx
-						.update(schema.svCaptureTasks)
-						.set({ status: "SUBMITTED_FOR_REVIEW", updatedAt: new Date() })
-						.where(eq(schema.svCaptureTasks.id, task.id));
-					await recordAudit(tx, ctx, "OBSERVATION_SUBMITTED", "sv_local_observations", observation.id, {
-						captureTaskId: task.id,
-						pilotCycleId: cycle.id,
-						idempotencyKey: input.idempotencyKey ?? null,
+						return observation;
 					});
-					return observation;
-				});
+				} catch (error) {
+					const message = error instanceof Error ? error.message : String(error);
+					if (message === "OBSERVATION_CARDINALITY_BLOCKED" || message === "OBSERVATION_CARDINALITY_INVALID")
+						await recordPilotOverflow(ctx, cycle.id, message);
+					throw error;
+				}
 			},
 			review: async (
 				ctx: SelenaRepositoryContext,

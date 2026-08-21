@@ -59,10 +59,16 @@ async function cleanup(): Promise<void> {
 		schema.svAuditEvents,
 		schema.svCostEvents,
 		schema.svCitationGapSnapshots,
+		schema.svObservationEvidenceAssets,
+		schema.svObservationMentions,
+		schema.svLocalObservations,
+		schema.svCaptureTasks,
+		schema.svPilotCycles,
 		schema.svResponseMentions,
 		schema.svRuns,
 		schema.svRunPermits,
 		schema.svIncidents,
+		schema.svQcRecords,
 		schema.svCycles,
 		schema.svOrders,
 		schema.svQuotes,
@@ -74,6 +80,109 @@ async function cleanup(): Promise<void> {
 	];
 	for (const table of tables) await db.delete(table).where(eq(table.organizationId, ORG));
 	await db.delete(schema.organization).where(eq(schema.organization.id, ORG));
+}
+
+/**
+ * The manual pilot has its own cardinality boundary, reached by a person
+ * submitting one observation too many rather than by a scheduler. Its guard
+ * fires inside a transaction, so this proves the incident survives the
+ * rollback that contained it — a safeguard whose firing leaves no trace is
+ * indistinguishable from one that never fired.
+ */
+async function rehearsePilotOverflow(
+	repositories: ReturnType<typeof createSelenaRepositories>,
+	projectId: string,
+	scenarioId: string,
+): Promise<void> {
+	const observerContext = {
+		observerCountryCode: "ID",
+		observerGeoMode: "DECLARED_AREA" as const,
+		appLocale: "en-US",
+		queryLanguage: "en",
+		deviceClass: "MOBILE_ANDROID" as const,
+		accountState: "SIGNED_OUT" as const,
+		personalizationState: "OFF" as const,
+		timezone: "Asia/Makassar",
+		capturedAt: "2026-08-21T02:00:00.000Z",
+	};
+	const entityId = randomUUID();
+	const lock = await repositories.locks.create(ctx, {
+		projectId,
+		version: 2,
+		snapshot: {
+			localAiDiscovery: {
+				schemaVersion: 1,
+				surface: "GOOGLE_ASK_MAPS",
+				captureMethod: "MANUAL_OBSERVATION",
+				externalCallsAllowed: false,
+				placesApiAllowed: false,
+				policyVersion: "stub-cycle",
+				captureProtocolVersion: "stub-cycle/1",
+				entities: [{ entityId, name: "KORA Food Hall", entityKind: "MASTER_BRAND", prelaunch: false }],
+				entityRelationships: [],
+				businessLocations: [],
+				scenarios: [
+					{
+						scenarioId,
+						queryText: "Where should I have breakfast in Canggu?",
+						language: "en",
+						targetEntityIds: [entityId],
+					},
+				],
+				observerContexts: [observerContext],
+				repeats: 1,
+				expectedObservations: 1,
+				evidencePolicy: {
+					queryRequired: true,
+					contextRequired: true,
+					timestampRequired: true,
+					transcriptRequired: true,
+					screenshotRequired: true,
+					visibleSourcesOptional: true,
+				},
+			},
+		},
+		engineSha: "stub-cycle",
+		expectedRuns: 1,
+		budgetCap: "0",
+	});
+	const pilot = await repositories.pilotCycles.create(ctx, { projectId, lockId: lock.id });
+	const tasks = await repositories.captureTasks.generate(ctx, pilot.id);
+	// Stand the cycle at its boundary, which is where a concurrent submit
+	// leaves it, and then submit the observation that must be refused.
+	await db
+		.update(schema.svPilotCycles)
+		.set({ createdObservations: pilot.expectedObservations })
+		.where(eq(schema.svPilotCycles.id, pilot.id));
+	let blocked = "";
+	try {
+		await repositories.observations.submit(ctx, {
+			captureTaskId: tasks[0].id,
+			capturedAt: observerContext.capturedAt,
+			queryText: "Where should I have breakfast in Canggu?",
+			context: observerContext,
+			transcript: "1. Rival Cafe\n2. Other Place",
+			screenshot: {
+				privateObjectReference: "stub://screenshot",
+				mimeType: "image/png",
+				sizeBytes: 1024,
+				sha256: "0".repeat(64),
+			},
+		});
+	} catch (error) {
+		blocked = error instanceof Error ? error.message : String(error);
+	}
+	check(
+		blocked === "OBSERVATION_CARDINALITY_BLOCKED",
+		`an observation past the boundary is refused (${blocked || "not refused"})`,
+	);
+	const incidents = await repositories.incidents.list(ctx);
+	check(
+		incidents.some((incident) => incident.kind === "PILOT_CARDINALITY_OVERFLOW" && incident.detail.includes(pilot.id)),
+		"the refused observation left an incident behind",
+	);
+	const [after] = await db.select().from(schema.svPilotCycles).where(eq(schema.svPilotCycles.id, pilot.id));
+	check(after?.createdObservations === pilot.expectedObservations, "the refused observation did not move the counter");
 }
 
 async function main(): Promise<void> {
@@ -255,6 +364,8 @@ async function main(): Promise<void> {
 	check(delivered.status === "DELIVERED", "a signed-off order can be delivered");
 	const redelivered = await repositories.orders.deliver(ctx, order.id);
 	check(redelivered.status === "DELIVERED", "delivering twice is the same delivery");
+
+	await rehearsePilotOverflow(repositories, project.id, scenarios[0]);
 
 	const evidence = await repositories.runs.rawEvidenceFor(ctx, rows[0].runId);
 	check(evidence.rawResponseReference !== null, "raw evidence resolves for the tenant that owns the run");
