@@ -39,6 +39,37 @@ export function assertAdapterAllowed(adapterName: string, registered: readonly s
 
 export const runOutcomeStatuses = ["SUCCEEDED", "INVALID", "FAILED"] as const;
 export const runValidities = ["VALID", "INVALID"] as const;
+export const runCostBases = ["actual", "estimated"] as const;
+
+/**
+ * What the adapter observed in the answer — one Evidence Ledger row's worth of
+ * extraction. strictObject for the same reason as the outcome itself: an
+ * adapter cannot smuggle fields past the contract.
+ */
+export const runMeasurementSchema = z
+	.strictObject({
+		system: z.string().min(1),
+		model: z.string().min(1).optional(),
+		language: z.string().min(1),
+		region: z.string().min(1).optional(),
+		mention: z.boolean(),
+		// Position exists only among mentions (§12: average position is computed
+		// over mentions only), so a non-mention carries null, never 0.
+		position: z.number().int().positive().nullable(),
+		ownedCitation: z.boolean(),
+		citations: z.array(z.strictObject({ url: z.string().min(1), domain: z.string().min(1) })),
+		competitors: z.array(z.string().min(1)),
+		factualErrors: z.array(z.string().min(1)),
+	})
+	.superRefine((m, issues) => {
+		if (!m.mention && m.position !== null)
+			issues.addIssue({ code: "custom", message: "RUN_MEASUREMENT_POSITION_WITHOUT_MENTION", path: ["position"] });
+		// An owned citation is a citation: claiming one with an empty citation
+		// list would make owned-citation rate unverifiable against the row.
+		if (m.ownedCitation && m.citations.length === 0)
+			issues.addIssue({ code: "custom", message: "RUN_MEASUREMENT_OWNED_CITATION_WITHOUT_CITATIONS", path: ["ownedCitation"] });
+	});
+export type RunMeasurement = z.infer<typeof runMeasurementSchema>;
 
 // strictObject is load-bearing: an adapter cannot smuggle extra fields into
 // stored run state without the contract changing here first.
@@ -53,6 +84,10 @@ export const runOutcomeSchema = z
 			.strictObject({ input: z.number().int().nonnegative(), output: z.number().int().nonnegative() })
 			.optional(),
 		costUsd: z.number().nonnegative().optional(),
+		// §10.2: a provider that does not return its real charge must be stored
+		// as an estimate, never presented as the actual spend.
+		costBasis: z.enum(runCostBases).optional(),
+		measurement: runMeasurementSchema.optional(),
 	})
 	.superRefine((outcome, issues) => {
 		// A run that did not succeed must never be stored as valid evidence, and
@@ -62,5 +97,11 @@ export const runOutcomeSchema = z
 			issues.addIssue({ code: "custom", message: "RUN_OUTCOME_VALIDITY_MISMATCH", path: ["validity"] });
 		if (outcome.validity === "INVALID" && !outcome.invalidReason)
 			issues.addIssue({ code: "custom", message: "RUN_OUTCOME_INVALID_REASON_REQUIRED", path: ["invalidReason"] });
+		if (outcome.costUsd !== undefined && outcome.costBasis === undefined)
+			issues.addIssue({ code: "custom", message: "RUN_OUTCOME_COST_BASIS_REQUIRED", path: ["costBasis"] });
+		// Only a run that actually succeeded can carry evidence; an extraction
+		// attached to a failed run would enter the ledger as if it were observed.
+		if (outcome.measurement && outcome.status !== "SUCCEEDED")
+			issues.addIssue({ code: "custom", message: "RUN_OUTCOME_MEASUREMENT_REQUIRES_SUCCESS", path: ["measurement"] });
 	});
 export type RunOutcome = z.infer<typeof runOutcomeSchema>;

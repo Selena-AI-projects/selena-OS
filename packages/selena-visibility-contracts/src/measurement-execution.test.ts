@@ -38,6 +38,7 @@ describe("Selena measurement execution boundary", () => {
 			rawResponseReference: "private://raw/1",
 			tokenUsage: { input: 10, output: 20 },
 			costUsd: 0.005,
+			costBasis: "actual" as const,
 		};
 		expect(runOutcomeSchema.parse(succeeded)).toEqual(succeeded);
 		expect(
@@ -59,5 +60,57 @@ describe("Selena measurement execution boundary", () => {
 			false,
 		);
 		expect(runOutcomeSchema.safeParse({ ...succeeded, providerApiKey: "sk-test" }).success).toBe(false);
+		// A cost without a basis would read as an actual charge by default.
+		expect(runOutcomeSchema.safeParse({ ...succeeded, costBasis: undefined }).success).toBe(false);
+	});
+
+	it("accepts a grounded measurement and rejects one that contradicts itself", () => {
+		const measurement = {
+			system: "chatgpt",
+			model: "gpt-5",
+			language: "en",
+			region: "ID",
+			mention: true,
+			position: 2,
+			ownedCitation: true,
+			citations: [{ url: "https://example.com/menu", domain: "example.com" }],
+			competitors: ["Rival Cafe"],
+			factualErrors: [],
+		};
+		const succeeded = {
+			dispatchKey: "order:scenario:system:0:1",
+			status: "SUCCEEDED" as const,
+			validity: "VALID" as const,
+			measurement,
+		};
+		expect(runOutcomeSchema.parse(succeeded)).toEqual(succeeded);
+
+		// No mention → no position: §12 averages position over mentions only.
+		expect(
+			runOutcomeSchema.safeParse({ ...succeeded, measurement: { ...measurement, mention: false } }).success,
+		).toBe(false);
+		expect(
+			runOutcomeSchema.safeParse({
+				...succeeded,
+				measurement: { ...measurement, mention: false, position: null, ownedCitation: false },
+			}).success,
+		).toBe(true);
+		// An owned citation with no citations cannot be verified against the row.
+		expect(
+			runOutcomeSchema.safeParse({ ...succeeded, measurement: { ...measurement, citations: [] } }).success,
+		).toBe(false);
+		// Evidence on a run that did not succeed would enter the ledger unobserved.
+		expect(
+			runOutcomeSchema.safeParse({
+				...succeeded,
+				status: "INVALID",
+				validity: "INVALID",
+				invalidReason: "PROVIDER_TIMEOUT",
+			}).success,
+		).toBe(false);
+		// Unknown extraction fields stay out of stored run state.
+		expect(
+			runOutcomeSchema.safeParse({ ...succeeded, measurement: { ...measurement, sentiment: "positive" } }).success,
+		).toBe(false);
 	});
 });
