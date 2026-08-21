@@ -183,6 +183,13 @@
 			"when": 1786816800000,
 			"tag": "0025_selena_run_measurement",
 			"breakpoints": true
+		},
+		{
+			"idx": 26,
+			"version": "7",
+			"when": 1786903200000,
+			"tag": "0026_selena_incidents_cost_ledger",
+			"breakpoints": true
 		}
 	]
 }

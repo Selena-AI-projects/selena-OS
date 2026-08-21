@@ -375,10 +375,7 @@ export function createSelenaRepositories(db: Db) {
 						.select({ id: schema.svEntities.id, parentEntityId: schema.svEntities.parentEntityId })
 						.from(schema.svEntities)
 						.where(
-							and(
-								eq(schema.svEntities.projectId, value.projectId),
-								eq(schema.svEntities.organizationId, ctx.tenantId),
-							),
+							and(eq(schema.svEntities.projectId, value.projectId), eq(schema.svEntities.organizationId, ctx.tenantId)),
 						);
 					detectEntityCycle(siblings, {
 						id: value.id ?? globalThis.crypto.randomUUID(),
@@ -475,10 +472,7 @@ export function createSelenaRepositories(db: Db) {
 					.select()
 					.from(schema.svRunPermits)
 					.where(
-						and(
-							inArray(schema.svRunPermits.cycleId, cycleIds),
-							eq(schema.svRunPermits.organizationId, ctx.tenantId),
-						),
+						and(inArray(schema.svRunPermits.cycleId, cycleIds), eq(schema.svRunPermits.organizationId, ctx.tenantId)),
 					);
 			},
 			createPermits: async (
@@ -495,8 +489,7 @@ export function createSelenaRepositories(db: Db) {
 				const order = await getOrderOwned(ctx, orderId);
 				// QUEUED is accepted only as the replay of a dispatch that already
 				// succeeded; every other non-APPROVED status must not mint permits.
-				if (order.status !== "APPROVED" && order.status !== "QUEUED")
-					throw new Error("SELENA_ORDER_NOT_APPROVED");
+				if (order.status !== "APPROVED" && order.status !== "QUEUED") throw new Error("SELENA_ORDER_NOT_APPROVED");
 				const lock = await getLockOwned(ctx, order.lockId);
 				const scope = parseMeasurementScope(lock.snapshot);
 				if (!scope) throw new Error("SELENA_LOCK_SCOPE_MISSING");
@@ -518,78 +511,100 @@ export function createSelenaRepositories(db: Db) {
 				// Unconsumed permission must lapse on its own rather than linger as a
 				// standing authorization; one day comfortably covers a QUEUED order.
 				const expiresAt = opts?.expiresAt ?? new Date(Date.now() + 24 * 60 * 60 * 1000);
-				return db.transaction(async (tx) => {
-					const [existingCycle] = await tx
-						.select()
-						.from(schema.svCycles)
-						.where(
-							and(
-								eq(schema.svCycles.orderId, orderId),
-								eq(schema.svCycles.lockId, order.lockId),
-								eq(schema.svCycles.organizationId, ctx.tenantId),
-							),
-						)
-						.orderBy(desc(schema.svCycles.createdAt))
-						.limit(1);
-					const cycle =
-						existingCycle ??
-						(
-							await tx
-								.insert(schema.svCycles)
-								.values({
-									organizationId: ctx.tenantId,
-									orderId,
-									lockId: order.lockId,
-									status: "QUEUED",
-									expectedRuns: expected,
-								})
-								.returning()
-						)[0];
-					// The dispatch-key unique index makes replays idempotent: a second
-					// call inserts nothing and can never mint a duplicate permit.
-					const inserted = await tx
-						.insert(schema.svRunPermits)
-						.values(
-							planned.map((permit) => ({
-								organizationId: ctx.tenantId,
-								cycleId: cycle.id,
-								dispatchKey: permit.dispatchKey,
-								channel: permit.channel,
-								scenarioId: permit.scenarioId,
-								expiresAt,
-							})),
-						)
-						.onConflictDoNothing({ target: schema.svRunPermits.dispatchKey })
-						.returning();
-					const permits = await tx
-						.select()
-						.from(schema.svRunPermits)
-						.where(
-							and(eq(schema.svRunPermits.cycleId, cycle.id), eq(schema.svRunPermits.organizationId, ctx.tenantId)),
-						);
-					// assertCardinality blocks minting "one more" at its boundary; the
-					// complete permit set legitimately sits at exactly expectedRuns, so
-					// the overflow boundary for the stored total is expected + 1. An
-					// undercount means planned keys were claimed by another cycle.
-					assertCardinality(permits.length, expected + 1);
-					if (permits.length !== expected) throw new Error("SELENA_PERMIT_CARDINALITY_MISMATCH");
-					await tx
-						.update(schema.svCycles)
-						.set({ createdRuns: permits.length, updatedAt: new Date() })
-						.where(eq(schema.svCycles.id, cycle.id));
-					if (order.status === "APPROVED")
-						await tx
-							.update(schema.svOrders)
-							.set({ status: "QUEUED", updatedAt: new Date() })
-							.where(and(eq(schema.svOrders.id, orderId), eq(schema.svOrders.organizationId, ctx.tenantId)));
-					await recordAudit(tx, ctx, "ORDER_DISPATCH_PLANNED", "sv_orders", orderId, {
+				const recordOverflow = async (detail: string) => {
+					// §9.2: the transaction that hit the boundary rolls back, so the
+					// incident is written outside it — the overflow must survive the
+					// rollback that contained it.
+					await db.insert(schema.svIncidents).values({
+						organizationId: ctx.tenantId,
 						orderId,
-						cycleId: cycle.id,
-						created: inserted.length,
-						expected,
+						kind: "CARDINALITY_OVERFLOW",
+						detail,
 					});
-					return { cycleId: cycle.id, created: inserted.length, expected, permits };
-				});
+				};
+				try {
+					return await db.transaction(async (tx) => {
+						const [existingCycle] = await tx
+							.select()
+							.from(schema.svCycles)
+							.where(
+								and(
+									eq(schema.svCycles.orderId, orderId),
+									eq(schema.svCycles.lockId, order.lockId),
+									eq(schema.svCycles.organizationId, ctx.tenantId),
+								),
+							)
+							.orderBy(desc(schema.svCycles.createdAt))
+							.limit(1);
+						const cycle =
+							existingCycle ??
+							(
+								await tx
+									.insert(schema.svCycles)
+									.values({
+										organizationId: ctx.tenantId,
+										orderId,
+										lockId: order.lockId,
+										status: "QUEUED",
+										expectedRuns: expected,
+									})
+									.returning()
+							)[0];
+						// The dispatch-key unique index makes replays idempotent: a second
+						// call inserts nothing and can never mint a duplicate permit.
+						const inserted = await tx
+							.insert(schema.svRunPermits)
+							.values(
+								planned.map((permit) => ({
+									organizationId: ctx.tenantId,
+									cycleId: cycle.id,
+									dispatchKey: permit.dispatchKey,
+									channel: permit.channel,
+									scenarioId: permit.scenarioId,
+									expiresAt,
+								})),
+							)
+							.onConflictDoNothing({ target: schema.svRunPermits.dispatchKey })
+							.returning();
+						const permits = await tx
+							.select()
+							.from(schema.svRunPermits)
+							.where(
+								and(eq(schema.svRunPermits.cycleId, cycle.id), eq(schema.svRunPermits.organizationId, ctx.tenantId)),
+							);
+						// assertCardinality blocks minting "one more" at its boundary; the
+						// complete permit set legitimately sits at exactly expectedRuns, so
+						// the overflow boundary for the stored total is expected + 1. An
+						// undercount means planned keys were claimed by another cycle.
+						assertCardinality(permits.length, expected + 1);
+						if (permits.length !== expected) throw new Error("SELENA_PERMIT_CARDINALITY_MISMATCH");
+						await tx
+							.update(schema.svCycles)
+							.set({ createdRuns: permits.length, updatedAt: new Date() })
+							.where(eq(schema.svCycles.id, cycle.id));
+						if (order.status === "APPROVED")
+							await tx
+								.update(schema.svOrders)
+								.set({ status: "QUEUED", updatedAt: new Date() })
+								.where(and(eq(schema.svOrders.id, orderId), eq(schema.svOrders.organizationId, ctx.tenantId)));
+						await recordAudit(tx, ctx, "ORDER_DISPATCH_PLANNED", "sv_orders", orderId, {
+							orderId,
+							cycleId: cycle.id,
+							created: inserted.length,
+							expected,
+						});
+						return { cycleId: cycle.id, created: inserted.length, expected, permits };
+					});
+				} catch (error) {
+					const message = error instanceof Error ? error.message : String(error);
+					if (
+						message === "CARDINALITY_BLOCKED" ||
+						message === "CARDINALITY_INVALID" ||
+						message === "SELENA_PERMIT_CARDINALITY_MISMATCH"
+					)
+						await recordOverflow(message);
+					throw error;
+				}
 			},
 		},
 		// Execution of a permit. Claiming spends the permission and opens a run
@@ -617,9 +632,7 @@ export function createSelenaRepositories(db: Db) {
 							await tx
 								.select()
 								.from(schema.svRuns)
-								.where(
-									and(eq(schema.svRuns.dispatchKey, dispatchKey), eq(schema.svRuns.organizationId, ctx.tenantId)),
-								)
+								.where(and(eq(schema.svRuns.dispatchKey, dispatchKey), eq(schema.svRuns.organizationId, ctx.tenantId)))
 								.limit(1)
 						)[0];
 					// A replay returns the run that already exists rather than failing,
@@ -659,12 +672,7 @@ export function createSelenaRepositories(db: Db) {
 					return { permit, run, cycle, claimed: true };
 				});
 			},
-			complete: async (
-				ctx: SelenaRepositoryContext,
-				runId: string,
-				outcome: RunOutcome,
-				opts?: { now?: Date },
-			) => {
+			complete: async (ctx: SelenaRepositoryContext, runId: string, outcome: RunOutcome, opts?: { now?: Date }) => {
 				writable(ctx);
 				const parsed = runOutcomeSchema.parse(outcome);
 				const now = opts?.now ?? new Date();
@@ -738,6 +746,32 @@ export function createSelenaRepositories(db: Db) {
 									inArray(schema.svOrders.status, ["QUEUED", "RUNNING", "ANALYZING"]),
 								),
 							);
+					// The spend ledger is written with the run it belongs to, so a
+					// committed charge can never exist without its evidence row and
+					// vice versa.
+					if (parsed.costUsd !== undefined)
+						await tx.insert(schema.svCostEvents).values({
+							organizationId: ctx.tenantId,
+							cycleId: cycle.id,
+							runId,
+							provider: measurement?.system ?? run.channel,
+							amountUsd: String(parsed.costUsd),
+							basis: parsed.costBasis ?? "estimated",
+						});
+					// §9.2: a run halted by a stop guard is an incident, not just a
+					// FAILED row — the stop itself must be visible after the fact.
+					if (
+						parsed.invalidReason === "SELENA_GLOBAL_EMERGENCY_STOP" ||
+						parsed.invalidReason === "SELENA_ORDER_STOPPED"
+					)
+						await tx.insert(schema.svIncidents).values({
+							organizationId: ctx.tenantId,
+							orderId: cycle.orderId,
+							cycleId: cycle.id,
+							kind: "EMERGENCY_STOP",
+							detail: parsed.invalidReason,
+							dispatchKey: parsed.dispatchKey,
+						});
 					await recordAudit(tx, ctx, "RUN_COMPLETED", "sv_runs", runId, {
 						cycleId: cycle.id,
 						dispatchKey: parsed.dispatchKey,
@@ -749,6 +783,41 @@ export function createSelenaRepositories(db: Db) {
 					return completed;
 				});
 			},
+		},
+		incidents: {
+			list: (ctx: SelenaRepositoryContext, opts?: { status?: "OPEN" | "RESOLVED" }) =>
+				db
+					.select()
+					.from(schema.svIncidents)
+					.where(
+						and(
+							eq(schema.svIncidents.organizationId, ctx.tenantId),
+							...(opts?.status ? [eq(schema.svIncidents.status, opts.status)] : []),
+						),
+					)
+					.orderBy(desc(schema.svIncidents.createdAt)),
+			resolve: async (ctx: SelenaRepositoryContext, incidentId: string, opts?: { now?: Date }) => {
+				writable(ctx);
+				const now = opts?.now ?? new Date();
+				const [resolved] = await db
+					.update(schema.svIncidents)
+					.set({ status: "RESOLVED", resolvedAt: now })
+					.where(and(eq(schema.svIncidents.id, incidentId), eq(schema.svIncidents.organizationId, ctx.tenantId)))
+					.returning();
+				if (!resolved) throw new Error("Not found: incident is outside AuthContext tenant");
+				await recordAudit(db, ctx, "INCIDENT_RESOLVED", "sv_incidents", incidentId, { kind: resolved.kind });
+				return resolved;
+			},
+		},
+		// Read-only on purpose: the ledger is appended where the charge happens
+		// (run completion) and nowhere else.
+		costEvents: {
+			listForCycle: (ctx: SelenaRepositoryContext, cycleId: string) =>
+				db
+					.select()
+					.from(schema.svCostEvents)
+					.where(and(eq(schema.svCostEvents.cycleId, cycleId), eq(schema.svCostEvents.organizationId, ctx.tenantId)))
+					.orderBy(desc(schema.svCostEvents.createdAt)),
 		},
 		// RC7 Phase E — manual pilot. These writers are the only path into the
 		// sv_pilot_* / sv_local_observations tables and never touch background
@@ -823,11 +892,8 @@ export function createSelenaRepositories(db: Db) {
 				const owned = await db
 					.select({ id: schema.svScenarios.id })
 					.from(schema.svScenarios)
-					.where(
-						and(inArray(schema.svScenarios.id, scenarioIds), eq(schema.svScenarios.organizationId, ctx.tenantId)),
-					);
-				if (owned.length !== scenarioIds.length)
-					throw new Error("Not found: scenario is outside AuthContext tenant");
+					.where(and(inArray(schema.svScenarios.id, scenarioIds), eq(schema.svScenarios.organizationId, ctx.tenantId)));
+				if (owned.length !== scenarioIds.length) throw new Error("Not found: scenario is outside AuthContext tenant");
 				// The matrix unique index makes regeneration idempotent: replays
 				// insert nothing and can never exceed the planned cardinality.
 				const inserted = await db
@@ -924,12 +990,7 @@ export function createSelenaRepositories(db: Db) {
 					const [lockedCycle] = await tx
 						.select()
 						.from(schema.svPilotCycles)
-						.where(
-							and(
-								eq(schema.svPilotCycles.id, cycle.id),
-								eq(schema.svPilotCycles.organizationId, ctx.tenantId),
-							),
-						)
+						.where(and(eq(schema.svPilotCycles.id, cycle.id), eq(schema.svPilotCycles.organizationId, ctx.tenantId)))
 						.for("update");
 					assertObservationCardinality(lockedCycle.createdObservations, lockedCycle.expectedObservations);
 					await tx
@@ -1045,10 +1106,7 @@ export function createSelenaRepositories(db: Db) {
 						.select({ id: schema.svEntities.id })
 						.from(schema.svEntities)
 						.where(
-							and(
-								eq(schema.svEntities.id, value.matchedEntityId),
-								eq(schema.svEntities.organizationId, ctx.tenantId),
-							),
+							and(eq(schema.svEntities.id, value.matchedEntityId), eq(schema.svEntities.organizationId, ctx.tenantId)),
 						)
 						.limit(1);
 					if (!entity) throw new Error("Not found: entity is outside AuthContext tenant");
