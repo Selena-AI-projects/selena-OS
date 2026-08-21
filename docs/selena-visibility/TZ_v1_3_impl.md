@@ -1,5 +1,14 @@
 # TZ v1.3-impl — следующий блок (ред. 3)
 
+## Сверка с re-audit 21.08 (привязан к SHA 226def, активная ветка ушла вперёд)
+- Закрыто с тех пор: P0-03 идентичность — systemId + channel персистятся явными
+  полями (repeatIndex на runs ещё нет); SSRF закрыт (eff8b55). Поля evidence
+  (citations/mention/position/competitors/extractorVersion) добавлены в sv_runs.
+- Стоит: P0-01 spend-gate на Suggest; P0-02 object storage для полного raw-ответа +
+  подключение resolveExtractionContext; Topics/Coverage/Source Map/Timeline; spend
+  ledger; atomic approval. Вердикт NO-GO держится.
+
+
 Ветка: claude/selenasystems-security-audit-b9uyst. Одна app-ветка, новую не создавать.
 
 ## Инварианты дизайна (действуют во всех фазах)
@@ -19,6 +28,23 @@
 3. Не пушить в release.
 4. Не трогать секреты и бюджетные флаги.
 Всё остаётся DESIGNED / TESTED-on-stub. Верификация = stub/фикстуры end-to-end + сьюты.
+
+## Фаза 0 — Gate A: безопасность и честность (ПЕРЕД Фазой 1)
+Основание: re-audit 21.08 (P0-01, P1-05, P1-09) + живой OPENAI_API_KEY на воркере.
+1. Suggest НЕ вызывает платный LLM до approved permit/budget. По умолчанию —
+   сделать онбординг-подсказку deterministic/public-data-only (без LLM), либо дать
+   ей отдельный явно утверждённый free-budget class с лимитом.
+   Контекст: сейчас Suggest → analyze-brand → runStructuredResearch → реальный
+   OpenAI (ключ уже стоит). В прод не течёт только потому, что ветка с кнопкой не в
+   release. ЗАГЕЙТИТЬ до того, как эта ветка задеплоится.
+2. SSRF — закрыто (eff8b55). Verify: тот же guard на collector-пути.
+3. Global provider stop — единая boundary для Suggest, legacy Elmo и Selena measurement.
+4. Новый permit на каждый retry; approval + permits + audit одной транзакцией;
+   attempt/idempotency ledger.
+5. (site, owner-track) Снять со страниц claims без current artifact: «8 систем»,
+   «Evidence Ledger delivery», безусловные PDF/XLSX/CSV, финальные цена/cardinality v1.3.
+Acceptance: запрещённый provider call до approval невозможен; retry без нового
+permit блокируется; Suggest либо без LLM, либо через явный free-budget class.
 
 ## Фаза 1 — оживить экстракцию (доделать P0-08). Приоритет 1
 - resolveExtractionContext: бренд, варианты названия, конкуренты, owned-домены из
