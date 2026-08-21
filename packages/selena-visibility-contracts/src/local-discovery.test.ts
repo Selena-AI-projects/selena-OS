@@ -185,9 +185,7 @@ describe("RC7 lock block and observation cardinality", () => {
 	});
 
 	it("rejects a block that relaxes the manual-only literals", () => {
-		expect(
-			localAiDiscoveryLockBlockSchema.safeParse({ ...lockBlock, externalCallsAllowed: true }).success,
-		).toBe(false);
+		expect(localAiDiscoveryLockBlockSchema.safeParse({ ...lockBlock, externalCallsAllowed: true }).success).toBe(false);
 		expect(localAiDiscoveryLockBlockSchema.safeParse({ ...lockBlock, placesApiAllowed: true }).success).toBe(false);
 		expect(localAiDiscoveryLockBlockSchema.safeParse({ ...lockBlock, surface: "GOOGLE_PLACES" }).success).toBe(false);
 		expect(localAiDiscoveryLockBlockSchema.safeParse({ ...lockBlock, captureMethod: "API" }).success).toBe(false);
@@ -241,9 +239,9 @@ describe("RC7 observation submission evidence policy", () => {
 		expect(
 			observationSubmissionViolations({ ...submission, capturedAt: "not-a-date" }, lockBlock.evidencePolicy),
 		).toEqual(["OBSERVATION_MISSING_CAPTURED_AT"]);
-		expect(() =>
-			assertObservationSubmission({ ...submission, transcript: null }, lockBlock.evidencePolicy),
-		).toThrow("OBSERVATION_MISSING_TRANSCRIPT");
+		expect(() => assertObservationSubmission({ ...submission, transcript: null }, lockBlock.evidencePolicy)).toThrow(
+			"OBSERVATION_MISSING_TRANSCRIPT",
+		);
 		expect(() =>
 			assertObservationSubmission({ ...submission, screenshotReference: undefined }, lockBlock.evidencePolicy),
 		).toThrow("OBSERVATION_MISSING_SCREENSHOT");

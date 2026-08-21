@@ -47,6 +47,32 @@ describe("computeLedgerMetrics", () => {
 		expect(metrics.shareOfVoice.brand).toBeNull();
 	});
 
+	it("keeps unmeasured VALID rows out of evidence denominators instead of scoring them as non-mentions", () => {
+		// Five measured rows all mention the brand; five stored without
+		// extraction. The true mention rate among measured evidence is 100%.
+		const rows: LedgerRow[] = [
+			...Array.from({ length: 5 }, (_, i) =>
+				row({ scenarioId: `s${i}`, mention: true, position: 1, citations: [{ url: `https://a/${i}`, domain: "a" }] }),
+			),
+			...Array.from({ length: 5 }, (_, i) =>
+				row({
+					scenarioId: `s${i}`,
+					mention: null,
+					ownedCitation: null,
+					citations: null,
+					competitors: null,
+					system: null,
+				}),
+			),
+		];
+		const metrics = computeLedgerMetrics(rows);
+		expect(metrics.validRuns).toBe(10);
+		expect(metrics.unmeasuredRuns).toBe(5);
+		expect(metrics.mentionRate).toBe(1);
+		expect(metrics.stableMentionRate).toBe(1);
+		expect(metrics.citationCoverage).toBe(1);
+	});
+
 	it("keeps unfinished rows out of every denominator", () => {
 		const metrics = computeLedgerMetrics([row({ validity: null }), row({ mention: true, position: 1 })]);
 		expect(metrics.totalRuns).toBe(1);

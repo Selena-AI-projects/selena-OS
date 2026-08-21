@@ -754,7 +754,9 @@ export function createSelenaRepositories(db: Db) {
 							organizationId: ctx.tenantId,
 							cycleId: cycle.id,
 							runId,
-							provider: measurement?.system ?? run.channel,
+							// The billing transport, stable across extraction success: ledger
+							// rows must group by who charged, not by what was measured.
+							provider: parsed.provider ?? run.channel,
 							amountUsd: String(parsed.costUsd),
 							basis: parsed.costBasis ?? "estimated",
 						});

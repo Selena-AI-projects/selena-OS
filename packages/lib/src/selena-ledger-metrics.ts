@@ -25,6 +25,13 @@ export type LedgerRow = {
 export type LedgerMetrics = {
 	totalRuns: number;
 	validRuns: number;
+	/**
+	 * VALID runs whose answer was stored without extraction (no context wired,
+	 * or resolution failed). They stay out of every evidence denominator: an
+	 * unmeasured row is not a measured "no mention", and counting it as one
+	 * would fabricate negative observations.
+	 */
+	unmeasuredRuns: number;
 	invalidRate: number | null;
 	mentionRate: number | null;
 	/** Share of scenario × system groups whose every valid repeat mentions the brand. */
@@ -69,10 +76,14 @@ export function computeLedgerMetrics(rows: LedgerRow[]): LedgerMetrics {
 	// either way would shift every rate, so it is excluded from the ledger.
 	const terminal = rows.filter((row) => row.validity !== null);
 	const valid = terminal.filter((row) => row.validity === "VALID");
-	const mentions = valid.filter((row) => row.mention === true);
+	// Evidence rates are computed over rows that actually carry an extraction.
+	// A VALID run without one is reported in unmeasuredRuns instead of being
+	// scored as if the brand was observed to be absent.
+	const measured = valid.filter((row) => row.mention !== null);
+	const mentions = measured.filter((row) => row.mention === true);
 
 	const groups = new Map<string, { total: number; mentioned: number }>();
-	for (const row of valid) {
+	for (const row of measured) {
 		const key = `${row.scenarioId} ${row.system ?? row.channel}`;
 		const group = groups.get(key) ?? { total: 0, mentioned: 0 };
 		group.total += 1;
@@ -86,25 +97,29 @@ export function computeLedgerMetrics(rows: LedgerRow[]): LedgerMetrics {
 		.filter((position): position is number => typeof position === "number");
 
 	const competitorMentions = new Map<string, number>();
-	for (const row of valid)
+	for (const row of measured)
 		for (const name of competitorNames(row.competitors))
 			competitorMentions.set(name, (competitorMentions.get(name) ?? 0) + 1);
 	const totalCompetitorMentions = [...competitorMentions.values()].reduce((sum, count) => sum + count, 0);
 	const voiceDenominator = mentions.length + totalCompetitorMentions;
 
-	const visitorValid = valid.filter((row) => isVisitorChannel(row.channel));
-	const apiValid = valid.filter((row) => isApiChannel(row.channel));
-	const visitorMentionRate = ratio(visitorValid.filter((row) => row.mention === true).length, visitorValid.length);
-	const apiMentionRate = ratio(apiValid.filter((row) => row.mention === true).length, apiValid.length);
+	const visitorMeasured = measured.filter((row) => isVisitorChannel(row.channel));
+	const apiMeasured = measured.filter((row) => isApiChannel(row.channel));
+	const visitorMentionRate = ratio(
+		visitorMeasured.filter((row) => row.mention === true).length,
+		visitorMeasured.length,
+	);
+	const apiMentionRate = ratio(apiMeasured.filter((row) => row.mention === true).length, apiMeasured.length);
 
 	return {
 		totalRuns: terminal.length,
 		validRuns: valid.length,
+		unmeasuredRuns: valid.length - measured.length,
 		invalidRate: ratio(terminal.length - valid.length, terminal.length),
-		mentionRate: ratio(mentions.length, valid.length),
+		mentionRate: ratio(mentions.length, measured.length),
 		stableMentionRate: ratio(stableGroups, groups.size),
-		ownedCitationRate: ratio(valid.filter((row) => row.ownedCitation === true).length, valid.length),
-		citationCoverage: ratio(valid.filter((row) => citationCount(row.citations) > 0).length, valid.length),
+		ownedCitationRate: ratio(measured.filter((row) => row.ownedCitation === true).length, measured.length),
+		citationCoverage: ratio(measured.filter((row) => citationCount(row.citations) > 0).length, measured.length),
 		averagePosition:
 			positions.length === 0 ? null : positions.reduce((sum, position) => sum + position, 0) / positions.length,
 		shareOfVoice: {
@@ -116,8 +131,7 @@ export function computeLedgerMetrics(rows: LedgerRow[]): LedgerMetrics {
 		visitorApiDivergence: {
 			visitorMentionRate,
 			apiMentionRate,
-			divergence:
-				visitorMentionRate === null || apiMentionRate === null ? null : visitorMentionRate - apiMentionRate,
+			divergence: visitorMentionRate === null || apiMentionRate === null ? null : visitorMentionRate - apiMentionRate,
 		},
 	};
 }

@@ -33,6 +33,27 @@ export type ExtractionInput = {
 	context: ExtractionContext;
 };
 
+// Combining marks count as word material: "кора" inside a combining-accented
+// longer word is still inside that word, not a boundary hit.
+const WORD_CHAR = /[\p{L}\p{N}\p{M}]/u;
+
+/** The full code point ending at index - 1, surrogate pairs included. */
+function codePointBefore(text: string, index: number): string {
+	if (index <= 0) return "";
+	const unit = text.charCodeAt(index - 1);
+	// A low surrogate means the code point started one unit earlier; reading
+	// the lone unit would fail the word-char test and invent a boundary.
+	if (unit >= 0xdc00 && unit <= 0xdfff && index >= 2) return text.slice(index - 2, index);
+	return text[index - 1];
+}
+
+/** The full code point starting at index, surrogate pairs included. */
+function codePointAt(text: string, index: number): string {
+	if (index >= text.length) return "";
+	const point = text.codePointAt(index);
+	return point === undefined ? "" : String.fromCodePoint(point);
+}
+
 /**
  * Whether `term` appears in `text` as a whole word or phrase. Case-insensitive
  * and Unicode-aware, so Cyrillic brand names get the same boundary treatment
@@ -46,9 +67,9 @@ export function containsTerm(text: string, term: string): boolean {
 	for (;;) {
 		const at = haystack.indexOf(needle, from);
 		if (at === -1) return false;
-		const before = at === 0 ? "" : haystack[at - 1];
-		const after = at + needle.length >= haystack.length ? "" : haystack[at + needle.length];
-		const isWordChar = (ch: string) => ch !== "" && /[\p{L}\p{N}]/u.test(ch);
+		const before = codePointBefore(haystack, at);
+		const after = codePointAt(haystack, at + needle.length);
+		const isWordChar = (ch: string) => ch !== "" && WORD_CHAR.test(ch);
 		if (!isWordChar(before) && !isWordChar(after)) return true;
 		from = at + 1;
 	}
@@ -81,7 +102,10 @@ export function recommendationItems(answerText: string): string[] {
 }
 
 function normalizeDomain(domain: string): string {
-	return domain.trim().toLowerCase().replace(/^www\./, "");
+	return domain
+		.trim()
+		.toLowerCase()
+		.replace(/^www\./, "");
 }
 
 /** Whether `domain` is an owned domain or a subdomain of one. */

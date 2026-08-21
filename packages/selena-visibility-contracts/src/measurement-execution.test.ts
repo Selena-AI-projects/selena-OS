@@ -39,6 +39,7 @@ describe("Selena measurement execution boundary", () => {
 			tokenUsage: { input: 10, output: 20 },
 			costUsd: 0.005,
 			costBasis: "actual" as const,
+			provider: "openrouter",
 		};
 		expect(runOutcomeSchema.parse(succeeded)).toEqual(succeeded);
 		expect(
@@ -62,6 +63,21 @@ describe("Selena measurement execution boundary", () => {
 		expect(runOutcomeSchema.safeParse({ ...succeeded, providerApiKey: "sk-test" }).success).toBe(false);
 		// A cost without a basis would read as an actual charge by default.
 		expect(runOutcomeSchema.safeParse({ ...succeeded, costBasis: undefined }).success).toBe(false);
+		// A cost without its billing transport cannot be attributed in the ledger.
+		expect(runOutcomeSchema.safeParse({ ...succeeded, provider: undefined }).success).toBe(false);
+		// A charge on a failed run is legal: the request was dispatched and may
+		// have been billed even though no usable answer came back.
+		expect(
+			runOutcomeSchema.safeParse({
+				dispatchKey: "k1",
+				status: "INVALID",
+				validity: "INVALID",
+				invalidReason: "EMPTY_RESPONSE",
+				costUsd: 0.005,
+				costBasis: "actual",
+				provider: "openrouter",
+			}).success,
+		).toBe(true);
 	});
 
 	it("accepts a grounded measurement and rejects one that contradicts itself", () => {
@@ -86,9 +102,9 @@ describe("Selena measurement execution boundary", () => {
 		expect(runOutcomeSchema.parse(succeeded)).toEqual(succeeded);
 
 		// No mention → no position: §12 averages position over mentions only.
-		expect(
-			runOutcomeSchema.safeParse({ ...succeeded, measurement: { ...measurement, mention: false } }).success,
-		).toBe(false);
+		expect(runOutcomeSchema.safeParse({ ...succeeded, measurement: { ...measurement, mention: false } }).success).toBe(
+			false,
+		);
 		expect(
 			runOutcomeSchema.safeParse({
 				...succeeded,
@@ -96,9 +112,9 @@ describe("Selena measurement execution boundary", () => {
 			}).success,
 		).toBe(true);
 		// An owned citation with no citations cannot be verified against the row.
-		expect(
-			runOutcomeSchema.safeParse({ ...succeeded, measurement: { ...measurement, citations: [] } }).success,
-		).toBe(false);
+		expect(runOutcomeSchema.safeParse({ ...succeeded, measurement: { ...measurement, citations: [] } }).success).toBe(
+			false,
+		);
 		// Evidence on a run that did not succeed would enter the ledger unobserved.
 		expect(
 			runOutcomeSchema.safeParse({

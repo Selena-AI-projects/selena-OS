@@ -67,7 +67,11 @@ export const runMeasurementSchema = z
 		// An owned citation is a citation: claiming one with an empty citation
 		// list would make owned-citation rate unverifiable against the row.
 		if (m.ownedCitation && m.citations.length === 0)
-			issues.addIssue({ code: "custom", message: "RUN_MEASUREMENT_OWNED_CITATION_WITHOUT_CITATIONS", path: ["ownedCitation"] });
+			issues.addIssue({
+				code: "custom",
+				message: "RUN_MEASUREMENT_OWNED_CITATION_WITHOUT_CITATIONS",
+				path: ["ownedCitation"],
+			});
 	});
 export type RunMeasurement = z.infer<typeof runMeasurementSchema>;
 
@@ -87,6 +91,10 @@ export const runOutcomeSchema = z
 		// §10.2: a provider that does not return its real charge must be stored
 		// as an estimate, never presented as the actual spend.
 		costBasis: z.enum(runCostBases).optional(),
+		// The transport that billed the charge ("openrouter", "brightdata") —
+		// not the sold surface. Ledger attribution must not depend on whether
+		// extraction happened to succeed.
+		provider: z.string().min(1).optional(),
 		measurement: runMeasurementSchema.optional(),
 	})
 	.superRefine((outcome, issues) => {
@@ -99,6 +107,8 @@ export const runOutcomeSchema = z
 			issues.addIssue({ code: "custom", message: "RUN_OUTCOME_INVALID_REASON_REQUIRED", path: ["invalidReason"] });
 		if (outcome.costUsd !== undefined && outcome.costBasis === undefined)
 			issues.addIssue({ code: "custom", message: "RUN_OUTCOME_COST_BASIS_REQUIRED", path: ["costBasis"] });
+		if (outcome.costUsd !== undefined && outcome.provider === undefined)
+			issues.addIssue({ code: "custom", message: "RUN_OUTCOME_COST_PROVIDER_REQUIRED", path: ["provider"] });
 		// Only a run that actually succeeded can carry evidence; an extraction
 		// attached to a failed run would enter the ledger as if it were observed.
 		if (outcome.measurement && outcome.status !== "SUCCEEDED")

@@ -171,8 +171,7 @@ type Countable = number | readonly unknown[];
 const toCount = (value: Countable): number => (typeof value === "number" ? value : value.length);
 export function expectedObservations(scenarios: Countable, observerContexts: Countable, repeats: number): number {
 	const counts = [toCount(scenarios), toCount(observerContexts), repeats];
-	if (counts.some((value) => !Number.isInteger(value) || value < 0))
-		throw new Error("OBSERVATION_CARDINALITY_INVALID");
+	if (counts.some((value) => !Number.isInteger(value) || value < 0)) throw new Error("OBSERVATION_CARDINALITY_INVALID");
 	return counts[0] * counts[1] * counts[2];
 }
 
@@ -252,10 +251,7 @@ export function assertObservationSubmission(submission: ObservationSubmissionInp
 // Mention rules. An explicit position only exists when the answer itself was
 // explicitly ordered; an UNRESOLVED (ambiguous-name) match is never a mention.
 // ---------------------------------------------------------------------------
-export function resolveExplicitPosition(
-	orderingState: OrderingState,
-	explicitPosition?: number | null,
-): number | null {
+export function resolveExplicitPosition(orderingState: OrderingState, explicitPosition?: number | null): number | null {
 	if (explicitPosition == null) return null;
 	if (!Number.isInteger(explicitPosition) || explicitPosition < 1) throw new Error("MENTION_POSITION_INVALID");
 	if (orderingState !== "EXPLICIT_ORDER") throw new Error("MENTION_POSITION_WITHOUT_EXPLICIT_ORDER");
@@ -267,8 +263,7 @@ export type MentionMatchInput = { matchStatus: MatchStatus; matchedEntityId?: st
 export function assertMentionMatch(mention: MentionMatchInput): void {
 	if (mention.matchStatus === "UNRESOLVED" && mention.matchedEntityId)
 		throw new Error("MENTION_UNRESOLVED_WITH_ENTITY");
-	if (mention.matchStatus !== "UNRESOLVED" && !mention.matchedEntityId)
-		throw new Error("MENTION_MATCH_WITHOUT_ENTITY");
+	if (mention.matchStatus !== "UNRESOLVED" && !mention.matchedEntityId) throw new Error("MENTION_MATCH_WITHOUT_ENTITY");
 }
 
 export function isCountableMention(mention: MentionMatchInput): boolean {
@@ -356,10 +351,7 @@ export function familyPresenceRate(
 	);
 }
 
-export function explicitAveragePosition(
-	observations: readonly PilotObservation[],
-	entityId: string,
-): number | null {
+export function explicitAveragePosition(observations: readonly PilotObservation[], entityId: string): number | null {
 	const positions = eligiblePilotObservations(observations)
 		.filter((observation) => observation.orderingState === "EXPLICIT_ORDER")
 		.flatMap((observation) =>
@@ -370,9 +362,7 @@ export function explicitAveragePosition(
 				)
 				.map((mention) => mention.explicitPosition as number),
 		);
-	return positions.length === 0
-		? null
-		: positions.reduce((sum, position) => sum + position, 0) / positions.length;
+	return positions.length === 0 ? null : positions.reduce((sum, position) => sum + position, 0) / positions.length;
 }
 
 // Share of (scenario, context) groups whose repeats all agree on whether the
@@ -403,8 +393,7 @@ export function visibleSourceRate(observations: readonly PilotObservation[]): nu
 export function factualErrorRate(observations: readonly PilotObservation[], entityId?: string): number | null {
 	const countable = eligiblePilotObservations(observations).flatMap((observation) =>
 		observation.mentions.filter(
-			(mention) =>
-				isCountableMention(mention) && (entityId === undefined || mention.matchedEntityId === entityId),
+			(mention) => isCountableMention(mention) && (entityId === undefined || mention.matchedEntityId === entityId),
 		),
 	);
 	return rate(countable.filter((mention) => mention.factualError === true).length, countable.length);

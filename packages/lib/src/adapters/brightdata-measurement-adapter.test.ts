@@ -119,6 +119,7 @@ describe("Bright Data measurement adapter", () => {
 			rawResponseReference: "brightdata:s_01HZY",
 			costUsd: estimateRunCostUsd("brightdata", true),
 			costBasis: "estimated",
+			provider: "brightdata",
 		});
 		// A scraped surface reports no token accounting, so none is claimed.
 		expect(outcome.tokenUsage).toBeUndefined();
@@ -228,11 +229,16 @@ describe("Bright Data measurement adapter", () => {
 			const fetchImpl = respondWith(() => jsonResponse({ error: `boom ${API_KEY}` }, status));
 			const outcome = await adapterWith(fetchImpl).execute(permitFor());
 
+			// §10.2: the request was dispatched, so a worst-case estimated charge
+			// is recorded rather than letting a broken cycle ledger as $0.
 			expect(outcome).toEqual({
 				dispatchKey: permitFor().dispatchKey,
 				status: "FAILED",
 				validity: "INVALID",
 				invalidReason: `PROVIDER_HTTP_${status}`,
+				costUsd: estimateRunCostUsd("brightdata", true),
+				costBasis: "estimated",
+				provider: "brightdata",
 			});
 			// The provider's error body is never read into the run row.
 			expect(JSON.stringify(outcome)).not.toContain(API_KEY);
@@ -289,6 +295,9 @@ describe("Bright Data measurement adapter", () => {
 			status: "FAILED",
 			validity: "INVALID",
 			invalidReason: "TRANSPORT_ERROR",
+			costUsd: estimateRunCostUsd("brightdata", true),
+			costBasis: "estimated",
+			provider: "brightdata",
 		});
 	});
 
@@ -431,6 +440,35 @@ describe("Bright Data measurement adapter", () => {
 			resolveExtractionContext: () => {
 				throw new Error("LOCK_UNREACHABLE");
 			},
+		}).execute(permitFor());
+		expect(outcome.status).toBe("SUCCEEDED");
+		expect(outcome.validity).toBe("VALID");
+		expect(outcome.measurement).toBeUndefined();
+	});
+
+	it("records a charge for an empty or malformed answer instead of a $0 ledger row", async () => {
+		const empty = await adapterWith(respondWith(jsonResponse(successPayload({ answer_text_markdown: "  " })))).execute(
+			permitFor(),
+		);
+		expect(empty.invalidReason).toBe("EMPTY_RESPONSE");
+		expect(empty.costUsd).toBe(estimateRunCostUsd("brightdata", true));
+		expect(empty.costBasis).toBe("estimated");
+		expect(empty.provider).toBe("brightdata");
+
+		const malformed = await adapterWith(respondWith(jsonResponse({ unexpected: true }))).execute(permitFor());
+		expect(malformed.invalidReason).toBe("MALFORMED_RESPONSE");
+		expect(malformed.costUsd).toBe(estimateRunCostUsd("brightdata", true));
+		expect(malformed.provider).toBe("brightdata");
+	});
+
+	it("drops a contract-invalid extraction instead of failing the paid run", async () => {
+		const outcome = await adapterWith(respondWith(jsonResponse(successPayload())), {
+			resolveExtractionContext: () => ({
+				brandTerms: ["KORA"],
+				ownedDomains: [],
+				competitors: [],
+				language: "",
+			}),
 		}).execute(permitFor());
 		expect(outcome.status).toBe("SUCCEEDED");
 		expect(outcome.validity).toBe("VALID");

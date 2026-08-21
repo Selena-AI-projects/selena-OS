@@ -1,11 +1,6 @@
 import { runMeasurementSchema } from "@workspace/selena-visibility-contracts";
 import { describe, expect, it } from "vitest";
-import {
-	containsTerm,
-	extractMeasurement,
-	isOwnedDomain,
-	recommendationItems,
-} from "./selena-answer-extraction";
+import { containsTerm, extractMeasurement, isOwnedDomain, recommendationItems } from "./selena-answer-extraction";
 
 const context = {
 	brandTerms: ["KORA Food Hall", "KORA"],
@@ -29,6 +24,17 @@ describe("containsTerm", () => {
 	it("gives Cyrillic names the same boundary treatment as Latin ones", () => {
 		expect(containsTerm("Загляните в КОРА на завтрак", "кора")).toBe(true);
 		expect(containsTerm("декоративная коралловая стена", "кора")).toBe(false);
+	});
+
+	it("treats surrogate-pair neighbours and combining marks as word material, not boundaries", () => {
+		// An astral-plane letter (𝐀, U+1D400) directly attached to the term is
+		// part of the same word; a lone-surrogate boundary test would match.
+		expect(containsTerm("\u{1D400}kora", "kora")).toBe(false);
+		expect(containsTerm("kora\u{1D400}", "kora")).toBe(false);
+		// A combining accent extends the word rather than ending it.
+		expect(containsTerm("kora\u0301l", "kora")).toBe(false);
+		// An emoji is not a letter: standing next to it is a legitimate hit.
+		expect(containsTerm("\u{1F60A} kora", "kora")).toBe(true);
 	});
 
 	it("never matches an empty term", () => {

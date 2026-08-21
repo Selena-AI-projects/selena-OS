@@ -112,6 +112,7 @@ describe("OpenRouter measurement adapter", () => {
 			tokenUsage: { input: 12, output: 34 },
 			costUsd: 0.0042,
 			costBasis: "actual",
+			provider: "openrouter",
 		});
 		expect(() => runOutcomeSchema.parse(outcome)).not.toThrow();
 	});
@@ -158,11 +159,16 @@ describe("OpenRouter measurement adapter", () => {
 			const fetchImpl = respondWith(() => jsonResponse({ error: { message: `boom ${API_KEY}` } }, status));
 			const outcome = await adapterWith(fetchImpl).execute(permitFor());
 
+			// §10.2: the request was dispatched, so a worst-case estimated charge
+			// is recorded rather than letting a broken cycle ledger as $0.
 			expect(outcome).toEqual({
 				dispatchKey: permitFor().dispatchKey,
 				status: "FAILED",
 				validity: "INVALID",
 				invalidReason: `PROVIDER_HTTP_${status}`,
+				costUsd: estimateRunCostUsd("openrouter", false),
+				costBasis: "estimated",
+				provider: "openrouter",
 			});
 			// The provider's error body is never read into the run row.
 			expect(JSON.stringify(outcome)).not.toContain(API_KEY);
@@ -218,6 +224,9 @@ describe("OpenRouter measurement adapter", () => {
 			status: "FAILED",
 			validity: "INVALID",
 			invalidReason: "TRANSPORT_ERROR",
+			costUsd: estimateRunCostUsd("openrouter", false),
+			costBasis: "estimated",
+			provider: "openrouter",
 		});
 	});
 
@@ -339,6 +348,33 @@ describe("OpenRouter measurement adapter", () => {
 			resolveExtractionContext: () => {
 				throw new Error("LOCK_UNREACHABLE");
 			},
+		}).execute(permitFor());
+		expect(outcome.status).toBe("SUCCEEDED");
+		expect(outcome.validity).toBe("VALID");
+		expect(outcome.measurement).toBeUndefined();
+	});
+
+	it("records the provider's reported charge even when the answer is empty", async () => {
+		const payload = successPayload({ choices: [{ message: { content: "  " } }] });
+		const outcome = await adapterWith(respondWith(jsonResponse(payload))).execute(permitFor());
+		expect(outcome.status).toBe("INVALID");
+		expect(outcome.invalidReason).toBe("EMPTY_RESPONSE");
+		// Tokens were consumed and billed; a $0 ledger row here is how a broken
+		// cycle burns budget invisibly.
+		expect(outcome.costUsd).toBe(0.0042);
+		expect(outcome.costBasis).toBe("actual");
+		expect(outcome.provider).toBe("openrouter");
+	});
+
+	it("drops a contract-invalid extraction instead of failing the paid run", async () => {
+		const outcome = await adapterWith(respondWith(jsonResponse(successPayload())), {
+			// language is required non-empty by the measurement contract.
+			resolveExtractionContext: () => ({
+				brandTerms: ["KORA"],
+				ownedDomains: [],
+				competitors: [],
+				language: "",
+			}),
 		}).execute(permitFor());
 		expect(outcome.status).toBe("SUCCEEDED");
 		expect(outcome.validity).toBe("VALID");
