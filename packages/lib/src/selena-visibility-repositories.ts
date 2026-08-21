@@ -1,7 +1,4 @@
 import {
-	type ObservationReviewDecision,
-	type OrderingState,
-	type RunOutcome,
 	assertCardinality,
 	assertMentionMatch,
 	assertObservationCardinality,
@@ -9,18 +6,22 @@ import {
 	contextHash,
 	expectedObservations,
 	localAiDiscoveryLockBlockSchema,
+	type ObservationReviewDecision,
+	type OrderingState,
 	observationReviewDecisions,
 	observerContextSchema,
 	parseMeasurementScope,
+	type RunOutcome,
 	resolveExplicitPosition,
 	runOutcomeSchema,
 } from "@workspace/selena-visibility-contracts";
 import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import * as schema from "./db/schema";
-import { type ControlledCycleState, assertDirectDispatchAllowed } from "./run-policy";
+import { assertDirectDispatchAllowed, type ControlledCycleState } from "./run-policy";
 import { assertLockExpectedRuns, assertQcDecision, planOrderDispatch } from "./selena-dispatch";
 import { detectEntityCycle, validateEntityParent } from "./selena-entities";
+import type { LedgerMention, LedgerRow } from "./selena-ledger-metrics";
 import { observationContentSha256, planCaptureTasks } from "./selena-manual-pilot";
 
 export type SelenaRepositoryContext = {
@@ -816,6 +817,47 @@ export function createSelenaRepositories(db: Db) {
 					});
 					return completed;
 				});
+			},
+			/**
+			 * Everything §12 is computed from, for one cycle: the terminal run
+			 * rows and the mention rows extracted from them. Read as one pair so
+			 * a metric can never combine the runs of one cycle with the mentions
+			 * of another.
+			 */
+			ledgerForCycle: async (
+				ctx: SelenaRepositoryContext,
+				cycleId: string,
+			): Promise<{ rows: LedgerRow[]; mentions: LedgerMention[] }> => {
+				const [rows, mentions] = await Promise.all([
+					db
+						.select({
+							runId: schema.svRuns.id,
+							scenarioId: schema.svRuns.scenarioId,
+							system: schema.svRuns.system,
+							channel: schema.svRuns.channel,
+							validity: schema.svRuns.validity,
+							extractorVersion: schema.svRuns.extractorVersion,
+							ownedCitation: schema.svRuns.ownedCitation,
+							citations: schema.svRuns.citations,
+						})
+						.from(schema.svRuns)
+						.where(and(eq(schema.svRuns.cycleId, cycleId), eq(schema.svRuns.organizationId, ctx.tenantId))),
+					db
+						.select({
+							runId: schema.svResponseMentions.runId,
+							entityType: schema.svResponseMentions.entityType,
+							name: schema.svResponseMentions.name,
+							ordinalPosition: schema.svResponseMentions.ordinalPosition,
+						})
+						.from(schema.svResponseMentions)
+						.where(
+							and(
+								eq(schema.svResponseMentions.cycleId, cycleId),
+								eq(schema.svResponseMentions.organizationId, ctx.tenantId),
+							),
+						),
+				]);
+				return { rows, mentions };
 			},
 		},
 		incidents: {
