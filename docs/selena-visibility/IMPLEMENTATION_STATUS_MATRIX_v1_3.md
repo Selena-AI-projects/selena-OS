@@ -39,6 +39,17 @@ run by nobody.
 | OpenRouter API View adapter — registered nowhere | `CODE_IN_BRANCH` | unit only; never called live |
 | Bright Data Visitor View adapter — registered nowhere | `CODE_IN_BRANCH` | unit only; never called live |
 
+## Gate A — spend safety (Фаза 0)
+
+| Feature | Status | Verified |
+| --- | --- | --- |
+| Global provider stop covers measurement, legacy onboarding and Suggest | `CODE_IN_BRANCH` | unit |
+| Onboarding Suggest refuses to call a paid model unless the budget class is named | `CODE_IN_BRANCH` | unit; refused at the server function and again in the worker |
+| Spend limit on that budget class (a meter, not a gate) | `NOT_BUILT` — the cap that holds is the one on the provider account | — |
+| New permit per retry; approval, permits and audit in one transaction | `NOT_BUILT` | — |
+| SSRF guard on the onboarding fetch | `CODE_IN_BRANCH` (from `eff8b55`, not this session) | not re-verified here |
+| Collector path carries the same SSRF guard | unverified — not checked in this session | — |
+
 ## Evidence Ledger
 
 | Feature | Status | Verified |

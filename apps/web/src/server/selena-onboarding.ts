@@ -1,5 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { db } from "@workspace/lib/db/db";
+import { assertSuggestSpendAllowed } from "@workspace/lib/run-policy";
 import { createSelenaRepositories } from "@workspace/lib/selena-visibility-repositories";
 import { z } from "zod";
 import { cancelAnalyzeBrand, enqueueAnalyzeBrand, getAnalyzeBrandStatus } from "@/lib/analyze-brand-job";
@@ -66,6 +67,10 @@ async function requireProject(projectId: string) {
 export const startSelenaProfileSuggestionFn = createServerFn({ method: "POST" })
 	.validator(suggestionScopeSchema.extend({ website: z.string().trim().min(3).max(255) }))
 	.handler(async ({ data }) => {
+		// The button is free to the customer and not to us: it starts a paid
+		// LLM round trip on a live key. Refused unless the owner has named the
+		// budget class that pays for it.
+		assertSuggestSpendAllowed();
 		const project = await requireProject(data.projectId);
 		await enqueueAnalyzeBrand({
 			product: "selena",

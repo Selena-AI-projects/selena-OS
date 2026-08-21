@@ -49,7 +49,21 @@ records every run as `INVALID`, so an accidental run cannot produce something
 that reads like a real measurement.
 
 `SELENA_EMERGENCY_STOP=true` blocks execution at the point a provider would be
-contacted, including for runs that are already claimed.
+contacted, including for runs that are already claimed. It is the one stop for
+every paid path, not only measurement: the onboarding research call refuses
+under it too, because a stop that halts runs while a button keeps calling a
+vendor is not a stop.
+
+`SELENA_SUGGEST_LLM` decides whether the onboarding "suggest competitors and
+questions" button may spend. Unset is off, and so is any value other than
+`free_budget` — the button is free to the customer and is a real LLM round trip
+on a live key, so switching it on is a deliberate act with a name attached.
+While it is off the server function refuses with `SUGGEST_LLM_NOT_BUDGETED`
+before anything is queued, and a job that was already queued refuses in the
+worker.
+
+That class is a gate, not a meter: nothing counts the calls or the dollars, so
+the limit that actually holds is the spend cap on the provider account.
 
 Measurement jobs are never scheduled. A run starts from an explicit action on a
 specific permit, and a claimed permit is spent: it cannot be retried into a
