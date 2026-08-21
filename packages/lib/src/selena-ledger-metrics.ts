@@ -29,6 +29,8 @@ export type LedgerRow = {
 	 * otherwise be indistinguishable.
 	 */
 	extractorVersion: string | null;
+	/** How the answer was obtained: live search, training data, or not established. */
+	captureMode: string | null;
 	ownedCitation: boolean | null;
 	citations: unknown;
 	/** When the run reached a terminal state; what dates a source's first and last sighting. */
@@ -40,6 +42,7 @@ export type LedgerMention = {
 	entityType: string;
 	name: string;
 	ordinalPosition: number | null;
+	captureMode: string | null;
 };
 
 export type LedgerMetrics = {
@@ -71,6 +74,12 @@ export type LedgerMetrics = {
 		apiMentionRate: number | null;
 		divergence: number | null;
 	};
+	/**
+	 * Measured runs by capture mode. A live-search answer and a training-data
+	 * answer are observations of different things, so a reader has to be able to
+	 * see what a rate is made of before comparing two of them.
+	 */
+	captureModes: Record<string, number>;
 };
 
 const BRAND = "BRAND";
@@ -166,6 +175,12 @@ export function computeLedgerMetrics(rows: LedgerRow[], mentions: LedgerMention[
 	);
 	const apiMentionRate = ratio(apiMeasured.filter((row) => brandPositions.has(row.runId)).length, apiMeasured.length);
 
+	const captureModes: Record<string, number> = {};
+	for (const row of measured) {
+		const mode = row.captureMode ?? "unknown";
+		captureModes[mode] = (captureModes[mode] ?? 0) + 1;
+	}
+
 	return {
 		totalRuns: terminal.length,
 		validRuns: valid.length,
@@ -188,15 +203,40 @@ export function computeLedgerMetrics(rows: LedgerRow[], mentions: LedgerMention[
 			apiMentionRate,
 			divergence: visitorMentionRate === null || apiMentionRate === null ? null : visitorMentionRate - apiMentionRate,
 		},
+		captureModes,
 	};
 }
 
+/**
+ * A group's result. A group with no measured run is UNKNOWN, never a set of
+ * zeroes: "we measured nothing here" and "the brand appeared in none of the
+ * answers" are different statements, and only one of them is evidence.
+ */
+export type LedgerGroup =
+	| { status: "UNKNOWN"; reason: "NO_MEASURED_RUNS"; runs: number }
+	| { status: "MEASURED"; metrics: LedgerMetrics };
+
 export type LedgerReport = {
-	branded: LedgerMetrics | null;
-	discovery: LedgerMetrics | null;
+	/** Questions that name the brand. */
+	branded: LedgerGroup;
+	/** Discovery questions — the non-branded bucket §6.5 keeps on its own indicator. */
+	nonBranded: LedgerGroup;
+	/**
+	 * Both buckets together, derived and labelled. "Do people find us when they
+	 * ask for us" and "do people find us when they ask for the category" are
+	 * different questions; one number over both is only honest with the label
+	 * attached.
+	 */
+	mixed: { mixed: true; group: LedgerGroup };
 	/** Rows whose scenario has no classification; reported, never guessed into a bucket. */
 	unclassifiedRuns: number;
 };
+
+function groupFor(rows: LedgerRow[], mentions: LedgerMention[]): LedgerGroup {
+	const measured = rows.filter((row) => row.validity === "VALID" && row.extractorVersion !== null);
+	if (measured.length === 0) return { status: "UNKNOWN", reason: "NO_MEASURED_RUNS", runs: rows.length };
+	return { status: "MEASURED", metrics: computeLedgerMetrics(rows, mentions) };
+}
 
 export function computeLedgerReport(
 	rows: LedgerRow[],
@@ -204,17 +244,18 @@ export function computeLedgerReport(
 	scenarioKinds: ReadonlyMap<string, LedgerScenarioKind>,
 ): LedgerReport {
 	const branded: LedgerRow[] = [];
-	const discovery: LedgerRow[] = [];
+	const nonBranded: LedgerRow[] = [];
 	let unclassified = 0;
 	for (const row of rows) {
 		const kind = scenarioKinds.get(row.scenarioId);
 		if (kind === "branded") branded.push(row);
-		else if (kind === "discovery") discovery.push(row);
+		else if (kind === "discovery") nonBranded.push(row);
 		else unclassified += 1;
 	}
 	return {
-		branded: branded.length > 0 ? computeLedgerMetrics(branded, mentions) : null,
-		discovery: discovery.length > 0 ? computeLedgerMetrics(discovery, mentions) : null,
+		branded: groupFor(branded, mentions),
+		nonBranded: groupFor(nonBranded, mentions),
+		mixed: { mixed: true, group: groupFor([...branded, ...nonBranded], mentions) },
 		unclassifiedRuns: unclassified,
 	};
 }

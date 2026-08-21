@@ -317,6 +317,14 @@ async function main(): Promise<void> {
 
 	const report = computeLedgerReport(rows, mentions, scenarioKinds);
 	check(report.unclassifiedRuns === 0, "every run belongs to a classified scenario");
+	check(
+		report.branded.status === "MEASURED" && report.nonBranded.status === "MEASURED",
+		"branded and non-branded questions each carry their own coverage",
+	);
+	check(
+		rows.every((row) => row.captureMode !== null) && mentions.every((mention) => mention.captureMode !== null),
+		"every run and mention records how the answer was obtained",
+	);
 
 	const snapshots = await repositories.citationGaps.snapshot(ctx, dispatch.cycleId);
 	const gaps = snapshots.filter((snapshot) => snapshot.gapType !== null);
@@ -377,7 +385,7 @@ async function main(): Promise<void> {
 	}
 	check(denied.startsWith("Not found"), `raw evidence is refused to another organization (${denied || "not refused"})`);
 	console.log("\nbranded:", JSON.stringify(report.branded, null, 2));
-	console.log("discovery:", JSON.stringify(report.discovery, null, 2));
+	console.log("non-branded:", JSON.stringify(report.nonBranded, null, 2));
 }
 
 main()

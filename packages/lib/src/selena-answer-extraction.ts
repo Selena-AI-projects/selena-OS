@@ -1,4 +1,4 @@
-import type { RunMeasurement } from "@workspace/selena-visibility-contracts";
+import type { RunCaptureMode, RunMeasurement } from "@workspace/selena-visibility-contracts";
 
 /**
  * Deterministic extraction of one Evidence Ledger row from a provider answer.
@@ -36,6 +36,12 @@ export type ExtractionInput = {
 	sources: { url: string; domain: string }[];
 	system: string;
 	model?: string;
+	/**
+	 * How the adapter obtained the answer. Only the adapter knows; an omitted
+	 * value stays "unknown" rather than being inferred, because a live-search
+	 * answer and a training-data answer are different observations.
+	 */
+	captureMode?: RunCaptureMode;
 	context: ExtractionContext;
 };
 
@@ -125,7 +131,7 @@ export function isOwnedDomain(domain: string, ownedDomains: string[]): boolean {
 }
 
 export function extractMeasurement(input: ExtractionInput): RunMeasurement {
-	const { answerText, sources, system, model, context } = input;
+	const { answerText, sources, system, model, captureMode, context } = input;
 
 	const mention = matchesAny(answerText, context.brandTerms);
 
@@ -163,6 +169,7 @@ export function extractMeasurement(input: ExtractionInput): RunMeasurement {
 		language: context.language,
 		...(context.region === undefined ? {} : { region: context.region }),
 		extractorVersion: EXTRACTOR_VERSION,
+		captureMode: captureMode ?? "unknown",
 		brand: context.brandTerms[0] ?? "",
 		mention,
 		position: mention ? ordinalFor(context.brandTerms) : null,

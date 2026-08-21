@@ -1,8 +1,8 @@
 import { runMeasurementSchema } from "@workspace/selena-visibility-contracts";
 import { describe, expect, it } from "vitest";
 import {
-	EXTRACTOR_VERSION,
 	containsTerm,
+	EXTRACTOR_VERSION,
 	extractMeasurement,
 	isOwnedDomain,
 	recommendationItems,
@@ -95,6 +95,7 @@ describe("extractMeasurement", () => {
 			language: "en",
 			region: "ID",
 			extractorVersion: "selena-extract/1",
+			captureMode: "unknown",
 			brand: "KORA Food Hall",
 			mention: true,
 			position: 2,
@@ -173,6 +174,12 @@ describe("extractMeasurement", () => {
 			{ name: "Other Place", position: 3 },
 		]);
 		expect(measurement.extractorVersion).toBe(EXTRACTOR_VERSION);
+	});
+
+	it("leaves the capture mode unknown unless the adapter names it", () => {
+		const base = { answerText: "KORA Food Hall", sources: [], system: "chatgpt", context };
+		expect(extractMeasurement(base).captureMode).toBe("unknown");
+		expect(extractMeasurement({ ...base, captureMode: "live_search" }).captureMode).toBe("live_search");
 	});
 
 	it("keeps a competitor named only in prose unranked", () => {

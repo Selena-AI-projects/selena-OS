@@ -14,6 +14,7 @@ const row = (runId: string, overrides: Partial<LedgerRow> = {}): LedgerRow => ({
 	ownedCitation: false,
 	citations: [],
 	finishedAt: new Date("2026-08-21T10:00:00.000Z"),
+	captureMode: "live_search",
 	...overrides,
 });
 
@@ -22,6 +23,7 @@ const brand = (runId: string): LedgerMention => ({
 	entityType: "BRAND",
 	name: "KORA Food Hall",
 	ordinalPosition: 1,
+	captureMode: "live_search",
 });
 
 const competitor = (runId: string, name: string): LedgerMention => ({
@@ -29,6 +31,7 @@ const competitor = (runId: string, name: string): LedgerMention => ({
 	entityType: "COMPETITOR",
 	name,
 	ordinalPosition: 1,
+	captureMode: "live_search",
 });
 
 const OWNED = ["korafoodhall.com"];
@@ -67,7 +70,9 @@ describe("computeCitationGaps", () => {
 
 	it("leaves the brand's own pages out of the opportunity map", () => {
 		const report = computeCitationGaps({
-			rows: [row("r1", { citations: [cite("korafoodhall.com"), cite("menu.korafoodhall.com"), cite("guide.example")] })],
+			rows: [
+				row("r1", { citations: [cite("korafoodhall.com"), cite("menu.korafoodhall.com"), cite("guide.example")] }),
+			],
 			mentions: [competitor("r1", "Rival Cafe")],
 			ownedDomains: OWNED,
 		});
@@ -149,7 +154,9 @@ describe("computeCitationGaps", () => {
 
 	it("ignores citation entries that carry no usable url or domain", () => {
 		const report = computeCitationGaps({
-			rows: [row("r1", { citations: [{ url: "  ", domain: "guide.example" }, { url: "https://x", domain: "" }, "nope"] })],
+			rows: [
+				row("r1", { citations: [{ url: "  ", domain: "guide.example" }, { url: "https://x", domain: "" }, "nope"] }),
+			],
 			mentions: [competitor("r1", "Rival Cafe")],
 			ownedDomains: OWNED,
 		});

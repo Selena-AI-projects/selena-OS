@@ -5,8 +5,8 @@ import {
 	runOutcomeSchema,
 	type visitorSurfaces,
 } from "@workspace/selena-visibility-contracts";
-import type { SelenaExecutablePermit, SelenaMeasurementAdapter, SelenaMeasurementPermit } from "../selena-measurement";
 import { type ExtractionContext, extractMeasurement } from "../selena-answer-extraction";
+import type { SelenaExecutablePermit, SelenaMeasurementAdapter, SelenaMeasurementPermit } from "../selena-measurement";
 import { estimateRunCostUsd } from "../usage/cost";
 
 // The provider seam for Visitor View: the answer a person is actually shown by
@@ -417,6 +417,9 @@ export function createBrightDataAdapter(deps: BrightDataAdapterDeps): SelenaMeas
 						answerText: answer.answerText,
 						sources: answer.sources,
 						system: deps.system,
+						// Visitor View is the public surface answering a live query, so
+						// what it returned is a live-search observation.
+						captureMode: "live_search",
 						context: await deps.resolveExtractionContext(permit),
 					});
 					// Validated here, not in the executor: a context that produces a

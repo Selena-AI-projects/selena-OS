@@ -11,6 +11,7 @@ const row = (runId: string, overrides: Partial<LedgerRow> = {}): LedgerRow => ({
 	ownedCitation: false,
 	citations: [],
 	finishedAt: null,
+	captureMode: "training_data",
 	...overrides,
 });
 
@@ -19,6 +20,7 @@ const brand = (runId: string, ordinalPosition: number | null = null): LedgerMent
 	entityType: "BRAND",
 	name: "KORA",
 	ordinalPosition,
+	captureMode: "training_data",
 });
 
 const competitor = (runId: string, name: string, ordinalPosition: number | null = null): LedgerMention => ({
@@ -26,6 +28,7 @@ const competitor = (runId: string, name: string, ordinalPosition: number | null 
 	entityType: "COMPETITOR",
 	name,
 	ordinalPosition,
+	captureMode: "training_data",
 });
 
 describe("computeLedgerMetrics", () => {
@@ -150,29 +153,45 @@ describe("computeLedgerMetrics", () => {
 });
 
 describe("computeLedgerReport", () => {
-	it("keeps branded and discovery apart and never guesses a bucket", () => {
+	const kinds = new Map([
+		["branded-1", "branded"],
+		["discovery-1", "discovery"],
+	] as const);
+
+	it("keeps branded and non-branded questions on separate coverage figures", () => {
 		const rows = [
 			row("r1", { scenarioId: "branded-1" }),
 			row("r2", { scenarioId: "discovery-1" }),
 			row("r3", { scenarioId: "unknown-1" }),
 		];
-		const report = computeLedgerReport(
-			rows,
-			[brand("r1", 1), brand("r3", 2)],
-			new Map([
-				["branded-1", "branded"],
-				["discovery-1", "discovery"],
-			]),
-		);
-		expect(report.branded?.mentionCoverage).toBe(1);
-		expect(report.discovery?.mentionCoverage).toBe(0);
+		const report = computeLedgerReport(rows, [brand("r1", 1), brand("r3", 2)], kinds);
+		expect(report.branded.status === "MEASURED" && report.branded.metrics.mentionCoverage).toBe(1);
+		expect(report.nonBranded.status === "MEASURED" && report.nonBranded.metrics.mentionCoverage).toBe(0);
 		expect(report.unclassifiedRuns).toBe(1);
 	});
 
-	it("returns null blocks rather than empty-set rates", () => {
-		const report = computeLedgerReport([row("r1")], [], new Map());
-		expect(report.branded).toBeNull();
-		expect(report.discovery).toBeNull();
-		expect(report.unclassifiedRuns).toBe(1);
+	it("labels the combined figure as mixed rather than presenting it as one measurement", () => {
+		const rows = [row("r1", { scenarioId: "branded-1" }), row("r2", { scenarioId: "discovery-1" })];
+		const report = computeLedgerReport(rows, [brand("r1", 1)], kinds);
+		expect(report.mixed.mixed).toBe(true);
+		expect(report.mixed.group.status === "MEASURED" && report.mixed.group.metrics.mentionCoverage).toBe(1 / 2);
+	});
+
+	it("reports a group with nothing measured as UNKNOWN, never as zero coverage", () => {
+		const report = computeLedgerReport([row("r1", { scenarioId: "branded-1", extractorVersion: null })], [], kinds);
+		expect(report.branded).toEqual({ status: "UNKNOWN", reason: "NO_MEASURED_RUNS", runs: 1 });
+		expect(report.nonBranded).toEqual({ status: "UNKNOWN", reason: "NO_MEASURED_RUNS", runs: 0 });
+	});
+
+	it("says what a rate is made of, so live search and training data are not compared blind", () => {
+		const rows = [
+			row("r1", { scenarioId: "branded-1" }),
+			row("r2", { scenarioId: "branded-1", captureMode: "unknown" }),
+		];
+		const report = computeLedgerReport(rows, [brand("r1", 1)], kinds);
+		expect(report.branded.status === "MEASURED" && report.branded.metrics.captureModes).toEqual({
+			training_data: 1,
+			unknown: 1,
+		});
 	});
 });

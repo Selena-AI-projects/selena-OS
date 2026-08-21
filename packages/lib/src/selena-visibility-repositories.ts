@@ -200,6 +200,7 @@ export function createSelenaRepositories(db: Db) {
 					channel: schema.svRuns.channel,
 					validity: schema.svRuns.validity,
 					extractorVersion: schema.svRuns.extractorVersion,
+					captureMode: schema.svRuns.captureMode,
 					ownedCitation: schema.svRuns.ownedCitation,
 					citations: schema.svRuns.citations,
 					finishedAt: schema.svRuns.finishedAt,
@@ -212,6 +213,7 @@ export function createSelenaRepositories(db: Db) {
 					entityType: schema.svResponseMentions.entityType,
 					name: schema.svResponseMentions.name,
 					ordinalPosition: schema.svResponseMentions.ordinalPosition,
+					captureMode: schema.svResponseMentions.captureMode,
 				})
 				.from(schema.svResponseMentions)
 				.where(
@@ -812,6 +814,7 @@ export function createSelenaRepositories(db: Db) {
 							competitors: measurement?.competitors ?? null,
 							factualErrors: measurement?.factualErrors ?? null,
 							extractorVersion: measurement?.extractorVersion ?? null,
+							captureMode: measurement?.captureMode ?? null,
 							rawResponseReference: parsed.rawResponseReference ?? null,
 							canonicalPayload: parsed,
 							finishedAt: now,
@@ -874,6 +877,7 @@ export function createSelenaRepositories(db: Db) {
 									name: row.name,
 									ordinalPosition: row.ordinalPosition,
 									extractorVersion: measurement.extractorVersion,
+									captureMode: measurement.captureMode,
 								})),
 							);
 					}

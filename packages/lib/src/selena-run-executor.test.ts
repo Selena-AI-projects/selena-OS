@@ -140,6 +140,7 @@ describe("Selena permit execution", () => {
 			system: "gemini",
 			language: "en",
 			extractorVersion: "selena-extract/1",
+			captureMode: "unknown" as const,
 			brand: "KORA",
 			mention: true,
 			position: null,

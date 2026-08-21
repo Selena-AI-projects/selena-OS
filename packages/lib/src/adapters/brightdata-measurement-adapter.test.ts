@@ -425,6 +425,7 @@ describe("Bright Data measurement adapter", () => {
 			language: "en",
 			region: "ID",
 			extractorVersion: "selena-extract/1",
+			captureMode: "live_search",
 			brand: "KORA Food Hall",
 			mention: true,
 			position: 1,

@@ -40,6 +40,8 @@ export function assertAdapterAllowed(adapterName: string, registered: readonly s
 export const runOutcomeStatuses = ["SUCCEEDED", "INVALID", "FAILED"] as const;
 export const runValidities = ["VALID", "INVALID"] as const;
 export const runCostBases = ["actual", "estimated"] as const;
+export const runCaptureModes = ["live_search", "training_data", "unknown"] as const;
+export type RunCaptureMode = (typeof runCaptureModes)[number];
 
 /**
  * What the adapter observed in the answer — one Evidence Ledger row's worth of
@@ -56,6 +58,14 @@ export const runMeasurementSchema = z
 		// produced it, so a backfill with a newer extractor is distinguishable
 		// from the original observation.
 		extractorVersion: z.string().min(1),
+		/**
+		 * How the answer was produced. Perplexity searches the live web while
+		 * ChatGPT and Gemini answer from training data: the two are different
+		 * observations of different things, and a rate that averages them is
+		 * about neither. The adapter that made the call is the source of truth;
+		 * anything that did not establish it says so rather than guessing.
+		 */
+		captureMode: z.enum(runCaptureModes).default("unknown"),
 		/** The canonical brand name the extraction matched against. */
 		brand: z.string().min(1),
 		mention: z.boolean(),

@@ -5,8 +5,8 @@ import {
 	runMeasurementSchema,
 	runOutcomeSchema,
 } from "@workspace/selena-visibility-contracts";
-import type { SelenaExecutablePermit, SelenaMeasurementAdapter, SelenaMeasurementPermit } from "../selena-measurement";
 import { type ExtractionContext, extractMeasurement } from "../selena-answer-extraction";
+import type { SelenaExecutablePermit, SelenaMeasurementAdapter, SelenaMeasurementPermit } from "../selena-measurement";
 import { estimateRunCostUsd } from "../usage/cost";
 
 // The provider seam for API View, and the only thing in this package that
@@ -271,6 +271,9 @@ export function createOpenRouterAdapter(deps: OpenRouterAdapterDeps): SelenaMeas
 						sources: [],
 						system: deps.system ?? deps.model,
 						model: deps.model,
+						// No search plugin is ever sent (isApiViewWebSearchEnabled), so
+						// this answer is the model's own knowledge by construction.
+						captureMode: "training_data",
 						context: await deps.resolveExtractionContext(permit),
 					});
 					// Validated here, not in the executor: a context that produces a

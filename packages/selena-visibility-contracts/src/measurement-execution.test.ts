@@ -87,6 +87,7 @@ describe("Selena measurement execution boundary", () => {
 			language: "en",
 			region: "ID",
 			extractorVersion: "selena-extract/1",
+			captureMode: "training_data" as const,
 			brand: "KORA Food Hall",
 			mention: true,
 			position: 2,
@@ -102,6 +103,17 @@ describe("Selena measurement execution boundary", () => {
 			measurement,
 		};
 		expect(runOutcomeSchema.parse(succeeded)).toEqual(succeeded);
+
+		// An adapter that did not establish how the answer was produced must not
+		// have one assumed for it: live search and training data are different
+		// observations, and defaulting either way would invent the difference.
+		const { captureMode: _unset, ...withoutCaptureMode } = measurement;
+		expect(runOutcomeSchema.parse({ ...succeeded, measurement: withoutCaptureMode }).measurement?.captureMode).toBe(
+			"unknown",
+		);
+		expect(
+			runOutcomeSchema.safeParse({ ...succeeded, measurement: { ...measurement, captureMode: "guessed" } }).success,
+		).toBe(false);
 
 		// No mention → no position: §12 averages position over mentions only.
 		expect(runOutcomeSchema.safeParse({ ...succeeded, measurement: { ...measurement, mention: false } }).success).toBe(

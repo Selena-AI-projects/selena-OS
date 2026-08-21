@@ -336,6 +336,7 @@ describe("OpenRouter measurement adapter", () => {
 			model: "anthropic/claude-haiku-4.5",
 			language: "en",
 			extractorVersion: "selena-extract/1",
+			captureMode: "training_data",
 			brand: "KORA Food Hall",
 			mention: true,
 			position: null,
