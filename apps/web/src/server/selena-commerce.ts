@@ -3,7 +3,9 @@ import { db } from "@workspace/lib/db/db";
 import { svOrders, svPayments } from "@workspace/lib/db/schema";
 import { createSelenaRepositories } from "@workspace/lib/selena-visibility-repositories";
 import {
+	assertPaymentAllowed,
 	calculateQuote,
+	paymentConfigFromEnv,
 	quoteCreateSchema,
 	quotePricingSchema,
 	SELENA_CHECKOUT_METADATA,
@@ -69,6 +71,9 @@ export const createSelenaTestPaymentFn = createServerFn({ method: "POST" })
 		}),
 	)
 	.handler(async ({ data }) => {
+		// The owner kill-switch: no payment path may mutate an order while
+		// SELENA_PAYMENTS_ENABLED is unset, regardless of provider.
+		assertPaymentAllowed(paymentConfigFromEnv(process.env), "test");
 		const context = await resolveSessionAuthContext();
 		const [order] = await db
 			.select({ id: svOrders.id, orderCap: svOrders.orderCap })

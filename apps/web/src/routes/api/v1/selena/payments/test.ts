@@ -1,7 +1,11 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { db } from "@workspace/lib/db/db";
 import { svOrders, svPayments } from "@workspace/lib/db/schema";
-import { SELENA_CHECKOUT_METADATA } from "@workspace/selena-visibility-contracts";
+import {
+	assertPaymentAllowed,
+	paymentConfigFromEnv,
+	SELENA_CHECKOUT_METADATA,
+} from "@workspace/selena-visibility-contracts";
 import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 import { resolveApiKeyAuthContext } from "../../../../../lib/selena-auth-context";
@@ -24,6 +28,19 @@ export const Route = createFileRoute("/api/v1/selena/payments/test")({
 							{ error: "Forbidden", message: "API key lacks client:write permission" },
 							{ status: 403 },
 						);
+					// The owner kill-switch: no payment path may mutate an order while
+					// SELENA_PAYMENTS_ENABLED is unset, regardless of provider.
+					try {
+						assertPaymentAllowed(paymentConfigFromEnv(process.env), "test");
+					} catch (gateError) {
+						return Response.json(
+							{
+								error: "Payments Disabled",
+								message: gateError instanceof Error ? gateError.message : "Payments are disabled",
+							},
+							{ status: 503 },
+						);
+					}
 					const parsed = bodySchema.safeParse(await request.json());
 					if (!parsed.success)
 						return Response.json({ error: "Validation Error", message: parsed.error.message }, { status: 400 });
@@ -63,7 +80,7 @@ export const Route = createFileRoute("/api/v1/selena/payments/test")({
 					if (payment)
 						await db
 							.update(svOrders)
-							.set({ status: "APPROVED", paidAt: new Date(), updatedAt: new Date() })
+							.set({ status: "PAID_REVIEW_REQUIRED", paidAt: new Date(), updatedAt: new Date() })
 							.where(and(eq(svOrders.id, order.id), eq(svOrders.organizationId, auth.tenantId)));
 					return Response.json(
 						payment ?? {

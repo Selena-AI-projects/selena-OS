@@ -7,6 +7,7 @@ import { generateReportJob, type GenerateReportData } from "./jobs/generate-repo
 import { scheduleMaintenanceJob, type ScheduleMaintenanceData } from "./jobs/schedule-maintenance";
 import { syncAuth0MembershipsJob, type SyncAuth0MembershipsData } from "./jobs/sync-auth0-memberships";
 import { analyzeBrandJob, type AnalyzeBrandData } from "./jobs/analyze-brand";
+import { selenaMeasureJob, type SelenaMeasureData } from "./jobs/selena-measure";
 
 /**
  * Wraps a pg-boss handler to report errors to Sentry before re-throwing.
@@ -61,6 +62,15 @@ export async function registerHandlers(boss: PgBoss): Promise<void> {
 		withSentry("schedule-maintenance", scheduleMaintenanceJob),
 	);
 	console.log("Registered handler: schedule-maintenance");
+
+	// localConcurrency 1: a commercial cycle's spend is bounded by its permits,
+	// and serial execution keeps that bound easy to observe.
+	await boss.work<SelenaMeasureData>(
+		"selena-measure",
+		{ localConcurrency: 1 },
+		withSentry("selena-measure", selenaMeasureJob),
+	);
+	console.log("Registered handler: selena-measure");
 
 	if (process.env.DEPLOYMENT_MODE === "whitelabel") {
 		await boss.work<SyncAuth0MembershipsData>(
