@@ -297,12 +297,10 @@ describe("OpenRouter measurement adapter", () => {
 		);
 	});
 
-	it("stays behind the owner gate: the adapter cannot be selected by configuration", () => {
+	it("is owner-approved but never inert: selection still requires registration", () => {
 		expect(inertMeasurementAdapters as readonly string[]).not.toContain("openrouter");
 		expect(() => assertAdapterAllowed("openrouter", ["noop"])).toThrow("SELENA_ADAPTER_NOT_REGISTERED");
-		// Registering it in the worker is still not enough to select it.
-		expect(() => assertAdapterAllowed("openrouter", ["noop", "openrouter"])).toThrow(
-			"SELENA_LIVE_ADAPTER_REQUIRES_OWNER_GO",
-		);
+		// The owner-go edit: registered and named, the adapter may now execute.
+		expect(() => assertAdapterAllowed("openrouter", ["noop", "openrouter"])).not.toThrow();
 	});
 });

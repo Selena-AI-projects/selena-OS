@@ -9,6 +9,16 @@ import { z } from "zod";
 export const inertMeasurementAdapters = ["noop", "stub"] as const;
 export type InertMeasurementAdapter = (typeof inertMeasurementAdapters)[number];
 
+/**
+ * The owner gate. Selecting an adapter outside this list is refused even when
+ * it is registered, so configuration alone can never turn spend on. Every
+ * name beyond the inert pair is an explicit owner decision made together with
+ * supplying credentials and a provider-side spend cap: `openrouter` (API View)
+ * is approved on those terms.
+ */
+export const ownerApprovedMeasurementAdapters = [...inertMeasurementAdapters, "openrouter"] as const;
+export type OwnerApprovedMeasurementAdapter = (typeof ownerApprovedMeasurementAdapters)[number];
+
 export type SelenaMeasurementConfig = {
 	enabled: boolean;
 	adapter: string;
@@ -27,13 +37,12 @@ export function assertMeasurementAllowed(config: SelenaMeasurementConfig): void 
 
 /**
  * A live adapter cannot be selected by configuration alone. Even a registered,
- * correctly named provider adapter is refused here, so switching one
- * environment variable can never turn spend on: the owner has to change this
- * allowlist deliberately, in code, alongside supplying credentials.
+ * correctly named provider adapter is refused here unless the owner has put it
+ * on the approved list deliberately, in code, alongside supplying credentials.
  */
 export function assertAdapterAllowed(adapterName: string, registered: readonly string[]): void {
 	if (!registered.includes(adapterName)) throw new Error("SELENA_ADAPTER_NOT_REGISTERED");
-	if (!(inertMeasurementAdapters as readonly string[]).includes(adapterName))
+	if (!(ownerApprovedMeasurementAdapters as readonly string[]).includes(adapterName))
 		throw new Error("SELENA_LIVE_ADAPTER_REQUIRES_OWNER_GO");
 }
 
