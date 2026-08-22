@@ -1,3 +1,4 @@
+import { createOpenRouterAdapter } from "@workspace/lib/adapters/openrouter-measurement-adapter";
 import { db } from "@workspace/lib/db/db";
 import { isMaintenanceEnabled } from "@workspace/lib/run-policy";
 import { createNoopMeasurementAdapter } from "@workspace/lib/selena-measurement";
@@ -8,6 +9,7 @@ import {
 	runMeasurementForPermit,
 } from "@workspace/lib/selena-run-executor";
 import { type SelenaRepositoryContext, createSelenaRepositories } from "@workspace/lib/selena-visibility-repositories";
+import { apiModelIds } from "@workspace/selena-visibility-contracts";
 import type { Job } from "pg-boss";
 
 export interface SelenaMeasureData {
@@ -17,15 +19,20 @@ export interface SelenaMeasureData {
 	actorId?: string;
 }
 
-// Only inert adapters are registered. A live provider adapter is a separate
-// owner decision: it needs credentials this deployment does not hold, and the
-// execution contract refuses any adapter outside its inert allowlist even when
-// one is registered here.
-//
-// The OpenRouter API View adapter is built and tested but deliberately absent
-// from this registry; "Turning measurement on" in SELENA_OWNER_OPERATING_GUIDE.md
-// is the wiring, the credentials and the allowlist edit it takes to select it.
+// The OpenRouter API View adapter is registered per job below (it needs the
+// job's tenant context to read scenario text); selecting it still takes
+// SELENA_MEASUREMENT_ADAPTER=openrouter plus the owner-approved allowlist in
+// the contracts package — "Turning measurement on" in
+// SELENA_OWNER_OPERATING_GUIDE.md walks the full chain.
 const ADAPTERS: MeasurementAdapterRegistry = { noop: createNoopMeasurementAdapter() };
+
+/** A run measures the model the customer bought, so only catalog ids pass. */
+function openRouterModelFromEnv(env: Record<string, string | undefined>): string {
+	const requested = env.SELENA_OPENROUTER_MODEL ?? "anthropic/claude-haiku-4.5";
+	if (!(apiModelIds as readonly string[]).includes(requested))
+		throw new Error(`SELENA_OPENROUTER_MODEL must be a catalog API View model id, got "${requested}"`);
+	return requested;
+}
 
 /**
  * Executes one already-minted run permit. Nothing enqueues this job on a
@@ -50,11 +57,20 @@ export async function selenaMeasureJob(jobs: Job<SelenaMeasureData>[]): Promise<
 			authType: "session",
 			permissions: [],
 		};
+		const adapters: MeasurementAdapterRegistry = {
+			...ADAPTERS,
+			openrouter: createOpenRouterAdapter({
+				apiKey: process.env.OPENROUTER_API_KEY ?? "",
+				model: openRouterModelFromEnv(process.env),
+				fetchImpl: fetch,
+				resolveScenarioText: (permit) => repositories.scenarios.textFor(ctx, permit.scenarioId),
+			}),
+		};
 		const result = await runMeasurementForPermit({
 			permitId: job.data.permitId,
 			ctx,
 			store: repositories.runs,
-			adapters: ADAPTERS,
+			adapters,
 			config,
 			cycleState: { globalEmergencyStop: process.env.SELENA_EMERGENCY_STOP === "true" },
 		});

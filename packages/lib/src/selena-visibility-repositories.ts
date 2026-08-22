@@ -319,6 +319,18 @@ export function createSelenaRepositories(db: Db) {
 					.select()
 					.from(schema.svScenarios)
 					.where(and(eq(schema.svScenarios.familyId, familyId), eq(schema.svScenarios.organizationId, ctx.tenantId))),
+			// A permit carries a scenario id, not the question, and measurement
+			// adapters hold no database access on purpose — this is the single
+			// tenant-scoped read they are handed instead.
+			textFor: async (ctx: SelenaRepositoryContext, scenarioId: string): Promise<string> => {
+				const [row] = await db
+					.select({ text: schema.svScenarios.text })
+					.from(schema.svScenarios)
+					.where(and(eq(schema.svScenarios.id, scenarioId), eq(schema.svScenarios.organizationId, ctx.tenantId)))
+					.limit(1);
+				if (!row) throw new Error("Not found: scenario is outside AuthContext tenant");
+				return row.text;
+			},
 			create: async (
 				ctx: SelenaRepositoryContext,
 				value: Omit<typeof schema.svScenarios.$inferInsert, "organizationId">,
