@@ -6,6 +6,7 @@ import { Label } from "@workspace/ui/components/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@workspace/ui/components/table";
 import { Textarea } from "@workspace/ui/components/textarea";
 import { useCallback, useEffect, useState } from "react";
+import { SelenaOrderDesk } from "@/components/selena-order-desk";
 import {
 	approveSelenaOrderFn,
 	enqueueSelenaOrderRunsFn,
@@ -223,6 +224,8 @@ function SelenaAdminOrders() {
 					)}
 				</p>
 			)}
+
+			<SelenaOrderDesk locale={locale} onOrderCreated={() => void router.invalidate()} />
 
 			<Card>
 				<CardHeader>

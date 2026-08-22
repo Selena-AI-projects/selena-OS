@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 export const SELENA_CATALOG_VERSION = "selena-catalog-rc6-v1" as const;
-export const SELENA_SELLER_LEGAL_ENTITY = "PT Izi Jiza Bali" as const;
+export const SELENA_SELLER_LEGAL_ENTITY = "Selena Systems LLC" as const;
 export const SELENA_CHECKOUT_METADATA = {
 	sellerLegalEntity: SELENA_SELLER_LEGAL_ENTITY,
 	sellerStatus: "temporary_owner_approved_pending_kyc",
