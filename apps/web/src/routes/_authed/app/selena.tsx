@@ -980,6 +980,8 @@ function ResultsPanel({ project, locale }: { project: WorkspaceProject; locale: 
 								"What customers see in live AI answer surfaces.",
 								"Что клиенты видят в пользовательских AI-сервисах.",
 							)}
+							href={visibilityPlanUrl(locale, "snapshot")}
+							planLabel={tr(locale, "Snapshot plan · $49/mo", "План Snapshot · $49/мес")}
 						/>
 						<ChannelSummary
 							title="API View"
@@ -989,6 +991,8 @@ function ResultsPanel({ project, locale }: { project: WorkspaceProject; locale: 
 								"A separate model-knowledge baseline without web search by default.",
 								"Отдельная проверка знаний моделей; веб-поиск по умолчанию выключен.",
 							)}
+							href={visibilityPlanUrl(locale, "landscape")}
+							planLabel={tr(locale, "In the Landscape plan · $79/mo", "Входит в Landscape · $79/мес")}
 						/>
 					</div>
 					{project.measurement ? (
@@ -997,11 +1001,7 @@ function ResultsPanel({ project, locale }: { project: WorkspaceProject; locale: 
 								? `Проверено ответов: ${project.measurement.completedRuns} из ${project.measurement.expectedRuns}`
 								: `${project.measurement.completedRuns} of ${project.measurement.expectedRuns} answers checked`}
 						</p>
-					) : (
-						<a href={visibilityPlansUrl(locale)} className="selena-text-button mt-4 inline-flex">
-							{tr(locale, "Choose a visibility plan", "Выбрать план проверки")} <IconArrowRight className="size-4" />
-						</a>
-					)}
+					) : null}
 				</div>
 			</div>
 		</section>
@@ -1011,20 +1011,40 @@ function ResultsPanel({ project, locale }: { project: WorkspaceProject; locale: 
 /**
  * The plan ladder, not the AI-audit brief: someone who just finished a free
  * website review is buying a visibility measurement, and the audit form asks
- * about a different product entirely.
+ * about a different product entirely. Anchors land on the exact plan card.
  */
-function visibilityPlansUrl(locale: WorkspaceLocale): string {
+function visibilityPlanUrl(locale: WorkspaceLocale, anchor: "snapshot" | "landscape"): string {
 	const path = locale === "ru" ? "/ru/visibility" : "/visibility";
-	return `https://www.selenasystems.com${path}#plans`;
+	return `https://www.selenasystems.com${path}#${anchor}`;
 }
 
-function ChannelSummary({ title, systems, description }: { title: string; systems: string; description: string }) {
+function ChannelSummary({
+	title,
+	systems,
+	description,
+	href,
+	planLabel,
+}: {
+	title: string;
+	systems: string;
+	description: string;
+	href: string;
+	planLabel: string;
+}) {
 	return (
-		<div className="rounded-xl border border-[#e6ddd1] bg-[#fbf7f1] p-4">
+		<a
+			href={href}
+			target="_blank"
+			rel="noopener noreferrer"
+			className="block rounded-xl border border-[#e6ddd1] bg-[#fbf7f1] p-4 transition-colors hover:border-[#8f5c34]"
+		>
 			<p className="font-medium text-[#181614]">{title}</p>
 			<p className="mt-1 text-xs font-semibold uppercase tracking-[0.08em] text-[#8f5c34]">{systems}</p>
 			<p className="mt-2 text-sm leading-6 text-[#6e6258]">{description}</p>
-		</div>
+			<p className="mt-3 inline-flex items-center gap-1 text-sm font-medium text-[#8f5c34]">
+				{planLabel} <IconArrowRight className="size-4" />
+			</p>
+		</a>
 	);
 }
 
