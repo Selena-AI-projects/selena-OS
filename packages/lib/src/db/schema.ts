@@ -11,6 +11,7 @@ import {
 	smallint,
 	text,
 	timestamp,
+	unique,
 	uniqueIndex,
 	uuid,
 } from "drizzle-orm/pg-core";
@@ -133,6 +134,40 @@ export const promptRuns = pgTable(
 		),
 		providerIdx: index("prompt_runs_provider_idx").on(table.provider),
 		modelCreatedAtIdx: index("prompt_runs_model_created_at_idx").on(table.model, table.createdAt),
+	}),
+).enableRLS();
+
+/**
+ * Derived hourly rollup of prompt_runs for dashboard reads. prompt_runs stays
+ * the source of truth: rows here are written in the same transaction as the
+ * run insert, rebuilt by the 0031 migration backfill, and re-checked by the
+ * worker's trailing-window reconciler. Hour buckets (not days) so any
+ * whole-hour timezone can assemble its own local days at read time.
+ */
+export const promptRunHourlyAggregates = pgTable(
+	"prompt_run_hourly_aggregates",
+	{
+		promptId: uuid("prompt_id")
+			.references(() => prompts.id, { onDelete: "cascade" })
+			.notNull(),
+		brandId: text("brand_id")
+			.references(() => brands.id, { onDelete: "cascade" })
+			.notNull(),
+		model: text("model").notNull(),
+		// Part of the key, not just metadata: the dashboard's premium/standard
+		// model filter tests web_search_enabled + provider, so the rollup must
+		// keep those dimensions apart to answer it exactly.
+		provider: text("provider"),
+		webSearchEnabled: boolean("web_search_enabled").notNull(),
+		hourBucket: timestamp("hour_bucket", { withTimezone: true }).notNull(),
+		totalRuns: integer("total_runs").notNull(),
+		brandMentionedCount: integer("brand_mentioned_count").notNull(),
+	},
+	(table) => ({
+		bucketUnique: unique("prompt_run_hourly_aggregates_bucket_unique")
+			.on(table.promptId, table.model, table.provider, table.webSearchEnabled, table.hourBucket)
+			.nullsNotDistinct(),
+		brandHourIdx: index("prompt_run_hourly_aggregates_brand_hour_idx").on(table.brandId, table.hourBucket),
 	}),
 ).enableRLS();
 

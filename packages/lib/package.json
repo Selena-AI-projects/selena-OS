@@ -22,6 +22,7 @@
 		"./constants": "./src/constants.ts",
 		"./expedite": "./src/expedite.ts",
 		"./run-backoff": "./src/run-backoff.ts",
+		"./prompt-run-aggregates": "./src/prompt-run-aggregates.ts",
 		"./text-extraction": "./src/text-extraction.ts",
 		"./onboarding": "./src/onboarding/index.ts",
 		"./tag-utils": "./src/tag-utils.ts",

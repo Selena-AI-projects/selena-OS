@@ -218,6 +218,13 @@
 			"when": 1787248800000,
 			"tag": "0030_selena_capture_mode",
 			"breakpoints": true
+		},
+		{
+			"idx": 31,
+			"version": "7",
+			"when": 1787335200000,
+			"tag": "0031_prompt_run_hourly_aggregates",
+			"breakpoints": true
 		}
 	]
 }

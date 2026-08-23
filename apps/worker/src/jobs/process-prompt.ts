@@ -2,6 +2,7 @@ import * as Sentry from "@sentry/node";
 import { getDeployment } from "@workspace/deployment";
 import { getDefaultDelayHours } from "@workspace/lib/constants";
 import { db } from "@workspace/lib/db/db";
+import { upsertPromptRunAggregate } from "@workspace/lib/prompt-run-aggregates";
 import {
 	type Brand,
 	brands,
@@ -253,23 +254,35 @@ async function savePromptRun(
 	brandMentioned: boolean,
 	competitorsMentioned: string[],
 ): Promise<{ id: string; createdAt: Date }> {
-	const [result] = await db
-		.insert(promptRuns)
-		.values({
+	// The hourly rollup commits with the run so dashboard reads can trust it;
+	// see packages/lib/src/prompt-run-aggregates.ts.
+	return db.transaction(async (tx) => {
+		const [result] = await tx
+			.insert(promptRuns)
+			.values({
+				promptId,
+				brandId,
+				model,
+				provider,
+				version,
+				webSearchEnabled,
+				rawOutput,
+				webQueries,
+				brandMentioned,
+				competitorsMentioned,
+			})
+			.returning({ id: promptRuns.id, createdAt: promptRuns.createdAt });
+		await upsertPromptRunAggregate(tx, {
 			promptId,
 			brandId,
 			model,
 			provider,
-			version,
 			webSearchEnabled,
-			rawOutput,
-			webQueries,
+			createdAt: result.createdAt,
 			brandMentioned,
-			competitorsMentioned,
-		})
-		.returning({ id: promptRuns.id, createdAt: promptRuns.createdAt });
-
-	return result;
+		});
+		return result;
+	});
 }
 
 async function saveCitations(
