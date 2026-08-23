@@ -225,6 +225,46 @@ async function main(): Promise<void> {
 		scenarioSnapshot: [],
 	});
 
+	// The question-approval path (cabinet step 2): only a PROPOSED question can
+	// be decided, editing is part of the decision, every decision leaves an
+	// audit row, and a decided question cannot be silently re-decided.
+	{
+		const reviewFamily = await repositories.families.create(ctx, {
+			projectId: project.id,
+			intentType: "discovery",
+			source: "stub-cycle",
+			status: "APPROVED",
+		});
+		const proposed = await repositories.scenarios.create(ctx, {
+			familyId: reviewFamily.id,
+			text: "Where is good coffee in Canggu?",
+			language: "en",
+			status: "PROPOSED",
+		});
+		const approved = await repositories.scenarios.review(ctx, proposed.id, {
+			decision: "APPROVED",
+			text: "Where is the best coffee in Canggu?",
+		});
+		check(approved.status === "APPROVED" && approved.text === "Where is the best coffee in Canggu?",
+			"review approved the question with its edited text");
+		let reReviewRefused = false;
+		try {
+			await repositories.scenarios.review(ctx, proposed.id, { decision: "REJECTED" });
+		} catch (error) {
+			reReviewRefused = error instanceof Error && error.message === "SELENA_SCENARIO_NOT_REVIEWABLE";
+		}
+		check(reReviewRefused, "a decided question cannot be silently re-decided");
+		const reviewAudit = await db
+			.select()
+			.from(schema.svAuditEvents)
+			.where(and(eq(schema.svAuditEvents.organizationId, ORG), eq(schema.svAuditEvents.event, "SCENARIO_APPROVED")));
+		check(
+			reviewAudit.length === 1 &&
+				(reviewAudit[0]?.details as { textEdited?: boolean })?.textEdited === true,
+			"the approval left one audit row recording the text edit",
+		);
+	}
+
 	const scenarioKinds = new Map<string, LedgerScenarioKind>();
 	for (const kind of ["branded", "discovery"] as const) {
 		const family = await repositories.families.create(ctx, {

@@ -26,6 +26,11 @@ import { groupView, formatShare, type GroupView } from "@/lib/selena-measurement
 import { createSelenaProjectFn, getSelenaWorkspaceFn } from "../../../server/selena-client";
 import { getSelenaMeasurementFn, type MeasurementView } from "../../../server/selena-measurement-view";
 import {
+	listSelenaScenariosFn as getSelenaScenariosListFn,
+	reviewSelenaScenarioFn,
+	type ScenarioListItem,
+} from "../../../server/selena-scenarios";
+import {
 	cancelSelenaProfileSuggestionFn,
 	confirmSelenaProfileFn,
 	getSelenaProfileSuggestionFn,
@@ -493,6 +498,7 @@ function SelenaWorkspace() {
 								feedback={feedbackScope === "website" ? { notice, error } : undefined}
 								onCollect={collectWebsite}
 							/>
+							<QuestionsPanel project={selectedProject} locale={locale} />
 							<MeasurementPanel project={selectedProject} locale={locale} />
 							<ResultsPanel project={selectedProject} locale={locale} />
 						</>
@@ -883,6 +889,151 @@ function WebsiteEvidence({
 				</p>
 			)}
 			<FormFeedback feedback={feedback} className="mt-5" />
+		</section>
+	);
+}
+
+/**
+ * Step 2 of the cabinet: approving the questions a paid cycle will ask. The
+ * backend has always refused to order unapproved scenarios; this screen makes
+ * that decision the customer's. Text can be edited only as part of the
+ * decision — the same single repository path the operator desk uses.
+ */
+function QuestionsPanel({ project, locale }: { project: WorkspaceProject; locale: WorkspaceLocale }) {
+	const [scenarios, setScenarios] = useState<ScenarioListItem[] | null>(null);
+	const [failed, setFailed] = useState(false);
+	const [drafts, setDrafts] = useState<Record<string, string>>({});
+	const [busyId, setBusyId] = useState("");
+	const [rowError, setRowError] = useState("");
+
+	const load = () => {
+		getSelenaScenariosListFn({ data: { projectId: project.project.id } })
+			.then((data) => setScenarios(data.scenarios))
+			.catch(() => setFailed(true));
+	};
+	// biome-ignore lint/correctness/useExhaustiveDependencies: reload only when the project changes
+	useEffect(load, [project.project.id]);
+
+	const decide = async (scenario: ScenarioListItem, decision: "APPROVED" | "REJECTED") => {
+		setBusyId(scenario.id);
+		setRowError("");
+		try {
+			const draft = drafts[scenario.id];
+			await reviewSelenaScenarioFn({
+				data: {
+					scenarioId: scenario.id,
+					decision,
+					...(draft !== undefined && draft !== scenario.text ? { text: draft } : {}),
+				},
+			});
+			load();
+		} catch (cause) {
+			setRowError(
+				humanizeSelenaError(
+					cause,
+					locale,
+					tr(locale, "Could not save the decision. Try again.", "Не удалось сохранить решение. Попробуйте ещё раз."),
+				),
+			);
+		} finally {
+			setBusyId("");
+		}
+	};
+
+	const proposed = scenarios?.filter((item) => item.status === "PROPOSED") ?? [];
+	const decided = scenarios?.filter((item) => item.status !== "PROPOSED") ?? [];
+
+	return (
+		<section className="selena-section" aria-labelledby="questions-title">
+			<div className="flex gap-4">
+				<div className="selena-icon-disc">
+					<IconCheck className="size-5" />
+				</div>
+				<div>
+					<h2 id="questions-title" className="selena-heading text-2xl">
+						{tr(locale, "Approve the questions", "Утвердите вопросы")}
+					</h2>
+					<p className="mt-2 max-w-2xl text-sm leading-6 text-[#6e6258]">
+						{tr(
+							locale,
+							"A paid measurement asks only questions you approved. Edit the wording if needed, then approve or reject each one — nothing runs on unapproved questions.",
+							"Платный замер задаёт только утверждённые вами вопросы. Поправьте формулировку, если нужно, и утвердите или отклоните каждый — по неутверждённым вопросам ничего не запускается.",
+						)}
+					</p>
+				</div>
+			</div>
+			{failed ? (
+				<p className="mt-5 text-sm text-[#9a5f14]">
+					{tr(locale, "Could not load the questions.", "Не удалось загрузить вопросы.")}
+				</p>
+			) : scenarios === null ? (
+				<p className="mt-5 text-sm text-[#6e6258]">{tr(locale, "Loading…", "Загружаем…")}</p>
+			) : scenarios.length === 0 ? (
+				<p className="mt-5 rounded-lg border border-dashed border-[#cdbdac] bg-[#fffdf8] px-4 py-3 text-sm text-[#6e6258]">
+					{tr(
+						locale,
+						"No questions proposed yet. They appear here after the profile is confirmed and questions are prepared.",
+						"Вопросов пока не предложено. Они появятся здесь после подтверждения профиля и подготовки вопросов.",
+					)}
+				</p>
+			) : (
+				<div className="mt-5 flex flex-col gap-3">
+					{rowError && <p className="text-sm text-[#9a5f14]">{rowError}</p>}
+					{proposed.map((scenario) => (
+						<div key={scenario.id} className="rounded-lg border border-[#e5dbcd] bg-[#fffdf8] p-4">
+							<p className="text-xs uppercase tracking-wide text-[#6e6258]">
+								{scenario.language.toUpperCase()} ·{" "}
+								{scenario.intentType === "branded"
+									? tr(locale, "names the brand", "с названием бренда")
+									: tr(locale, "category question", "вопрос про категорию")}
+							</p>
+							<Input
+								className="mt-2"
+								value={drafts[scenario.id] ?? scenario.text}
+								onChange={(event) =>
+									setDrafts((current) => ({ ...current, [scenario.id]: event.target.value }))
+								}
+							/>
+							<div className="mt-3 flex gap-2">
+								<Button
+									type="button"
+									size="sm"
+									disabled={busyId === scenario.id}
+									onClick={() => decide(scenario, "APPROVED")}
+								>
+									{tr(locale, "Approve", "Утвердить")}
+								</Button>
+								<Button
+									type="button"
+									size="sm"
+									variant="outline"
+									disabled={busyId === scenario.id}
+									onClick={() => decide(scenario, "REJECTED")}
+								>
+									{tr(locale, "Reject", "Отклонить")}
+								</Button>
+							</div>
+						</div>
+					))}
+					{decided.length > 0 && (
+						<div className="rounded-lg border border-[#e5dbcd] bg-[#fffdf8] p-4">
+							<h3 className="text-sm font-semibold text-[#3d362e]">{tr(locale, "Decided", "Решённые")}</h3>
+							<ul className="mt-2 flex flex-col gap-1 text-sm text-[#3d362e]">
+								{decided.map((scenario) => (
+									<li key={scenario.id} className="flex items-start justify-between gap-3">
+										<span>{scenario.text}</span>
+										<span className="shrink-0 text-xs text-[#6e6258]">
+											{scenario.status === "APPROVED"
+												? tr(locale, "approved", "утверждён")
+												: tr(locale, "rejected", "отклонён")}
+										</span>
+									</li>
+								))}
+							</ul>
+						</div>
+					)}
+				</div>
+			)}
 		</section>
 	);
 }

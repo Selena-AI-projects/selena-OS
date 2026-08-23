@@ -455,6 +455,52 @@ export function createSelenaRepositories(db: Db) {
 						.returning()
 				)[0];
 			},
+			/**
+			 * The one path a question changes status — customer screen and
+			 * operator desk both come through here, so there is no second
+			 * status model to drift. Only a PROPOSED question can be decided,
+			 * and its text can only be edited as part of that decision: an
+			 * approved question is what the order will freeze, and editing it
+			 * afterwards would sell text nobody reviewed.
+			 */
+			review: async (
+				ctx: SelenaRepositoryContext,
+				scenarioId: string,
+				value: { decision: "APPROVED" | "REJECTED"; text?: string },
+			) => {
+				writable(ctx);
+				const [scenario] = await db
+					.select()
+					.from(schema.svScenarios)
+					.where(
+						and(eq(schema.svScenarios.id, scenarioId), eq(schema.svScenarios.organizationId, ctx.tenantId)),
+					)
+					.limit(1);
+				if (!scenario) throw new Error("Not found: scenario is outside AuthContext tenant");
+				if (scenario.status !== "PROPOSED") throw new Error("SELENA_SCENARIO_NOT_REVIEWABLE");
+				const editedText = value.text?.trim();
+				if (editedText !== undefined && editedText === "") throw new Error("SELENA_SCENARIO_TEXT_EMPTY");
+				const [updated] = await db
+					.update(schema.svScenarios)
+					.set({
+						status: value.decision,
+						...(editedText === undefined ? {} : { text: editedText }),
+						updatedAt: new Date(),
+					})
+					.where(
+						and(eq(schema.svScenarios.id, scenarioId), eq(schema.svScenarios.organizationId, ctx.tenantId)),
+					)
+					.returning();
+				await recordAudit(
+					db,
+					ctx,
+					value.decision === "APPROVED" ? "SCENARIO_APPROVED" : "SCENARIO_REJECTED",
+					"sv_scenarios",
+					scenarioId,
+					{ familyId: scenario.familyId, textEdited: editedText !== undefined && editedText !== scenario.text },
+				);
+				return updated;
+			},
 		},
 		entities: {
 			list: (ctx: SelenaRepositoryContext, projectId: string) =>
