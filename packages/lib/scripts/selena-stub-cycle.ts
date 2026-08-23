@@ -18,7 +18,7 @@ import { and, eq } from "drizzle-orm";
 import { createStubMeasurementAdapter } from "../src/adapters/stub-measurement-adapter";
 import { db } from "../src/db/db";
 import * as schema from "../src/db/schema";
-import { createSelenaMeasurementResolvers } from "../src/selena-extraction-context";
+import { createSelenaMeasurementResolvers, lockedProfileBlock } from "../src/selena-extraction-context";
 import { computeLedgerReport, type LedgerScenarioKind } from "../src/selena-ledger-metrics";
 import { runMeasurementForPermit } from "../src/selena-run-executor";
 import { createSelenaRepositories, type SelenaRepositoryContext } from "../src/selena-visibility-repositories";
@@ -253,7 +253,19 @@ async function main(): Promise<void> {
 	const lock = await repositories.locks.create(ctx, {
 		projectId: project.id,
 		version: 1,
-		snapshot: { measurementScope: { scenarios, systems, repeats: REPEATS } },
+		snapshot: {
+			measurementScope: { scenarios, systems, repeats: REPEATS },
+			// Same block the order desk freezes: the rehearsal must exercise the
+			// resolver's preferred path, not its fallback to the live profile.
+			profile: lockedProfileBlock({
+				brandName: "KORA Food Hall",
+				primaryDomain: "https://korafoodhall.com",
+				competitorSnapshot: [
+					{ name: "Rival Cafe", domains: ["rivalcafe.id"] },
+					{ name: "Other Place", domains: [] },
+				],
+			}),
+		},
 		engineSha: "stub-cycle",
 		expectedRuns,
 		budgetCap: "0",
@@ -299,6 +311,16 @@ async function main(): Promise<void> {
 		"every permit carries the system it was sold as",
 	);
 
+	// A profile renamed after approval must not change what the cycle measures:
+	// the resolver prefers the lock's profile block, so every run below still
+	// extracts for the locked brand even though the live profile now names
+	// another one. If the fallback were used, no brand mention would match and
+	// the mention checks after the loop would fail.
+	await db
+		.update(schema.svProjectProfiles)
+		.set({ brandName: "Renamed After Approval" })
+		.where(eq(schema.svProjectProfiles.projectId, project.id));
+
 	for (const permit of dispatch.permits) {
 		const result = await runMeasurementForPermit({
 			permitId: permit.id,
@@ -320,6 +342,10 @@ async function main(): Promise<void> {
 		"every run is VALID and carries an extractor version",
 	);
 	check(mentions.length > 0, `${mentions.length} mention rows written`);
+	check(
+		mentions.some((mention) => mention.entityType === "BRAND" && mention.name === "KORA Food Hall"),
+		"extraction followed the locked profile, not the renamed live one",
+	);
 	check(
 		mentions.every((mention) => runIds.has(mention.runId)),
 		"every mention row belongs to a run of this cycle",
