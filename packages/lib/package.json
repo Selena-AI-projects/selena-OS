@@ -57,6 +57,7 @@
 		"./selena-run-executor": "./src/selena-run-executor.ts",
 		"./selena-answer-extraction": "./src/selena-answer-extraction.ts",
 		"./selena-citation-gap": "./src/selena-citation-gap.ts",
+		"./selena-cycle-diff": "./src/selena-cycle-diff.ts",
 		"./selena-answer-retention": "./src/selena-answer-retention.ts",
 		"./selena-raw-evidence-storage": "./src/selena-raw-evidence-storage.ts",
 		"./selena-suggest-metering": "./src/selena-suggest-metering.ts",

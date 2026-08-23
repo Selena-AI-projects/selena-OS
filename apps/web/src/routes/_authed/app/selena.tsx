@@ -25,6 +25,8 @@ import type { LedgerReport } from "@workspace/lib/selena-ledger-metrics";
 import { groupView, formatShare, type GroupView } from "@/lib/selena-measurement-view";
 import { createSelenaProjectFn, getSelenaWorkspaceFn } from "../../../server/selena-client";
 import { getSelenaMeasurementFn, type MeasurementView } from "../../../server/selena-measurement-view";
+import type { CycleDiffChange } from "@workspace/lib/selena-cycle-diff";
+import { getSelenaCycleCompareFn, type CycleCompareResult } from "../../../server/selena-cycle-compare";
 import {
 	getSelenaRunDetailFn,
 	listSelenaRunsFn,
@@ -1105,13 +1107,13 @@ function MeasurementPanel({ project, locale }: { project: WorkspaceProject; loca
 			) : view === null ? (
 				<p className="mt-5 text-sm text-[#6e6258]">{tr(locale, "Loading…", "Загружаем…")}</p>
 			) : (
-				<MeasurementReport view={view} locale={locale} />
+				<MeasurementReport view={view} locale={locale} projectId={project.project.id} />
 			)}
 		</section>
 	);
 }
 
-function MeasurementReport({ view, locale }: { view: MeasurementView; locale: WorkspaceLocale }) {
+function MeasurementReport({ view, locale, projectId }: { view: MeasurementView; locale: WorkspaceLocale; projectId: string }) {
 	const latest = view.latest;
 	const cycle = view.cycles[0];
 	if (!latest || !cycle) {
@@ -1154,6 +1156,103 @@ function MeasurementReport({ view, locale }: { view: MeasurementView; locale: Wo
 				</p>
 			)}
 			<RunExplorer cycleId={latest.cycleId} locale={locale} />
+			<CycleComparePanel cycleCount={view.cycles.length} locale={locale} projectId={projectId} />
+		</div>
+	);
+}
+
+/**
+ * Step 7: what changed between the two newest cycles — and in which measured
+ * answers. Deliberately never "thanks to us": engines and competitors change
+ * over the same weeks, and the diff states observations, not causes.
+ */
+function CycleComparePanel({
+	cycleCount,
+	locale,
+	projectId,
+}: {
+	cycleCount: number;
+	locale: WorkspaceLocale;
+	projectId: string;
+}) {
+	const [result, setResult] = useState<CycleCompareResult | null>(null);
+
+	useEffect(() => {
+		if (cycleCount < 2 || !projectId) return;
+		let cancelled = false;
+		getSelenaCycleCompareFn({ data: { projectId } })
+			.then((data) => {
+				if (!cancelled) setResult(data);
+			})
+			.catch(() => {});
+		return () => {
+			cancelled = true;
+		};
+	}, [cycleCount, projectId]);
+
+	if (cycleCount < 2)
+		return (
+			<p className="rounded-lg border border-dashed border-[#cdbdac] bg-[#fffdf8] px-4 py-3 text-sm text-[#6e6258]">
+				{tr(
+					locale,
+					"Comparison between measurements opens after the second cycle.",
+					"Сравнение между замерами откроется после второго цикла.",
+				)}
+			</p>
+		);
+	if (!result || !result.comparable) return null;
+
+	const label = (change: CycleDiffChange): string => {
+		switch (change.type) {
+			case "MENTION_APPEARED":
+				return tr(locale, "the brand is now mentioned", "бренд теперь упоминается");
+			case "MENTION_DISAPPEARED":
+				return tr(locale, "the brand is no longer mentioned", "бренд больше не упоминается");
+			case "POSITION_SHIFTED":
+				return `${tr(locale, "position", "позиция")} ${change.basePosition} → ${change.comparePosition}`;
+			case "SOURCE_APPEARED":
+				return `${tr(locale, "new cited source", "новый цитируемый источник")}: ${change.domain}`;
+			case "SOURCE_DISAPPEARED":
+				return `${tr(locale, "source no longer cited", "источник больше не цитируется")}: ${change.domain}`;
+		}
+	};
+
+	const unknownGroups = result.report.groups.filter((group) => group.status === "UNKNOWN");
+	return (
+		<div className="rounded-lg border border-[#e5dbcd] bg-[#fffdf8] p-4">
+			<h3 className="text-sm font-semibold text-[#3d362e]">
+				{tr(locale, "What changed between the measurements", "Что изменилось между замерами")}
+			</h3>
+			<p className="mt-1 text-xs text-[#6e6258]">
+				{tr(
+					locale,
+					"Observed differences only — engines and competitors also change over the same period.",
+					"Только наблюдаемые различия — за то же время меняются и движки, и конкуренты.",
+				)}
+			</p>
+			{result.report.changes.length === 0 ? (
+				<p className="mt-2 text-sm text-[#6e6258]">
+					{tr(locale, "No differences in the compared groups.", "В сравнимых группах различий нет.")}
+				</p>
+			) : (
+				<ul className="mt-2 flex flex-col gap-1 text-sm text-[#3d362e]">
+					{result.report.changes.map((change, index) => (
+						<li key={`${change.type}-${change.scenarioId}-${change.system}-${index}`}>
+							{change.system} · {label(change)}{" "}
+							<span className="text-xs text-[#6e6258]">
+								({tr(locale, "measured in", "измерено в")} {change.evidence.baseRunIds.length}+
+								{change.evidence.compareRunIds.length} {tr(locale, "answers", "ответах")})
+							</span>
+						</li>
+					))}
+				</ul>
+			)}
+			{unknownGroups.length > 0 && (
+				<p className="mt-2 text-xs text-[#6e6258]">
+					{tr(locale, "Groups not comparable between the cycles", "Группы, несравнимые между циклами")}:{" "}
+					{unknownGroups.length}
+				</p>
+			)}
 		</div>
 	);
 }
