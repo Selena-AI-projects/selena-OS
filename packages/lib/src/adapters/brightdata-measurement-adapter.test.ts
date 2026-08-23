@@ -118,6 +118,7 @@ describe("Bright Data measurement adapter", () => {
 			status: "SUCCEEDED",
 			validity: "VALID",
 			rawResponseReference: "brightdata:s_01HZY",
+			sources: [{ url: "https://example.test/spa", domain: "example.test", title: "Spa guide" }],
 			costUsd: estimateRunCostUsd("brightdata", true),
 			costBasis: "estimated",
 			provider: "brightdata",
@@ -401,6 +402,24 @@ describe("Bright Data measurement adapter", () => {
 		expect(() => assertAdapterAllowed("brightdata", ["noop", "brightdata"])).toThrow(
 			"SELENA_LIVE_ADAPTER_REQUIRES_OWNER_GO",
 		);
+	});
+
+	it("carries the displayed sources on the outcome, with or without extraction", async () => {
+		const payload = successPayload({
+			citations: [{ url: "https://guide.example/best-spas", title: "Best spas" }],
+			links_attached: ["https://maps.example/place/1", "https://guide.example/best-spas"],
+			sources: [{ url: "not a url" }, { url: "ftp://guide.example/file" }],
+		});
+		const outcome = await adapterWith(respondWith(jsonResponse(payload))).execute(permitFor());
+		expect(() => runOutcomeSchema.parse(outcome)).not.toThrow();
+		expect(outcome.sources).toEqual([
+			{ url: "https://guide.example/best-spas", domain: "guide.example", title: "Best spas" },
+			{ url: "https://maps.example/place/1", domain: "maps.example" },
+		]);
+		expect(outcome.measurement).toBeUndefined();
+
+		const bare = await adapterWith(respondWith(jsonResponse(successPayload({ citations: [] })))).execute(permitFor());
+		expect(bare.sources).toBeUndefined();
 	});
 
 	it("attaches a measurement when an extraction context is supplied, and stays silent without one", async () => {

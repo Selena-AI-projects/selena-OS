@@ -136,6 +136,24 @@ export const runOutcomeSchema = z
 				retainUntil: z.date(),
 			})
 			.optional(),
+		/**
+		 * What the Visitor View surface displayed as sources beside the answer.
+		 * A different origin from answer.citedUrls (the provider naming its own
+		 * sources) and from anything later derived from the answer text — the
+		 * three must never be pooled into one figure. Top-level rather than
+		 * inside answer because a surface whose answer text stays out of the row
+		 * (Bright Data keeps a reference, not the text) still shows citations,
+		 * and losing them with the text would erase evidence that was displayed.
+		 */
+		sources: z
+			.array(
+				z.strictObject({
+					url: z.string().min(1),
+					domain: z.string().min(1),
+					title: z.string().min(1).optional(),
+				}),
+			)
+			.optional(),
 		tokenUsage: z
 			.strictObject({ input: z.number().int().nonnegative(), output: z.number().int().nonnegative() })
 			.optional(),
