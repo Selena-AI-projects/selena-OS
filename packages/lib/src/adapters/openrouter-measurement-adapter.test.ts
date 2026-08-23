@@ -1,4 +1,5 @@
 import {
+	answerRetainUntil,
 	assertAdapterAllowed,
 	inertMeasurementAdapters,
 	type RunOutcome,
@@ -109,6 +110,10 @@ describe("OpenRouter measurement adapter", () => {
 			status: "SUCCEEDED",
 			validity: "VALID",
 			rawResponseReference: "openrouter:gen-01HZY",
+			// The answer is retained so competitor and citation analysis has
+			// something to read, and carries the window after which only its
+			// findings remain.
+			answer: { text: "Answer text mentioning two studios.", retainUntil: answerRetainUntil(now()) },
 			tokenUsage: { input: 12, output: 34 },
 			costUsd: 0.0042,
 		});
@@ -132,7 +137,7 @@ describe("OpenRouter measurement adapter", () => {
 		expect(outcome.status).toBe("SUCCEEDED");
 	});
 
-	it("references the response instead of storing it, and digests it when there is no generation id", async () => {
+	it("digests the response when there is no generation id, without repeating the answer into the reference", async () => {
 		const payload = successPayload({ id: null });
 		const outcome = await adapterWith(respondWith(jsonResponse(payload))).execute(permitFor());
 

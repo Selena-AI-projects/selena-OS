@@ -7,6 +7,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Textarea } from "@workspace/ui/components/textarea";
 import { useCallback, useEffect, useState } from "react";
 import { SelenaOrderDesk } from "@/components/selena-order-desk";
+import { analyzeSelenaOrderFn } from "@/server/selena-order-analysis";
 import {
 	approveSelenaOrderFn,
 	enqueueSelenaOrderRunsFn,
@@ -29,7 +30,7 @@ export const Route = createFileRoute("/_authed/app/selena-admin")({
 type QueueOrder = Awaited<ReturnType<typeof getSelenaAdminOrderQueueFn>>[number];
 type Preflight = Awaited<ReturnType<typeof getSelenaOrderPreflightFn>>;
 type AdminLocale = "en" | "ru";
-type AdminAction = "approve" | "enqueue" | "stop" | "qc";
+type AdminAction = "approve" | "enqueue" | "stop" | "qc" | "analyze";
 
 const emptyQcForm = { reviewer: "", scope: "", decision: "approved" as "approved" | "rejected", notes: "" };
 
@@ -46,6 +47,7 @@ function SelenaAdminOrders() {
 	const [measurementDisabled, setMeasurementDisabled] = useState(false);
 	const [stopReason, setStopReason] = useState("");
 	const [qcForm, setQcForm] = useState(emptyQcForm);
+	const [analysis, setAnalysis] = useState<Awaited<ReturnType<typeof analyzeSelenaOrderFn>> | null>(null);
 	const [notice, setNotice] = useState("");
 	const [error, setError] = useState("");
 	// One key per order and action, so retrying after a failed request replays
@@ -74,6 +76,7 @@ function SelenaAdminOrders() {
 	useEffect(() => {
 		if (!selectedOrder) {
 			setPreflight(null);
+			setAnalysis(null);
 			return;
 		}
 		void loadPreflight(selectedOrder.id);
@@ -369,7 +372,102 @@ function SelenaAdminOrders() {
 								>
 									{tr(locale, "Re-check", "Проверить снова")}
 								</Button>
+								<Button
+									type="button"
+									variant="outline"
+									disabled={pendingAction !== ""}
+									onClick={() =>
+										void (async () => {
+											setPendingAction("analyze");
+											setError("");
+											setNotice("");
+											try {
+												setAnalysis(await analyzeSelenaOrderFn({ data: { orderId: selectedOrder.id } }));
+											} catch (cause) {
+												setAnalysis(null);
+												setError(cause instanceof Error ? cause.message : "Analysis failed");
+											} finally {
+												setPendingAction("");
+											}
+										})()
+									}
+								>
+									{pendingAction === "analyze"
+										? tr(locale, "Reading answers…", "Читаем ответы…")
+										: tr(locale, "Read the answers", "Разобрать ответы")}
+								</Button>
 							</div>
+
+							{analysis && (
+								<div className="space-y-4 border-t pt-4 text-sm">
+									<p className="text-muted-foreground">
+										{tr(
+											locale,
+											`Read ${analysis.analyzed} answer(s); ${analysis.reused} reused past findings; ${analysis.withoutAnswer} had nothing to read.`,
+											`Разобрано ответов: ${analysis.analyzed}; взято из прежних находок: ${analysis.reused}; без текста: ${analysis.withoutAnswer}.`,
+										)}
+									</p>
+									<dl className="grid gap-4 sm:grid-cols-3">
+										<div>
+											<dt className="text-xs text-muted-foreground">
+												{tr(locale, "Answers naming the brand", "Ответов с упоминанием бренда")}
+											</dt>
+											<dd className="text-lg font-semibold">{formatShare(analysis.summary.brandMentionRate, locale)}</dd>
+										</div>
+										<div>
+											<dt className="text-xs text-muted-foreground">{tr(locale, "Share of voice", "Доля голоса")}</dt>
+											<dd className="text-lg font-semibold">
+												{formatShare(analysis.summary.brandShareOfVoice, locale)}
+											</dd>
+										</div>
+										<div>
+											<dt className="text-xs text-muted-foreground">
+												{tr(locale, "Average standing", "Средняя позиция")}
+											</dt>
+											<dd className="text-lg font-semibold">
+												{analysis.summary.brandAverageOrder === null
+													? tr(locale, "UNKNOWN", "НЕИЗВЕСТНО")
+													: analysis.summary.brandAverageOrder.toFixed(2)}
+											</dd>
+										</div>
+									</dl>
+									{analysis.summary.competitors.length > 0 && (
+										<div>
+											<p className="font-medium">{tr(locale, "Named instead", "Названы вместо вас")}</p>
+											<ul className="mt-2 space-y-1 text-muted-foreground">
+												{analysis.summary.competitors.slice(0, 8).map((competitor) => (
+													<li key={competitor.name}>
+														{competitor.name} — {competitor.answersMentioned}{" "}
+														{tr(locale, "answer(s)", "ответ(ов)")}, {tr(locale, "avg standing", "средняя позиция")}{" "}
+														{competitor.averageOrder.toFixed(2)}
+													</li>
+												))}
+											</ul>
+										</div>
+									)}
+									{analysis.summary.citationGap.length > 0 && (
+										<div>
+											<p className="font-medium">{tr(locale, "Citation gap", "Разрыв по источникам")}</p>
+											<p className="text-xs text-muted-foreground">
+												{tr(
+													locale,
+													"Sources the answers leaned on, ranked by how often the brand was absent from them.",
+													"Источники, на которые опирались ответы, по числу случаев, где бренда в них не было.",
+												)}
+											</p>
+											<ul className="mt-2 space-y-1 text-muted-foreground">
+												{analysis.summary.citationGap.slice(0, 10).map((entry) => (
+													<li key={entry.domain}>
+														{entry.domain} — {tr(locale, "cited", "цитирований")} {entry.timesCited},{" "}
+														{tr(locale, "without the brand", "без бренда")} {entry.timesCitedWithoutBrand}
+														{entry.ownedByBrand ? tr(locale, " (own site)", " (свой сайт)") : ""}
+													</li>
+												))}
+											</ul>
+										</div>
+									)}
+								</div>
+							)}
 							{selectedOrder.status !== "QUEUED" && (
 								<p className="text-xs text-muted-foreground">
 									{tr(
@@ -487,6 +585,12 @@ function SelenaAdminOrders() {
 			)}
 		</div>
 	);
+}
+
+/** An empty measurement reports UNKNOWN; a zero here would claim knowledge. */
+function formatShare(value: number | null, locale: AdminLocale): string {
+	if (value === null) return tr(locale, "UNKNOWN", "НЕИЗВЕСТНО");
+	return `${Math.round(value * 100)}%`;
 }
 
 function cycleSummary(order: QueueOrder): string {

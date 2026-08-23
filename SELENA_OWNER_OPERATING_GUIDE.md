@@ -108,7 +108,13 @@ What the adapter does and does not do, so the first invoice holds no surprises:
 - Web search is never enabled and no search plugin is sent: API View is the
   model's own knowledge, which is what the catalog sells it as.
 - The run row stores a reference to the answer — OpenRouter's generation id, or
-  a digest when the response carries none — not the answer itself.
+  a digest when the response carries none. Storing the answer text alongside it
+  is an owner decision taken deliberately (see `docs/selena-visibility/CABINET_MODEL.md`,
+  section 4a): competitor and citation analysis reads the answer, and the owner
+  chose retained text over extract-at-execution so metrics can be recomputed
+  without re-measuring. Retained text is tenant-scoped like every other run
+  field, holds the answer body only — never a provider error body, which can
+  echo the API key — and carries a retention window the owner sets.
 - `costUsd` is the cost OpenRouter reported for that call when it reports one,
   and the coarse local per-run estimate otherwise. The stored number does not
   say which it was, so reconcile against the provider invoice rather than
