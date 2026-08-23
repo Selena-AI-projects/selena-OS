@@ -23,10 +23,7 @@ const db = drizzle(process.env.DATABASE_URL!);
 // ============================================================================
 
 export interface DashboardSummary {
-	total_prompts: number;
 	total_runs: number;
-	avg_visibility: number;
-	non_branded_visibility: number;
 	last_updated: string | null;
 }
 
@@ -219,10 +216,7 @@ export async function getDashboardSummary(
 ): Promise<DashboardSummary[]> {
 	const rows = await queryPg<DashboardSummary>(sql`
 		SELECT
-			count(DISTINCT prompt_id)::int AS total_prompts,
 			count(*)::int AS total_runs,
-			round(count(*) FILTER (WHERE brand_mentioned) * 100.0 / NULLIF(count(*), 0), 0)::int AS avg_visibility,
-			round(count(*) FILTER (WHERE brand_mentioned) * 100.0 / NULLIF(count(*), 0), 0)::int AS non_branded_visibility,
 			to_char(max(created_at) AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS') || '.000Z' AS last_updated
 		FROM prompt_runs
 		WHERE brand_id = ${brandId}
