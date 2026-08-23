@@ -1149,6 +1149,7 @@ function MeasurementReport({ view, locale, projectId }: { view: MeasurementView;
 					group={groupView(latest.report.branded)}
 				/>
 			</div>
+			<RelativeMentionShare locale={locale} report={latest.report} />
 			<VisitorApiSplit locale={locale} report={latest.report} />
 			{latest.report.unclassifiedRuns > 0 && (
 				<p className="text-xs text-[#6e6258]">
@@ -1424,6 +1425,38 @@ function MeasurementGroup({ locale, title, group }: { locale: WorkspaceLocale; t
 					)}
 				</dl>
 			)}
+		</div>
+	);
+}
+
+/**
+ * The Share-of-Voice analog on ledger evidence (addendum §6.2): the brand's
+ * share among tracked-entity mentions, next to each confirmed competitor.
+ * Rendered under the mixed label because it pools branded and non-branded —
+ * the two group cards above stay the primary reading.
+ */
+function RelativeMentionShare({ locale, report }: { locale: WorkspaceLocale; report: LedgerReport }) {
+	const mixed = report.mixed.group;
+	if (mixed.status !== "MEASURED") return null;
+	const share = mixed.metrics.relativeMentionShare;
+	if (share.brand === null && share.competitors.length === 0) return null;
+	return (
+		<div className="rounded-lg border border-[#e5dbcd] bg-[#fffdf8] p-4 text-sm">
+			<h3 className="font-semibold text-[#3d362e]">
+				{tr(locale, "Share among tracked mentions (both groups pooled)", "Доля среди отслеживаемых упоминаний (обе группы вместе)")}
+			</h3>
+			<dl className="mt-2 grid gap-1 text-[#3d362e]">
+				<div className="flex justify-between gap-3">
+					<dt className="text-[#6e6258]">{tr(locale, "Your brand", "Ваш бренд")}</dt>
+					<dd>{formatShare(share.brand) ?? tr(locale, "unknown", "неизвестно")}</dd>
+				</div>
+				{share.competitors.map((competitor) => (
+					<div key={competitor.name} className="flex justify-between gap-3">
+						<dt className="text-[#6e6258]">{competitor.name}</dt>
+						<dd>{formatShare(competitor.share)}</dd>
+					</div>
+				))}
+			</dl>
 		</div>
 	);
 }
