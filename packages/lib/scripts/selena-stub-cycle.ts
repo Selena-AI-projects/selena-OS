@@ -18,6 +18,7 @@ import { and, eq } from "drizzle-orm";
 import { createStubMeasurementAdapter } from "../src/adapters/stub-measurement-adapter";
 import { db } from "../src/db/db";
 import * as schema from "../src/db/schema";
+import { expireAnswerTexts } from "../src/selena-answer-retention";
 import { createSelenaMeasurementResolvers, lockedProfileBlock } from "../src/selena-extraction-context";
 import { computeLedgerReport, type LedgerScenarioKind } from "../src/selena-ledger-metrics";
 import { runMeasurementForPermit } from "../src/selena-run-executor";
@@ -358,6 +359,43 @@ async function main(): Promise<void> {
 	check(
 		costEvents.every((event) => event.provider === "stub" && Number(event.amountUsd) === 0),
 		"every charge is zero and attributed to the stub provider",
+	);
+
+	// CABINET_MODEL §4a: the answer text is stored with the run, and expiry
+	// removes only the text — findings, citations and the reference outlive it.
+	const storedRuns = await db.select().from(schema.svRuns).where(eq(schema.svRuns.organizationId, ORG));
+	const payloadOf = (run: (typeof storedRuns)[number]) => run.canonicalPayload as Record<string, any>;
+	check(
+		storedRuns.every((run) => typeof payloadOf(run).answer?.text === "string" && payloadOf(run).answer.text !== ""),
+		"every completed run retained its answer text",
+	);
+	const { expired } = await expireAnswerTexts(db, {
+		now: new Date(Date.now() + (13 * 31 + 40) * 24 * 60 * 60 * 1000),
+	});
+	check(expired === expectedRuns, `expiry cleaned ${expectedRuns} texts`);
+	const cleanedRuns = await db.select().from(schema.svRuns).where(eq(schema.svRuns.organizationId, ORG));
+	check(
+		cleanedRuns.every((run) => payloadOf(run).answer?.text === undefined),
+		"no answer text survives its retention window",
+	);
+	check(
+		cleanedRuns.every(
+			(run) =>
+				typeof payloadOf(run).answer?.textDeletedAt === "string" &&
+				typeof run.rawResponseReference === "string" &&
+				payloadOf(run).measurement !== undefined,
+		),
+		"expiry left the deletion stamp, the reference and the findings in place",
+	);
+	const retentionAudit = await db
+		.select()
+		.from(schema.svAuditEvents)
+		.where(and(eq(schema.svAuditEvents.organizationId, ORG), eq(schema.svAuditEvents.event, "ANSWER_TEXT_EXPIRED")));
+	check(retentionAudit.length === expectedRuns, "every deletion left an audit row");
+	const mentionsAfterExpiry = await repositories.runs.ledgerForCycle(ctx, dispatch.cycleId);
+	check(
+		mentionsAfterExpiry.mentions.length === mentions.length,
+		"mention rows are untouched by answer-text expiry",
 	);
 
 	const [cycle] = await db

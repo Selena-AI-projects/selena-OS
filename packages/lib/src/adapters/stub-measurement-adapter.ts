@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import type { RunOutcome } from "@workspace/selena-visibility-contracts";
+import { answerRetainUntil, type RunOutcome } from "@workspace/selena-visibility-contracts";
 import { type ExtractionContext, extractMeasurement } from "../selena-answer-extraction";
 import type { SelenaExecutablePermit, SelenaMeasurementAdapter, SelenaMeasurementChannel } from "../selena-measurement";
 
@@ -98,6 +98,9 @@ export function createStubMeasurementAdapter(deps: StubAdapterDeps): SelenaMeasu
 				status: "SUCCEEDED",
 				validity: "VALID",
 				rawResponseReference: `stub:sha256:${createHash("sha256").update(answerText).digest("hex")}`,
+				// Same retention shape as the live adapters, so the rehearsal
+				// exercises text storage and the expiry job against real rows.
+				answer: { text: answerText, retainUntil: answerRetainUntil(new Date()) },
 				// A rehearsal still writes a ledger row: the cost path is part of
 				// what it is proving. Zero is the truth — nothing was bought.
 				costUsd: 0,

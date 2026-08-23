@@ -118,6 +118,7 @@ describe("Bright Data measurement adapter", () => {
 			status: "SUCCEEDED",
 			validity: "VALID",
 			rawResponseReference: "brightdata:s_01HZY",
+			answer: { text: "Answer text mentioning two studios.", retainUntil: expect.any(Date) },
 			sources: [{ url: "https://example.test/spa", domain: "example.test", title: "Spa guide" }],
 			costUsd: estimateRunCostUsd("brightdata", true),
 			costBasis: "estimated",

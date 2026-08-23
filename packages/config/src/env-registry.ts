@@ -406,6 +406,13 @@ export const ENV_REGISTRY: EnvVarSpec[] = [
 		requiredBy: "optional",
 		description: "Set to any value to disable telemetry.",
 	},
+	{
+		name: "SELENA_ANSWER_RETENTION_ENABLED",
+		scope: "server",
+		requiredBy: "optional",
+		description:
+			"Set to 'true' to let the worker delete raw answer texts whose retention window (CABINET_MODEL §4a) has passed. Unset means off: deleting customer evidence is an owner decision.",
+	},
 	// Cloud-only service credentials. Consumed by the Stripe billing and
 	// Resend transactional-email integrations (implemented in follow-up work);
 	// required here so a cloud deployment fails startup validation without them.
