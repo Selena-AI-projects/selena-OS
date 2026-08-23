@@ -11,6 +11,7 @@ import {
 	svQuotes,
 	svScenarios,
 } from "@workspace/lib/db/schema";
+import { lockedProfileBlock } from "@workspace/lib/selena-extraction-context";
 import { createSelenaRepositories, type SelenaRepositoryContext } from "@workspace/lib/selena-visibility-repositories";
 import {
 	analysisSubjectsSchema,
@@ -312,6 +313,10 @@ async function createSelenaOrderDraft(data: OrderDraftInput) {
 			snapshot: {
 				measurementScope: scope,
 				analysisSubjects: subjects,
+				// The extraction resolver prefers this block over the live
+				// profile: without it a profile edit after purchase would change
+				// what the cycle's runs are measured against.
+				profile: lockedProfileBlock(profile),
 				planId: plan.planId,
 				catalogVersion: SELENA_CATALOG_VERSION,
 				scenarios: approved.map((scenario) => ({

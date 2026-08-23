@@ -292,6 +292,11 @@ describe("OpenRouter measurement adapter", () => {
 			respondWith(jsonResponse(successPayload())),
 			respondWith(() => jsonResponse({ error: `key was ${API_KEY}` }, 401)),
 			respondWith(() => new Response(`not json ${API_KEY}`, { status: 200 })),
+			// An answer that echoes the credential back is stored scrubbed: the
+			// retained text (CABINET_MODEL §4a) must never retain the key.
+			respondWith(() =>
+				jsonResponse({ choices: [{ message: { content: `the request used ${API_KEY} as its key` } }] }),
+			),
 			vi.fn(async (): Promise<Response> => {
 				throw new Error(`ECONNRESET with Bearer ${API_KEY}`);
 			}),

@@ -1,5 +1,8 @@
 # §20 Implementation Status Matrix v1.3
 
+> **Superseded by `IMPLEMENTATION_STATUS_MATRIX_v1_4.md`** for everything the
+> TZ v1.4 run touched; rows not repeated there still read from this file.
+
 State of the branch `claude/selenasystems-security-audit-b9uyst` on 2026-08-21.
 
 **Nothing here is RELEASED.** Migrations 0025–0030 exist in this branch and have

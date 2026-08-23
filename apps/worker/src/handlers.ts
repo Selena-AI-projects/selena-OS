@@ -8,6 +8,7 @@ import { scheduleMaintenanceJob, type ScheduleMaintenanceData } from "./jobs/sch
 import { syncAuth0MembershipsJob, type SyncAuth0MembershipsData } from "./jobs/sync-auth0-memberships";
 import { analyzeBrandJob, type AnalyzeBrandData } from "./jobs/analyze-brand";
 import { selenaMeasureJob, type SelenaMeasureData } from "./jobs/selena-measure";
+import { selenaAnswerRetentionJob, type SelenaAnswerRetentionData } from "./jobs/selena-answer-retention";
 
 /**
  * Wraps a pg-boss handler to report errors to Sentry before re-throwing.
@@ -62,6 +63,13 @@ export async function registerHandlers(boss: PgBoss): Promise<void> {
 		withSentry("schedule-maintenance", scheduleMaintenanceJob),
 	);
 	console.log("Registered handler: schedule-maintenance");
+
+	await boss.work<SelenaAnswerRetentionData>(
+		"selena-answer-retention",
+		{ localConcurrency: 1 },
+		withSentry("selena-answer-retention", selenaAnswerRetentionJob),
+	);
+	console.log("Registered handler: selena-answer-retention");
 
 	// localConcurrency 1: a commercial cycle's spend is bounded by its permits,
 	// and serial execution keeps that bound easy to observe.

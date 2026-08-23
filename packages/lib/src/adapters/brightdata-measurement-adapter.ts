@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import {
+	answerRetainUntil,
 	type RunOutcome,
 	runMeasurementSchema,
 	runOutcomeSchema,
@@ -199,10 +200,8 @@ export function extractBrightDataSources(record: Record<string, unknown>): Brigh
  * collector: it never falls back to stringifying an unknown record into an
  * "answer", because that would store a measurement of something nobody read.
  *
- * Exported because RunOutcome has nowhere to carry `sources`: a layer that
- * persists citations calls this parser itself (or injects its own) and stores
- * them next to the run. This adapter does not widen the run contract to smuggle
- * them through.
+ * Exported so the owner's shape-pinning path (parseAnswer injection) can wrap
+ * or replace it without editing the adapter.
  */
 export function parseBrightDataAnswer(raw: unknown): BrightDataAnswer | null {
 	// Snapshot-style payloads arrive as a single-record array.
@@ -403,6 +402,20 @@ export function createBrightDataAdapter(deps: BrightDataAdapterDeps): SelenaMeas
 				answer = null;
 			}
 			if (!answer) return invalidOutcome(permit, "MALFORMED_RESPONSE", costFields());
+			// Storing the answer text (CABINET_MODEL §4a) must never store the
+			// credential: a surface that echoes request material back would
+			// otherwise write the key into a row read by more people than hold
+			// it. Everything destined for the run row is scrubbed.
+			const scrub = (value: string) => value.split(deps.apiKey).join("[redacted-credential]");
+			answer = {
+				...answer,
+				answerText: scrub(answer.answerText),
+				sources: answer.sources.map((source) => ({
+					...source,
+					url: scrub(source.url),
+					...(source.title ? { title: scrub(source.title) } : {}),
+				})),
+			};
 			// A parsed payload may name its own charge even when the answer is
 			// unusable: bill what was reported, not the estimate.
 			if (answer.answerText.trim() === "") return invalidOutcome(permit, "EMPTY_RESPONSE", costFields(answer.costUsd));
@@ -435,6 +448,16 @@ export function createBrightDataAdapter(deps: BrightDataAdapterDeps): SelenaMeas
 				status: "SUCCEEDED",
 				validity: "VALID",
 				rawResponseReference: rawResponseReference(answer.providerRequestId, raw),
+				// CABINET_MODEL §4a: the answer text is retained with the run for
+				// the owner's window so findings can be recomputed without buying
+				// a second measurement; the reference stays for provider-side
+				// lookup after the text expires. Only the answer body — an error
+				// body is never stored (see the !response.ok path above).
+				answer: { text: answer.answerText, retainUntil: answerRetainUntil(now()) },
+				// Displayed-source evidence survives independently of extraction:
+				// a run whose context failed to resolve still keeps what the
+				// surface showed, so the citation record is recoverable offline.
+				...(answer.sources.length > 0 ? { sources: answer.sources } : {}),
 				// No tokenUsage: a scraped visitor surface reports no token
 				// accounting, and a zero would read as a measured value.
 				...costFields(answer.costUsd),

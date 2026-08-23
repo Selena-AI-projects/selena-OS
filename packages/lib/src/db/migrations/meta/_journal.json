@@ -230,7 +230,28 @@
 			"idx": 32,
 			"version": "7",
 			"when": 1787421600000,
-			"tag": "0032_selena_profile_maps_location",
+			"tag": "0032_suggest_cost_metering",
+			"breakpoints": true
+		},
+		{
+			"idx": 33,
+			"version": "7",
+			"when": 1787508000000,
+			"tag": "0033_reports_organization",
+			"breakpoints": true
+		},
+		{
+			"idx": 34,
+			"version": "7",
+			"when": 1787594400000,
+			"tag": "0034_tenant_rls_policies",
+			"breakpoints": true
+		},
+		{
+			"idx": 35,
+			"version": "7",
+			"when": 1787680800000,
+			"tag": "0035_selena_profile_maps_location",
 			"breakpoints": true
 		}
 	]
