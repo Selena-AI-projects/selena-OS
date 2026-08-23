@@ -1,4 +1,5 @@
 import {
+	answerRetainUntil,
 	assertAdapterAllowed,
 	inertMeasurementAdapters,
 	type RunOutcome,
@@ -110,6 +111,10 @@ describe("OpenRouter measurement adapter", () => {
 			status: "SUCCEEDED",
 			validity: "VALID",
 			rawResponseReference: "openrouter:gen-01HZY",
+			// The answer is retained so competitor and citation analysis has
+			// something to read, and carries the window after which only its
+			// findings remain.
+			answer: { text: "Answer text mentioning two studios.", retainUntil: answerRetainUntil(now()) },
 			tokenUsage: { input: 12, output: 34 },
 			costUsd: 0.0042,
 			costBasis: "actual",
@@ -135,7 +140,7 @@ describe("OpenRouter measurement adapter", () => {
 		expect(outcome.status).toBe("SUCCEEDED");
 	});
 
-	it("references the response instead of storing it, and digests it when there is no generation id", async () => {
+	it("digests the response when there is no generation id, without repeating the answer into the reference", async () => {
 		const payload = successPayload({ id: null });
 		const outcome = await adapterWith(respondWith(jsonResponse(payload))).execute(permitFor());
 
@@ -308,13 +313,11 @@ describe("OpenRouter measurement adapter", () => {
 		);
 	});
 
-	it("stays behind the owner gate: the adapter cannot be selected by configuration", () => {
+	it("is owner-approved but never inert: selection still requires registration", () => {
 		expect(inertMeasurementAdapters as readonly string[]).not.toContain("openrouter");
 		expect(() => assertAdapterAllowed("openrouter", ["noop"])).toThrow("SELENA_ADAPTER_NOT_REGISTERED");
-		// Registering it in the worker is still not enough to select it.
-		expect(() => assertAdapterAllowed("openrouter", ["noop", "openrouter"])).toThrow(
-			"SELENA_LIVE_ADAPTER_REQUIRES_OWNER_GO",
-		);
+		// The owner-go edit: registered and named, the adapter may now execute.
+		expect(() => assertAdapterAllowed("openrouter", ["noop", "openrouter"])).not.toThrow();
 	});
 
 	it("attaches a measurement under the sold system name, with no sources on API View", async () => {

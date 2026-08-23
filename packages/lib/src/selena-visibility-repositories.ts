@@ -420,6 +420,18 @@ export function createSelenaRepositories(db: Db) {
 					.select()
 					.from(schema.svScenarios)
 					.where(and(eq(schema.svScenarios.familyId, familyId), eq(schema.svScenarios.organizationId, ctx.tenantId))),
+			// A permit carries a scenario id, not the question, and measurement
+			// adapters hold no database access on purpose — this is the single
+			// tenant-scoped read they are handed instead.
+			textFor: async (ctx: SelenaRepositoryContext, scenarioId: string): Promise<string> => {
+				const [row] = await db
+					.select({ text: schema.svScenarios.text })
+					.from(schema.svScenarios)
+					.where(and(eq(schema.svScenarios.id, scenarioId), eq(schema.svScenarios.organizationId, ctx.tenantId)))
+					.limit(1);
+				if (!row) throw new Error("Not found: scenario is outside AuthContext tenant");
+				return row.text;
+			},
 			create: async (
 				ctx: SelenaRepositoryContext,
 				value: Omit<typeof schema.svScenarios.$inferInsert, "organizationId">,
@@ -987,6 +999,47 @@ export function createSelenaRepositories(db: Db) {
 				if (!run) throw new Error("Not found: run is outside AuthContext tenant");
 				await recordAudit(db, ctx, "RAW_EVIDENCE_ACCESSED", "sv_runs", runId, { dispatchKey: run.dispatchKey });
 				return run;
+			},
+			/** Every terminal run of an order, newest cycle first. */
+			listForOrder: async (ctx: SelenaRepositoryContext, orderId: string) => {
+				await assertOrderOwned(ctx, orderId);
+				return db
+					.select({
+						id: schema.svRuns.id,
+						cycleId: schema.svRuns.cycleId,
+						scenarioId: schema.svRuns.scenarioId,
+						channel: schema.svRuns.channel,
+						status: schema.svRuns.status,
+						validity: schema.svRuns.validity,
+						canonicalPayload: schema.svRuns.canonicalPayload,
+						finishedAt: schema.svRuns.finishedAt,
+					})
+					.from(schema.svRuns)
+					.innerJoin(schema.svCycles, eq(schema.svRuns.cycleId, schema.svCycles.id))
+					.where(and(eq(schema.svCycles.orderId, orderId), eq(schema.svRuns.organizationId, ctx.tenantId)))
+					.orderBy(desc(schema.svRuns.finishedAt));
+			},
+			/**
+			 * Attach findings to a completed run, beside the answer they were read
+			 * from. Findings live in the same payload rather than a table of their
+			 * own so that dropping the answer text at the end of its retention
+			 * window leaves the evidence derived from it untouched.
+			 */
+			saveAnalysis: async (ctx: SelenaRepositoryContext, runId: string, analysis: unknown) => {
+				writable(ctx);
+				const [run] = await db
+					.select({ id: schema.svRuns.id, canonicalPayload: schema.svRuns.canonicalPayload })
+					.from(schema.svRuns)
+					.where(and(eq(schema.svRuns.id, runId), eq(schema.svRuns.organizationId, ctx.tenantId)))
+					.limit(1);
+				if (!run) throw new Error("Not found: run is outside AuthContext tenant");
+				const payload = (run.canonicalPayload ?? {}) as Record<string, unknown>;
+				const [updated] = await db
+					.update(schema.svRuns)
+					.set({ canonicalPayload: { ...payload, analysis } })
+					.where(and(eq(schema.svRuns.id, runId), eq(schema.svRuns.organizationId, ctx.tenantId)))
+					.returning({ id: schema.svRuns.id });
+				return updated;
 			},
 		},
 		incidents: {

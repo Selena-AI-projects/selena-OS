@@ -18,16 +18,16 @@ describe("Selena measurement execution boundary", () => {
 		).not.toThrow();
 	});
 
-	it("refuses an unregistered adapter and refuses a live one even when registered", () => {
+	it("refuses an unregistered adapter and refuses a live one the owner has not approved", () => {
 		expect(() => assertAdapterAllowed("noop", ["noop"])).not.toThrow();
 		expect(() => assertAdapterAllowed("brightdata", ["noop"])).toThrow("SELENA_ADAPTER_NOT_REGISTERED");
 		// The owner gate: registering a live adapter is not enough to select it.
 		expect(() => assertAdapterAllowed("brightdata", ["noop", "brightdata"])).toThrow(
 			"SELENA_LIVE_ADAPTER_REQUIRES_OWNER_GO",
 		);
-		expect(() => assertAdapterAllowed("openrouter", ["noop", "openrouter"])).toThrow(
-			"SELENA_LIVE_ADAPTER_REQUIRES_OWNER_GO",
-		);
+		// openrouter is owner-approved: registered and named, it may execute.
+		expect(() => assertAdapterAllowed("openrouter", ["noop", "openrouter"])).not.toThrow();
+		expect(() => assertAdapterAllowed("openrouter", ["noop"])).toThrow("SELENA_ADAPTER_NOT_REGISTERED");
 	});
 
 	it("accepts a well-formed outcome and rejects incoherent or unknown fields", () => {

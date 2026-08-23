@@ -1,5 +1,7 @@
 import { createHash } from "node:crypto";
 import {
+	answerRetainUntil,
+	apiModelIds,
 	isApiViewWebSearchEnabled,
 	type RunOutcome,
 	runMeasurementSchema,
@@ -16,6 +18,7 @@ import { estimateRunCostUsd } from "../usage/cost";
 // itself turn spend on.
 
 const OPENROUTER_CHAT_COMPLETIONS_URL = "https://openrouter.ai/api/v1/chat/completions";
+const DEFAULT_API_VIEW_MODEL = "anthropic/claude-haiku-4.5";
 const DEFAULT_TIMEOUT_MS = 60_000;
 const DEFAULT_MAX_OUTPUT_TOKENS = 1200;
 /** A measurement answer is prose; anything past this is a runaway response. */
@@ -171,6 +174,19 @@ async function readBodyWithinLimit(response: Response, limitBytes: number): Prom
  * request; every outcome path returns the permit's dispatch key, because the
  * executor refuses an outcome whose key does not match the permit it spent.
  */
+/**
+ * A run measures the model the customer bought, so only a catalog API View id
+ * may be selected. Resolving it here keeps the caller free of the catalog and
+ * turns a mistyped model into a refusal at startup rather than a measurement
+ * of something nobody sold.
+ */
+export function resolveCatalogApiModel(value: string | undefined): string {
+	const requested = value?.trim() || DEFAULT_API_VIEW_MODEL;
+	if (!(apiModelIds as readonly string[]).includes(requested))
+		throw new Error(`SELENA_OPENROUTER_MODEL must be a catalog API View model id, got "${requested}"`);
+	return requested;
+}
+
 export function createOpenRouterAdapter(deps: OpenRouterAdapterDeps): SelenaMeasurementAdapter {
 	if (deps.apiKey.trim() === "") throw new Error("OPENROUTER_API_KEY_MISSING");
 	if (deps.model.trim() === "") throw new Error("OPENROUTER_MODEL_MISSING");
@@ -291,6 +307,11 @@ export function createOpenRouterAdapter(deps: OpenRouterAdapterDeps): SelenaMeas
 				status: "SUCCEEDED",
 				validity: "VALID",
 				rawResponseReference: rawResponseReference(data.id, raw),
+				// Retained on purpose: competitor and citation analysis reads the
+				// answer, and keeping it lets a metric be recomputed without buying
+				// a second measurement of a different moment. Only the answer body
+				// is kept — never a provider error body, which can echo the key.
+				answer: { text: content, retainUntil: answerRetainUntil(now()) },
 				...(tokenUsage ? { tokenUsage } : {}),
 				...costFields(usage),
 				...(measurement === null ? {} : { measurement }),

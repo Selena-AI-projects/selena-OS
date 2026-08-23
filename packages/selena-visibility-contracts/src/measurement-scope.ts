@@ -35,3 +35,29 @@ export function parseMeasurementScope(snapshot: unknown): MeasurementScope | nul
 	if (block === undefined || block === null) return null;
 	return measurementScopeSchema.parse(block);
 }
+
+/**
+ * Who a measurement looks for in an answer, frozen into the lock alongside the
+ * scope. Reading these from the live profile instead would let a report change
+ * under a customer who edited their competitor list afterwards — the lock is
+ * what the run was sold against, so it answers this too.
+ */
+export const analysisSubjectSchema = z.object({
+	name: z.string().min(1),
+	aliases: z.array(z.string().min(1)).optional(),
+	domain: z.string().min(1).optional(),
+});
+
+export const analysisSubjectsSchema = z.object({
+	brand: analysisSubjectSchema,
+	competitors: z.array(analysisSubjectSchema).default([]),
+});
+export type AnalysisSubjects = z.infer<typeof analysisSubjectsSchema>;
+
+/** Absent on locks written before subjects were frozen; malformed throws. */
+export function parseAnalysisSubjects(snapshot: unknown): AnalysisSubjects | null {
+	if (typeof snapshot !== "object" || snapshot === null) return null;
+	const block = (snapshot as Record<string, unknown>).analysisSubjects;
+	if (block === undefined || block === null) return null;
+	return analysisSubjectsSchema.parse(block);
+}
