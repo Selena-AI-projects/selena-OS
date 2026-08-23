@@ -31,6 +31,7 @@ import {
 import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
 import { requireAdmin } from "@/lib/auth/helpers";
+import { approveOrder, enqueueOrderRunsForOrder } from "./selena-admin-orders";
 import { resolveSessionAuthContext } from "../lib/selena-auth-context";
 
 // The order desk: where a confirmed brand profile becomes an order the
@@ -248,15 +249,15 @@ function scopeForPlan(plan: SelenaPlan, scenarioIds: string[]): MeasurementScope
  * money objects and never mutated afterwards: an order that has been paid for
  * always points at the exact scope the customer agreed to.
  */
-export const createSelenaOrderDraftFn = createServerFn({ method: "POST" })
-	.validator(
-		projectIdSchema.extend({
-			planId: z.enum(planIds),
-			scenarioIds: z.array(z.string().uuid()).min(1).max(200),
-			idempotencyKey: z.string().min(1).max(200),
-		}),
-	)
-	.handler(async ({ data }) => {
+type OrderDraftInput = {
+	projectId: string;
+	planId: (typeof planIds)[number];
+	scenarioIds: string[];
+	idempotencyKey: string;
+};
+
+async function createSelenaOrderDraft(data: OrderDraftInput) {
+	{
 		const context = await requireAdminContext();
 		// The payment gate decides before anything is written: a desk that
 		// cannot record the payment must not leave a half-built order behind.
@@ -396,5 +397,49 @@ export const createSelenaOrderDraftFn = createServerFn({ method: "POST" })
 			budgetCap: plan.providerBudgetCap,
 			status: payment ? "PAID_REVIEW_REQUIRED" : "AWAITING_PAYMENT",
 			paymentRecorded: Boolean(payment),
+		};
+	}
+}
+
+export const createSelenaOrderDraftFn = createServerFn({ method: "POST" })
+	.validator(
+		projectIdSchema.extend({
+			planId: z.enum(planIds),
+			scenarioIds: z.array(z.string().uuid()).min(1).max(200),
+			idempotencyKey: z.string().min(1).max(200),
+		}),
+	)
+	.handler(async ({ data }) => createSelenaOrderDraft(data));
+
+/**
+ * Order, approve and queue in one action.
+ *
+ * The judgement an operator makes is which questions are worth measuring;
+ * ordering, approving and queueing are three clicks on a decision already
+ * taken. They stay three separate gates in the code — this only stops asking
+ * three times for one answer, and still spends nothing without the click that
+ * calls it.
+ */
+export const startSelenaMeasurementFn = createServerFn({ method: "POST" })
+	.validator(
+		projectIdSchema.extend({
+			planId: z.enum(planIds),
+			scenarioIds: z.array(z.string().uuid()).min(1).max(200),
+			idempotencyKey: z.string().min(1).max(200),
+		}),
+	)
+	.handler(async ({ data }) => {
+		const draft = await createSelenaOrderDraft(data);
+		if (!draft.paymentRecorded)
+			return { ...draft, approved: null, queued: null, stoppedAt: "payment" as const };
+
+		const context = await requireAdminContext();
+		const approved = await approveOrder(context, draft.orderId, `${data.idempotencyKey}:approve`);
+		const queued = await enqueueOrderRunsForOrder(context, draft.orderId, `${data.idempotencyKey}:enqueue`);
+		return {
+			...draft,
+			approved: { permits: approved.created, expected: approved.expected },
+			queued: { enqueued: queued.enqueued, skipped: queued.skipped, reason: queued.reason },
+			stoppedAt: queued.reason ? ("execution" as const) : null,
 		};
 	});

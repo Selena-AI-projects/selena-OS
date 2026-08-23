@@ -61,12 +61,18 @@ describe("selena order approval gate", () => {
 	});
 });
 
-/** The body of one exported server fn, up to the next export. */
+/**
+ * The body of one exported declaration, up to the next one. The gates these
+ * tests guard live wherever the act itself lives, which is a shared function
+ * once more than one screen performs it — so a name here is a declaration,
+ * not specifically a server fn.
+ */
 function serverFnSource(name: string): string {
-	const start = adminOrdersSource.indexOf(`export const ${name}`);
+	const start = adminOrdersSource.search(new RegExp(`export (?:const|async function) ${name}\\b`));
 	expect(start, `${name} is missing`).toBeGreaterThan(-1);
-	const end = adminOrdersSource.indexOf("\nexport const ", start + 1);
-	return adminOrdersSource.slice(start, end === -1 ? undefined : end);
+	const rest = adminOrdersSource.slice(start + 1);
+	const offset = rest.search(/\nexport (?:const|async function) /);
+	return offset === -1 ? adminOrdersSource.slice(start) : adminOrdersSource.slice(start, start + 1 + offset);
 }
 
 describe("admin order layer zero provider surface invariant", () => {
@@ -81,15 +87,15 @@ describe("admin order layer zero provider surface invariant", () => {
 	});
 
 	it("keeps approval free of queueing, so minting permission never starts work", () => {
-		const approve = serverFnSource("approveSelenaOrderFn");
+		const approve = serverFnSource("approveOrder");
 		for (const marker of ["boss", "enqueue"]) {
-			expect(approve.includes(marker), `approveSelenaOrderFn must not contain "${marker}"`).toBe(false);
+			expect(approve.includes(marker), `approveOrder must not contain "${marker}"`).toBe(false);
 		}
 	});
 });
 
 describe("run enqueue gate", () => {
-	const enqueue = serverFnSource("enqueueSelenaOrderRunsFn");
+	const enqueue = serverFnSource("enqueueOrderRunsForOrder");
 
 	it("refuses to queue an order that approval has not moved to QUEUED", () => {
 		expect(enqueue).toContain("SELENA_ORDER_NOT_QUEUED");

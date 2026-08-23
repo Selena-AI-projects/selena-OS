@@ -255,106 +255,124 @@ export const getSelenaOrderPreflightFn = createServerFn({ method: "GET" })
 		return collectPreflight(context, data.orderId);
 	});
 
+/**
+ * Approval as a plain call: minting permits is the same act whether one
+ * button or a combined one asks for it, so both paths run this and cannot
+ * drift apart on a gate.
+ */
+export async function approveOrder(
+	context: SelenaRepositoryContext,
+	orderId: string,
+	idempotencyKey?: string,
+) {
+	if (idempotencyKey) {
+		const prior = await findPriorAudit(context, "ORDER_APPROVED", orderId, idempotencyKey);
+		if (prior) {
+			const order = await getOwnedOrder(context, orderId);
+			const details = prior.details as Record<string, unknown>;
+			return {
+				orderId: orderId,
+				status: order.status,
+				cycleId: (details.cycleId as string | undefined) ?? null,
+				created: (details.created as number | undefined) ?? 0,
+				expected: (details.expected as number | undefined) ?? 0,
+				replay: true,
+			};
+		}
+	}
+	const preflight = await collectPreflight(context, orderId);
+	// Approval never runs past a blocker: the same evaluation the operator
+	// saw is recomputed here and decides.
+	assertApprovable(preflight);
+	const [approved] = await db
+		.update(svOrders)
+		.set({ status: "APPROVED", updatedAt: new Date() })
+		.where(
+			and(
+				eq(svOrders.id, orderId),
+				eq(svOrders.organizationId, context.tenantId),
+				eq(svOrders.status, "PAID_REVIEW_REQUIRED"),
+			),
+		)
+		.returning({ id: svOrders.id });
+	if (!approved) throw new Error("SELENA_ORDER_STATUS_CHANGED");
+	const dispatch = await repositories.dispatch.createPermits(context, orderId);
+	await recordAdminAudit(context, "ORDER_APPROVED", orderId, {
+		cycleId: dispatch.cycleId,
+		created: dispatch.created,
+		expected: dispatch.expected,
+		idempotencyKey: idempotencyKey ?? null,
+	});
+	const order = await getOwnedOrder(context, orderId);
+	return {
+		orderId: orderId,
+		status: order.status,
+		cycleId: dispatch.cycleId,
+		created: dispatch.created,
+		expected: dispatch.expected,
+		replay: false,
+	};
+}
+
+/** Handing minted permits to the worker; see approveOrder on why it is shared. */
+export async function enqueueOrderRunsForOrder(
+	context: SelenaRepositoryContext,
+	orderId: string,
+	idempotencyKey?: string,
+) {
+	if (idempotencyKey) {
+		const prior = await findPriorAudit(context, "RUNS_ENQUEUED", orderId, idempotencyKey);
+		if (prior) {
+			const details = prior.details as Record<string, unknown>;
+			return {
+				orderId: orderId,
+				enqueued: (details.enqueued as number | undefined) ?? 0,
+				skipped: (details.skipped as number | undefined) ?? 0,
+				duplicates: (details.duplicates as number | undefined) ?? 0,
+				reason: null,
+				replay: true,
+			};
+		}
+	}
+	const order = await getOwnedOrder(context, orderId);
+	// QUEUED is the state approval leaves an order in: permits exist and none
+	// of them has been handed to the queue yet.
+	if (order.status !== "QUEUED") throw new Error("SELENA_ORDER_NOT_QUEUED");
+	const permits = await repositories.dispatch.listPermits(context, orderId);
+	const config = measurementConfigFromEnv(process.env);
+	const result = await enqueueOrderRuns({
+		permits,
+		config,
+		organizationId: context.tenantId,
+		actorId: context.actorId,
+		now: new Date(),
+		send: async (payload, options) => {
+			const boss = await getBoss();
+			return boss.send("selena-measure", payload, { singletonKey: options.singletonKey });
+		},
+	});
+	await recordAdminAudit(context, "RUNS_ENQUEUED", orderId, {
+		orderId: orderId,
+		enqueued: result.enqueued,
+		skipped: result.skipped,
+		duplicates: result.duplicates,
+		reason: result.reason,
+		// A refused enqueue is deliberately not replayable: once the owner
+		// turns execution on, the same key must still be able to queue the run.
+		idempotencyKey: result.reason === null ? (idempotencyKey ?? null) : null,
+	});
+	return { orderId: orderId, ...result, replay: false };
+}
+
 export const approveSelenaOrderFn = createServerFn({ method: "POST" })
 	.validator(orderIdSchema.extend({ idempotencyKey: z.string().min(1).max(200).optional() }))
-	.handler(async ({ data }) => {
-		const context = await requireAdminContext();
-		if (data.idempotencyKey) {
-			const prior = await findPriorAudit(context, "ORDER_APPROVED", data.orderId, data.idempotencyKey);
-			if (prior) {
-				const order = await getOwnedOrder(context, data.orderId);
-				const details = prior.details as Record<string, unknown>;
-				return {
-					orderId: data.orderId,
-					status: order.status,
-					cycleId: (details.cycleId as string | undefined) ?? null,
-					created: (details.created as number | undefined) ?? 0,
-					expected: (details.expected as number | undefined) ?? 0,
-					replay: true,
-				};
-			}
-		}
-		const preflight = await collectPreflight(context, data.orderId);
-		// Approval never runs past a blocker: the same evaluation the operator
-		// saw is recomputed here and decides.
-		assertApprovable(preflight);
-		const [approved] = await db
-			.update(svOrders)
-			.set({ status: "APPROVED", updatedAt: new Date() })
-			.where(
-				and(
-					eq(svOrders.id, data.orderId),
-					eq(svOrders.organizationId, context.tenantId),
-					eq(svOrders.status, "PAID_REVIEW_REQUIRED"),
-				),
-			)
-			.returning({ id: svOrders.id });
-		if (!approved) throw new Error("SELENA_ORDER_STATUS_CHANGED");
-		const dispatch = await repositories.dispatch.createPermits(context, data.orderId);
-		await recordAdminAudit(context, "ORDER_APPROVED", data.orderId, {
-			cycleId: dispatch.cycleId,
-			created: dispatch.created,
-			expected: dispatch.expected,
-			idempotencyKey: data.idempotencyKey ?? null,
-		});
-		const order = await getOwnedOrder(context, data.orderId);
-		return {
-			orderId: data.orderId,
-			status: order.status,
-			cycleId: dispatch.cycleId,
-			created: dispatch.created,
-			expected: dispatch.expected,
-			replay: false,
-		};
-	});
+	.handler(async ({ data }) => approveOrder(await requireAdminContext(), data.orderId, data.idempotencyKey));
 
 export const enqueueSelenaOrderRunsFn = createServerFn({ method: "POST" })
 	.validator(orderIdSchema.extend({ idempotencyKey: z.string().min(1).max(200).optional() }))
-	.handler(async ({ data }) => {
-		const context = await requireAdminContext();
-		if (data.idempotencyKey) {
-			const prior = await findPriorAudit(context, "RUNS_ENQUEUED", data.orderId, data.idempotencyKey);
-			if (prior) {
-				const details = prior.details as Record<string, unknown>;
-				return {
-					orderId: data.orderId,
-					enqueued: (details.enqueued as number | undefined) ?? 0,
-					skipped: (details.skipped as number | undefined) ?? 0,
-					duplicates: (details.duplicates as number | undefined) ?? 0,
-					reason: null,
-					replay: true,
-				};
-			}
-		}
-		const order = await getOwnedOrder(context, data.orderId);
-		// QUEUED is the state approval leaves an order in: permits exist and none
-		// of them has been handed to the queue yet.
-		if (order.status !== "QUEUED") throw new Error("SELENA_ORDER_NOT_QUEUED");
-		const permits = await repositories.dispatch.listPermits(context, data.orderId);
-		const config = measurementConfigFromEnv(process.env);
-		const result = await enqueueOrderRuns({
-			permits,
-			config,
-			organizationId: context.tenantId,
-			actorId: context.actorId,
-			now: new Date(),
-			send: async (payload, options) => {
-				const boss = await getBoss();
-				return boss.send("selena-measure", payload, { singletonKey: options.singletonKey });
-			},
-		});
-		await recordAdminAudit(context, "RUNS_ENQUEUED", data.orderId, {
-			orderId: data.orderId,
-			enqueued: result.enqueued,
-			skipped: result.skipped,
-			duplicates: result.duplicates,
-			reason: result.reason,
-			// A refused enqueue is deliberately not replayable: once the owner
-			// turns execution on, the same key must still be able to queue the run.
-			idempotencyKey: result.reason === null ? (data.idempotencyKey ?? null) : null,
-		});
-		return { orderId: data.orderId, ...result, replay: false };
-	});
+	.handler(async ({ data }) =>
+		enqueueOrderRunsForOrder(await requireAdminContext(), data.orderId, data.idempotencyKey),
+	);
 
 export const stopSelenaOrderFn = createServerFn({ method: "POST" })
 	.validator(
