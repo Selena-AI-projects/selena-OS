@@ -1,5 +1,10 @@
 import { createHash } from "node:crypto";
-import { isApiViewWebSearchEnabled, type RunOutcome, runOutcomeSchema } from "@workspace/selena-visibility-contracts";
+import {
+	answerRetainUntil,
+	isApiViewWebSearchEnabled,
+	type RunOutcome,
+	runOutcomeSchema,
+} from "@workspace/selena-visibility-contracts";
 import type { SelenaExecutablePermit, SelenaMeasurementAdapter, SelenaMeasurementPermit } from "../selena-measurement";
 import { estimateRunCostUsd } from "../usage/cost";
 
@@ -233,6 +238,11 @@ export function createOpenRouterAdapter(deps: OpenRouterAdapterDeps): SelenaMeas
 				status: "SUCCEEDED",
 				validity: "VALID",
 				rawResponseReference: rawResponseReference(data.id, raw),
+				// Retained on purpose: competitor and citation analysis reads the
+				// answer, and keeping it lets a metric be recomputed without buying
+				// a second measurement of a different moment. Only the answer body
+				// is kept — never a provider error body, which can echo the key.
+				answer: { text: content, retainUntil: answerRetainUntil(now()) },
 				...(tokenUsage ? { tokenUsage } : {}),
 				...(costUsd === null ? {} : { costUsd }),
 			};

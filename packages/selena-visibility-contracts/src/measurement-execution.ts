@@ -5,6 +5,19 @@ import { z } from "zod";
 // noop implementation. Nothing here performs, or can perform, transport — it
 // decides whether an injected adapter may be invoked at all.
 
+/**
+ * How long a retained answer text is kept before only its findings remain.
+ * Thirteen months is the owner's setting: a year of year-over-year comparison
+ * plus room, after which the text is dropped and the evidence around it stays.
+ */
+export const ANSWER_RETENTION_MONTHS = 13;
+
+export function answerRetainUntil(from: Date): Date {
+	const until = new Date(from);
+	until.setMonth(until.getMonth() + ANSWER_RETENTION_MONTHS);
+	return until;
+}
+
 /** Adapters that provably perform no provider call and hold no credentials. */
 export const inertMeasurementAdapters = ["noop", "stub"] as const;
 export type InertMeasurementAdapter = (typeof inertMeasurementAdapters)[number];
@@ -58,6 +71,19 @@ export const runOutcomeSchema = z
 		validity: z.enum(runValidities),
 		invalidReason: z.string().min(1).optional(),
 		rawResponseReference: z.string().min(1).optional(),
+		// The answer itself, retained deliberately: competitor and citation
+		// analysis reads the text, and retaining it lets a metric be recomputed
+		// without paying for a second measurement of a different moment. The
+		// owner set a retention window on the text (see CABINET_MODEL.md §4a);
+		// findings derived from it outlive the text.
+		answer: z
+			.strictObject({
+				text: z.string().min(1),
+				// What the provider itself named as sources, when it names any.
+				citedUrls: z.array(z.string().min(1)).optional(),
+				retainUntil: z.date(),
+			})
+			.optional(),
 		tokenUsage: z
 			.strictObject({ input: z.number().int().nonnegative(), output: z.number().int().nonnegative() })
 			.optional(),
