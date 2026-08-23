@@ -13,6 +13,7 @@ import {
 } from "@workspace/lib/db/schema";
 import { createSelenaRepositories, type SelenaRepositoryContext } from "@workspace/lib/selena-visibility-repositories";
 import {
+	analysisSubjectsSchema,
 	apiModelIds,
 	assertPaymentAllowed,
 	expectedRunsFromScope,
@@ -71,6 +72,19 @@ function readProfileQuestions(snapshot: unknown): ProfileQuestion[] {
 				intentType: typeof record.intentType === "string" ? record.intentType : "discovery",
 			},
 		];
+	});
+}
+
+function readProfileCompetitors(snapshot: unknown): { name: string; domain?: string }[] {
+	if (!Array.isArray(snapshot)) return [];
+	return snapshot.flatMap((entry) => {
+		if (typeof entry !== "object" || entry === null) return [];
+		const record = entry as Record<string, unknown>;
+		const name = typeof record.name === "string" ? record.name.trim() : "";
+		if (name === "") return [];
+		const domains = Array.isArray(record.domains) ? record.domains : [];
+		const domain = domains.find((value): value is string => typeof value === "string" && value.trim() !== "");
+		return [domain ? { name, domain } : { name }];
 	});
 }
 
@@ -268,6 +282,19 @@ export const createSelenaOrderDraftFn = createServerFn({ method: "POST" })
 		const scope = scopeForPlan(plan, data.scenarioIds);
 		const expectedRuns = expectedRunsFromScope(scope);
 
+		// Frozen with the scope: analysis looks for exactly the brand and
+		// competitors the customer agreed to, so a later profile edit cannot
+		// change what a paid report says.
+		const profile = await repositories.profiles.get(context, data.projectId);
+		if (!profile) throw new Error("SELENA_PROFILE_MISSING");
+		const subjects = analysisSubjectsSchema.parse({
+			brand: {
+				name: profile.brandName,
+				domain: profile.primaryDomain,
+			},
+			competitors: readProfileCompetitors(profile.competitorSnapshot),
+		});
+
 		const [priorVersion] = await db
 			.select({ version: sql<number>`coalesce(max(${svConfigurationLocks.version}), 0)::int` })
 			.from(svConfigurationLocks)
@@ -283,6 +310,7 @@ export const createSelenaOrderDraftFn = createServerFn({ method: "POST" })
 			version: (priorVersion?.version ?? 0) + 1,
 			snapshot: {
 				measurementScope: scope,
+				analysisSubjects: subjects,
 				planId: plan.planId,
 				catalogVersion: SELENA_CATALOG_VERSION,
 				scenarios: approved.map((scenario) => ({
