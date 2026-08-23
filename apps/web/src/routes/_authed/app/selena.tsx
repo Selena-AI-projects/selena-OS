@@ -18,6 +18,7 @@ import { useEffect, useMemo, useState } from "react";
 import { SelenaWordmark } from "@/components/selena-wordmark";
 import { useAuth } from "@/hooks/use-auth";
 import { validateWebsiteUrl } from "@/lib/brand-website";
+import { parseGoogleMapsLocation } from "@/lib/google-maps-location";
 import { resetPostHog } from "@/lib/posthog";
 import { SUGGESTION_LIMITS } from "@/lib/selena-suggestion";
 import { humanizeSelenaError } from "@/lib/selena-workspace-errors";
@@ -49,6 +50,7 @@ const emptyProjectForm = { name: "", category: "", country: "ID", region: "", la
 const emptyProfileForm = {
 	brandName: "",
 	primaryDomain: "",
+	mapsLocation: "",
 	publicProfiles: "",
 	competitors: "",
 	scenarios: "",
@@ -96,6 +98,7 @@ function SelenaWorkspace() {
 		setProfileForm({
 			brandName: selectedProject.profile.brandName,
 			primaryDomain: selectedProject.profile.primaryDomain,
+			mapsLocation: readObjectString(selectedProject.profile.mapsLocation, "url"),
 			publicProfiles: selectedProject.profile.publicProfiles
 				.map((item) => readObjectString(item, "url"))
 				.filter(Boolean)
@@ -257,6 +260,21 @@ function SelenaWorkspace() {
 			);
 			return;
 		}
+		let mapsLocationUrl = "";
+		if (profileForm.mapsLocation.trim()) {
+			const maps = parseGoogleMapsLocation(profileForm.mapsLocation);
+			if (!maps.isValid) {
+				setError(
+					tr(
+						locale,
+						"«Google Maps location»: we could not read the link. Paste your place's share link, for example https://maps.app.goo.gl/…",
+						"«Локация в Google Maps»: ссылка не распознана. Вставьте ссылку «Поделиться» вашей точки, например https://maps.app.goo.gl/…",
+					),
+				);
+				return;
+			}
+			mapsLocationUrl = maps.location.url;
+		}
 		const publicProfiles: string[] = [];
 		for (const input of splitList(profileForm.publicProfiles)) {
 			const link = validateWebsiteUrl(input);
@@ -270,7 +288,11 @@ function SelenaWorkspace() {
 			}
 			publicProfiles.push(link.formattedUrl);
 		}
-		onProfileNormalized({ primaryDomain: primary.formattedUrl, publicProfiles: publicProfiles.join(", ") });
+		onProfileNormalized({
+			primaryDomain: primary.formattedUrl,
+			mapsLocation: mapsLocationUrl,
+			publicProfiles: publicProfiles.join(", "),
+		});
 
 		setPendingAction("profile");
 		try {
@@ -280,6 +302,7 @@ function SelenaWorkspace() {
 					brandName: profileForm.brandName.trim(),
 					primaryDomain: primary.formattedUrl,
 					publicProfiles: publicProfiles.map((url) => ({ platform: "public", url })),
+					mapsLocationUrl,
 					competitorSnapshot: splitList(profileForm.competitors).map((name) => ({ name, domains: [] })),
 					scenarioSnapshot: profileForm.scenarios
 						.split("\n")
@@ -749,11 +772,30 @@ function BrandProfileForm({
 					/>
 				</Field>
 				<Field
+					label={tr(locale, "Google Maps location", "Локация в Google Maps")}
+					hint={tr(
+						locale,
+						"Optional. Your place's share link — it pins the exact business for local questions",
+						"Необязательно. Ссылка «Поделиться» вашей точки — она однозначно указывает бизнес в локальных вопросах",
+					)}
+					htmlFor="maps-location"
+				>
+					<Input
+						id="maps-location"
+						inputMode="url"
+						autoCapitalize="none"
+						spellCheck={false}
+						value={form.mapsLocation}
+						onChange={(event) => onChange({ ...form, mapsLocation: event.target.value })}
+						placeholder="https://maps.app.goo.gl/…"
+					/>
+				</Field>
+				<Field
 					label={tr(locale, "Public profile links", "Ссылки на публичные профили")}
 					hint={tr(
 						locale,
-						"Optional. Google Maps, Instagram, TripAdvisor — comma separated",
-						"Необязательно. Google Maps, Instagram, TripAdvisor — через запятую",
+						"Optional. Instagram, TripAdvisor — comma separated",
+						"Необязательно. Instagram, TripAdvisor — через запятую",
 					)}
 					htmlFor="public-profiles"
 				>

@@ -4,6 +4,7 @@ import { assertSuggestSpendAllowed } from "@workspace/lib/run-policy";
 import { createSelenaRepositories } from "@workspace/lib/selena-visibility-repositories";
 import { z } from "zod";
 import { cancelAnalyzeBrand, enqueueAnalyzeBrand, getAnalyzeBrandStatus } from "@/lib/analyze-brand-job";
+import { parseGoogleMapsLocation } from "@/lib/google-maps-location";
 import { questionLanguagePrefix, SUGGESTION_LIMITS } from "@/lib/selena-suggestion";
 import { resolveSessionAuthContext } from "../lib/selena-auth-context";
 
@@ -13,6 +14,7 @@ const profileSchema = z.object({
 	brandName: z.string().trim().min(1).max(160),
 	primaryDomain: z.string().trim().min(3).max(255),
 	publicProfiles: z.array(z.object({ platform: z.string().min(1), url: z.string().url() })).max(20),
+	mapsLocationUrl: z.string().trim().max(2048).default(""),
 	competitorSnapshot: z.array(z.object({ name: z.string().min(1), domains: z.array(z.string()).default([]) })).max(50),
 	scenarioSnapshot: z
 		.array(z.object({ text: z.string().min(1), language: z.string().min(2), intentType: z.string().min(1) }))
@@ -23,11 +25,16 @@ export const confirmSelenaProfileFn = createServerFn({ method: "POST" })
 	.validator(profileSchema)
 	.handler(async ({ data }) => {
 		const context = await resolveSessionAuthContext();
+		// The snapshot is re-derived server-side from the raw link so a client
+		// cannot store arbitrary coordinates or another business's CID.
+		const mapsLocation = data.mapsLocationUrl ? parseGoogleMapsLocation(data.mapsLocationUrl) : null;
+		if (mapsLocation && !mapsLocation.isValid) throw new Error(`Google Maps location: ${mapsLocation.error}`);
 		const profile = await repositories.profiles.confirm(context, {
 			projectId: data.projectId,
 			brandName: data.brandName,
 			primaryDomain: data.primaryDomain,
 			publicProfiles: data.publicProfiles,
+			mapsLocation: mapsLocation ? mapsLocation.location : null,
 			competitorSnapshot: data.competitorSnapshot,
 			scenarioSnapshot: data.scenarioSnapshot,
 		});
@@ -37,6 +44,7 @@ export const confirmSelenaProfileFn = createServerFn({ method: "POST" })
 			brandName: profile.brandName,
 			primaryDomain: profile.primaryDomain,
 			publicProfiles: data.publicProfiles,
+			mapsLocation: mapsLocation ? mapsLocation.location : null,
 			competitorSnapshot: data.competitorSnapshot,
 			scenarioSnapshot: data.scenarioSnapshot,
 			confirmedAt: profile.confirmedAt,

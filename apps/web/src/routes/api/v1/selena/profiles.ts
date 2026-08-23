@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { db } from "@workspace/lib/db/db";
 import { createSelenaRepositories } from "@workspace/lib/selena-visibility-repositories";
 import { z } from "zod";
+import { parseGoogleMapsLocation } from "../../../../lib/google-maps-location";
 import { resolveApiKeyAuthContext } from "../../../../lib/selena-auth-context";
 
 const repositories = createSelenaRepositories(db);
@@ -10,6 +11,7 @@ const profileSchema = z.object({
 	brandName: z.string().trim().min(1).max(160),
 	primaryDomain: z.string().url(),
 	publicProfiles: z.array(z.object({ platform: z.string().min(1), url: z.string().url() })).max(20),
+	mapsLocationUrl: z.string().trim().max(2048).optional(),
 	competitorSnapshot: z.array(z.object({ name: z.string().min(1), domains: z.array(z.string()) })).max(50),
 	scenarioSnapshot: z
 		.array(z.object({ text: z.string().min(1), language: z.string().min(2), intentType: z.string().min(1) }))
@@ -50,7 +52,19 @@ export const Route = createFileRoute("/api/v1/selena/profiles")({
 					const parsed = profileSchema.safeParse(await request.json());
 					if (!parsed.success)
 						return Response.json({ error: "Validation Error", message: parsed.error.message }, { status: 400 });
-					const profile = await repositories.profiles.confirm(auth, parsed.data);
+					// Snapshot fields are derived from the raw link server-side; the
+					// API never accepts pre-parsed coordinates or a CID.
+					const { mapsLocationUrl, ...value } = parsed.data;
+					const mapsLocation = mapsLocationUrl ? parseGoogleMapsLocation(mapsLocationUrl) : null;
+					if (mapsLocation && !mapsLocation.isValid)
+						return Response.json(
+							{ error: "Validation Error", message: `mapsLocationUrl: ${mapsLocation.error}` },
+							{ status: 400 },
+						);
+					const profile = await repositories.profiles.confirm(auth, {
+						...value,
+						mapsLocation: mapsLocation ? mapsLocation.location : null,
+					});
 					return Response.json(profile, { status: 201 });
 				} catch (error) {
 					const message = error instanceof Error ? error.message : "Request failed";
