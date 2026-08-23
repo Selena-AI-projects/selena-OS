@@ -413,6 +413,39 @@ export const ENV_REGISTRY: EnvVarSpec[] = [
 		description:
 			"Set to 'true' to let the worker delete raw answer texts whose retention window (CABINET_MODEL §4a) has passed. Unset means off: deleting customer evidence is an owner decision.",
 	},
+	{
+		name: "SELENA_EVIDENCE_S3_ENDPOINT",
+		scope: "server",
+		requiredBy: "optional",
+		description:
+			"HTTPS endpoint of the S3-compatible store holding raw evidence objects. Unset means signed evidence links answer 'unavailable'.",
+	},
+	{
+		name: "SELENA_EVIDENCE_S3_BUCKET",
+		scope: "server",
+		requiredBy: "optional",
+		description: "Bucket of the raw evidence store.",
+	},
+	{
+		name: "SELENA_EVIDENCE_S3_REGION",
+		scope: "server",
+		requiredBy: "optional",
+		description: "Region used in SigV4 signing for the raw evidence store.",
+	},
+	{
+		name: "SELENA_EVIDENCE_S3_ACCESS_KEY_ID",
+		scope: "server",
+		requiredBy: "optional",
+		credential: true,
+		description: "Access key id for signing raw evidence links.",
+	},
+	{
+		name: "SELENA_EVIDENCE_S3_SECRET_ACCESS_KEY",
+		scope: "server",
+		requiredBy: "optional",
+		credential: true,
+		description: "Secret key for signing raw evidence links. Never sent to a client; only signatures derived from it are.",
+	},
 	// Cloud-only service credentials. Consumed by the Stripe billing and
 	// Resend transactional-email integrations (implemented in follow-up work);
 	// required here so a cloud deployment fails startup validation without them.

@@ -26,6 +26,12 @@ import { groupView, formatShare, type GroupView } from "@/lib/selena-measurement
 import { createSelenaProjectFn, getSelenaWorkspaceFn } from "../../../server/selena-client";
 import { getSelenaMeasurementFn, type MeasurementView } from "../../../server/selena-measurement-view";
 import {
+	getSelenaRunDetailFn,
+	listSelenaRunsFn,
+	type RunDetail,
+	type RunListItem,
+} from "../../../server/selena-run-explorer";
+import {
 	listSelenaScenariosFn as getSelenaScenariosListFn,
 	reviewSelenaScenarioFn,
 	type ScenarioListItem,
@@ -1147,6 +1153,140 @@ function MeasurementReport({ view, locale }: { view: MeasurementView; locale: Wo
 					{tr(locale, "Runs outside both groups", "Прогоны вне обеих групп")}: {latest.report.unclassifiedRuns}
 				</p>
 			)}
+			<RunExplorer cycleId={latest.cycleId} locale={locale} />
+		</div>
+	);
+}
+
+/**
+ * Addendum §7 made visible: each answer behind the numbers, with the verbatim
+ * text while it is inside its retention window and an honest marker after.
+ */
+function RunExplorer({ cycleId, locale }: { cycleId: string; locale: WorkspaceLocale }) {
+	const [runs, setRuns] = useState<RunListItem[] | null>(null);
+	const [openRunId, setOpenRunId] = useState("");
+	const [detail, setDetail] = useState<RunDetail | null>(null);
+
+	useEffect(() => {
+		let cancelled = false;
+		listSelenaRunsFn({ data: { cycleId } })
+			.then((data) => {
+				if (!cancelled) setRuns(data.runs);
+			})
+			.catch(() => {
+				if (!cancelled) setRuns([]);
+			});
+		return () => {
+			cancelled = true;
+		};
+	}, [cycleId]);
+
+	const openRun = async (runId: string) => {
+		if (openRunId === runId) {
+			setOpenRunId("");
+			setDetail(null);
+			return;
+		}
+		setOpenRunId(runId);
+		setDetail(null);
+		try {
+			setDetail(await getSelenaRunDetailFn({ data: { runId } }));
+		} catch {
+			setOpenRunId("");
+		}
+	};
+
+	if (!runs || runs.length === 0) return null;
+	return (
+		<div className="rounded-lg border border-[#e5dbcd] bg-[#fffdf8] p-4">
+			<h3 className="text-sm font-semibold text-[#3d362e]">
+				{tr(locale, "Answers behind the numbers", "Ответы, из которых собраны цифры")}
+			</h3>
+			<ul className="mt-2 flex flex-col gap-1">
+				{runs.map((run) => (
+					<li key={run.id}>
+						<button
+							type="button"
+							className="flex w-full items-center justify-between gap-3 rounded px-2 py-1.5 text-left text-sm hover:bg-[#f5eee2]"
+							onClick={() => openRun(run.id)}
+						>
+							<span className="text-[#3d362e]">
+								{run.system ?? "—"} · {run.channel === "VISITOR" || run.channel.toLowerCase().startsWith("visitor")
+									? "Visitor View"
+									: "API View"}
+							</span>
+							<span className="shrink-0 text-xs text-[#6e6258]">
+								{run.validity ?? run.status}
+								{run.finishedAt ? ` · ${formatDate(run.finishedAt, locale)}` : ""}
+							</span>
+						</button>
+						{openRunId === run.id && (
+							<div className="mt-1 rounded border border-[#e5dbcd] bg-white p-3 text-sm">
+								{detail === null ? (
+									<p className="text-[#6e6258]">{tr(locale, "Loading…", "Загружаем…")}</p>
+								) : (
+									<div className="flex flex-col gap-2">
+										{detail.scenarioText && (
+											<p>
+												<span className="text-[#6e6258]">{tr(locale, "Question", "Вопрос")}: </span>
+												{detail.scenarioText}
+											</p>
+										)}
+										{detail.mentions.length > 0 ? (
+											<p>
+												<span className="text-[#6e6258]">{tr(locale, "Named", "Названы")}: </span>
+												{detail.mentions
+													.map((m) => `${m.name}${m.ordinalPosition ? ` (#${m.ordinalPosition})` : ""}`)
+													.join(", ")}
+											</p>
+										) : (
+											<p className="text-[#6e6258]">
+												{tr(
+													locale,
+													"No tracked entity was named, or the answer is stored but not measured.",
+													"Ни одна отслеживаемая сущность не названа, либо ответ сохранён, но не измерен.",
+												)}
+											</p>
+										)}
+										{detail.citations.length > 0 && (
+											<p>
+												<span className="text-[#6e6258]">{tr(locale, "Cited", "Процитированы")}: </span>
+												{detail.citations.map((c) => c.domain).join(", ")}
+											</p>
+										)}
+										{detail.sources.length > 0 && (
+											<p>
+												<span className="text-[#6e6258]">
+													{tr(locale, "Shown as sources", "Показаны как источники")}:{" "}
+												</span>
+												{detail.sources.map((s) => s.domain).join(", ")}
+											</p>
+										)}
+										{detail.answer.state === "present" ? (
+											<blockquote className="whitespace-pre-wrap rounded bg-[#faf6ee] p-2 text-[#3d362e]">
+												{detail.answer.text}
+											</blockquote>
+										) : detail.answer.state === "deleted" ? (
+											<p className="text-[#6e6258]">
+												{tr(
+													locale,
+													"The verbatim text was deleted at the end of its retention window; the findings above remain.",
+													"Дословный текст удалён по окончании срока хранения; находки выше сохранены.",
+												)}
+											</p>
+										) : null}
+										{detail.rawResponseReference && (
+											<p className="text-xs text-[#6e6258]">
+												{tr(locale, "Answer reference", "Ссылка на ответ")}: {detail.rawResponseReference}
+											</p>
+										)}
+									</div>
+								)}
+							</div>
+						)}
+					</li>
+				))}
+			</ul>
 		</div>
 	);
 }
