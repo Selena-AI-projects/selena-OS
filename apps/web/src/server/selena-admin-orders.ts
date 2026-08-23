@@ -1,5 +1,4 @@
 import { createServerFn } from "@tanstack/react-start";
-import { db } from "@workspace/lib/db/db";
 import {
 	svAuditEvents,
 	svConfigurationLocks,
@@ -31,7 +30,9 @@ import { resolveSessionAuthContext } from "../lib/selena-auth-context";
 // lives in the worker. Approval and enqueue stay separate actions so minting
 // permission never starts spending on its own.
 
-const repositories = createSelenaRepositories(db);
+let repositoriesPromise: ReturnType<typeof buildRepositories> | undefined;
+const buildRepositories = async () => createSelenaRepositories(await database());
+const getRepositories = () => (repositoriesPromise ??= buildRepositories());
 
 /** Statuses an operator is expected to act on, newest work first. */
 export const adminQueueStatuses = [
@@ -42,6 +43,14 @@ export const adminQueueStatuses = [
 	"QC_REQUIRED",
 	"READY",
 ] as const;
+
+/**
+ * The database handle, fetched when a call actually needs it. A static import
+ * here reaches the browser: this module exports plain helpers (not just server
+ * functions), so the client build keeps it, and the edge to the handle dragged
+ * the Postgres driver into the browser bundle.
+ */
+const database = async () => (await import("@workspace/lib/db/db")).db;
 
 const orderIdSchema = z.object({ orderId: z.string().uuid() });
 
@@ -56,7 +65,7 @@ async function recordAdminAudit(
 	orderId: string,
 	details: Record<string, unknown>,
 ) {
-	await db.insert(svAuditEvents).values({
+	await (await database()).insert(svAuditEvents).values({
 		organizationId: context.tenantId,
 		actorId: context.actorId,
 		event,
@@ -67,7 +76,7 @@ async function recordAdminAudit(
 }
 
 async function findPriorAudit(context: SelenaRepositoryContext, event: string, orderId: string, key: string) {
-	const [prior] = await db
+	const [prior] = await (await database())
 		.select({ details: svAuditEvents.details, at: svAuditEvents.at })
 		.from(svAuditEvents)
 		.where(
@@ -83,7 +92,7 @@ async function findPriorAudit(context: SelenaRepositoryContext, event: string, o
 }
 
 async function getOwnedOrder(context: SelenaRepositoryContext, orderId: string) {
-	const [order] = await db
+	const [order] = await (await database())
 		.select()
 		.from(svOrders)
 		.where(and(eq(svOrders.id, orderId), eq(svOrders.organizationId, context.tenantId)))
@@ -104,12 +113,12 @@ function providerBudgetRemaining(): number {
 
 async function collectPreflight(context: SelenaRepositoryContext, orderId: string): Promise<PreflightEvaluation> {
 	const order = await getOwnedOrder(context, orderId);
-	const [lock] = await db
+	const [lock] = await (await database())
 		.select()
 		.from(svConfigurationLocks)
 		.where(and(eq(svConfigurationLocks.id, order.lockId), eq(svConfigurationLocks.organizationId, context.tenantId)))
 		.limit(1);
-	const [quote] = await db
+	const [quote] = await (await database())
 		.select({ currency: svQuotes.currency })
 		.from(svQuotes)
 		.where(and(eq(svQuotes.id, order.quoteId), eq(svQuotes.organizationId, context.tenantId)))
@@ -125,7 +134,7 @@ async function collectPreflight(context: SelenaRepositoryContext, orderId: strin
 		}
 	}
 	const cycleIds = (
-		await db
+		await (await database())
 			.select({ id: svCycles.id })
 			.from(svCycles)
 			.where(and(eq(svCycles.orderId, orderId), eq(svCycles.organizationId, context.tenantId)))
@@ -133,7 +142,7 @@ async function collectPreflight(context: SelenaRepositoryContext, orderId: strin
 	const [permitCount, jobCount, payment] = await Promise.all([
 		cycleIds.length === 0
 			? Promise.resolve([{ count: 0 }])
-			: db
+			: (await database())
 					.select({ count: sql<number>`count(*)::int` })
 					.from(svRunPermits)
 					.where(
@@ -145,7 +154,7 @@ async function collectPreflight(context: SelenaRepositoryContext, orderId: strin
 					),
 		cycleIds.length === 0
 			? Promise.resolve([{ count: 0 }])
-			: db
+			: (await database())
 					.select({ count: sql<number>`count(*)::int` })
 					.from(svRuns)
 					.where(
@@ -155,7 +164,7 @@ async function collectPreflight(context: SelenaRepositoryContext, orderId: strin
 							isNull(svRuns.finishedAt),
 						),
 					),
-		db
+		(await database())
 			.select({ id: svPayments.id })
 			.from(svPayments)
 			.where(
@@ -194,7 +203,7 @@ export const getSelenaAdminAccessFn = createServerFn({ method: "GET" }).handler(
 
 export const getSelenaAdminOrderQueueFn = createServerFn({ method: "GET" }).handler(async () => {
 	const context = await requireAdminContext();
-	const orders = await db
+	const orders = await (await database())
 		.select({
 			id: svOrders.id,
 			status: svOrders.status,
@@ -218,7 +227,7 @@ export const getSelenaAdminOrderQueueFn = createServerFn({ method: "GET" }).hand
 	return Promise.all(
 		orders.map(async (order) => {
 			const [cycles, qc] = await Promise.all([
-				db
+				(await database())
 					.select({
 						id: svCycles.id,
 						status: svCycles.status,
@@ -229,7 +238,7 @@ export const getSelenaAdminOrderQueueFn = createServerFn({ method: "GET" }).hand
 					.from(svCycles)
 					.where(and(eq(svCycles.orderId, order.id), eq(svCycles.organizationId, context.tenantId)))
 					.orderBy(desc(svCycles.createdAt)),
-				db
+				(await database())
 					.select({
 						id: svQcRecords.id,
 						reviewer: svQcRecords.reviewer,
@@ -288,7 +297,7 @@ export async function approveOrder(
 	// decision commit together: an approval stored without its audit row is a
 	// decision nobody can prove was taken, and permits without the approval
 	// are permission nobody gave.
-	const dispatch = await repositories.dispatch.createPermits(context, orderId, {
+	const dispatch = await (await getRepositories()).dispatch.createPermits(context, orderId, {
 		approval: {
 			fromStatus: "PAID_REVIEW_REQUIRED",
 			auditEvent: "ORDER_APPROVED",
@@ -330,7 +339,7 @@ export async function enqueueOrderRunsForOrder(
 	// QUEUED is the state approval leaves an order in: permits exist and none
 	// of them has been handed to the queue yet.
 	if (order.status !== "QUEUED") throw new Error("SELENA_ORDER_NOT_QUEUED");
-	const permits = await repositories.dispatch.listPermits(context, orderId);
+	const permits = await (await getRepositories()).dispatch.listPermits(context, orderId);
 	const config = measurementConfigFromEnv(process.env);
 	const result = await enqueueOrderRuns({
 		permits,
@@ -384,11 +393,11 @@ export const stopSelenaOrderFn = createServerFn({ method: "POST" })
 		// cancelled one, while the cycle it owns carries the STOPPED state.
 		if (order.status === "CANCELLED")
 			return { orderId: data.orderId, status: order.status, stoppedCycles: 0, replay: true };
-		await db
+		await (await database())
 			.update(svOrders)
 			.set({ status: "CANCELLED", updatedAt: new Date() })
 			.where(and(eq(svOrders.id, data.orderId), eq(svOrders.organizationId, context.tenantId)));
-		const stopped = await db
+		const stopped = await (await database())
 			.update(svCycles)
 			.set({ status: "STOPPED", updatedAt: new Date() })
 			.where(
@@ -417,7 +426,7 @@ export const deliverSelenaOrderFn = createServerFn({ method: "POST" })
 	.validator(orderIdSchema)
 	.handler(async ({ data }) => {
 		const context = await requireAdminContext();
-		const delivered = await repositories.orders.deliver(context, data.orderId);
+		const delivered = await (await getRepositories()).orders.deliver(context, data.orderId);
 		return { orderId: data.orderId, status: delivered.status };
 	});
 
@@ -434,7 +443,7 @@ export const recordSelenaQcFn = createServerFn({ method: "POST" })
 	)
 	.handler(async ({ data }) => {
 		const context = await requireAdminContext();
-		return repositories.qcRecords.create(context, {
+		return (await getRepositories()).qcRecords.create(context, {
 			orderId: data.orderId,
 			cycleId: data.cycleId ?? null,
 			reviewer: data.reviewer,

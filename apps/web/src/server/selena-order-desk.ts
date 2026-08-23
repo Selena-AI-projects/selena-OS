@@ -46,7 +46,7 @@ import { resolveSessionAuthContext } from "../lib/selena-auth-context";
 // person did not read and accept, which is the whole point of the
 // configuration lock.
 
-const repositories = createSelenaRepositories(db);
+const repositories = /* @__PURE__ */ createSelenaRepositories(db);
 
 async function requireAdminContext(): Promise<SelenaRepositoryContext> {
 	await requireAdmin();

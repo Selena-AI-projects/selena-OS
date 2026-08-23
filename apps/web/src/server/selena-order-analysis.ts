@@ -17,7 +17,7 @@ import { resolveSessionAuthContext } from "../lib/selena-auth-context";
 // leaned on. The stage is re-runnable on purpose: findings are derived, never
 // authored, so recomputing them can only ever restate what the answers say.
 
-const repositories = createSelenaRepositories(db);
+const repositories = /* @__PURE__ */ createSelenaRepositories(db);
 
 async function requireAdminContext(): Promise<SelenaRepositoryContext> {
 	await requireAdmin();

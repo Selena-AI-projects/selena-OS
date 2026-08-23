@@ -4,7 +4,7 @@ import { createSelenaRepositories } from "@workspace/lib/selena-visibility-repos
 import { z } from "zod";
 import { resolveSessionAuthContext } from "../lib/selena-auth-context";
 
-const repositories = createSelenaRepositories(db);
+const repositories = /* @__PURE__ */ createSelenaRepositories(db);
 
 /**
  * The Source Opportunity Map (addendum §8) reads the stored snapshots rather

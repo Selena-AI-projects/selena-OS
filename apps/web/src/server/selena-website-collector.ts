@@ -8,7 +8,7 @@ import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 import { resolveSessionAuthContext } from "../lib/selena-auth-context";
 
-const recommendationRepositories = createRecommendationRepositories(db);
+const recommendationRepositories = /* @__PURE__ */ createRecommendationRepositories(db);
 
 export const collectSelenaWebsiteFn = createServerFn({ method: "POST" })
 	.validator(z.object({ projectId: z.string().uuid() }))

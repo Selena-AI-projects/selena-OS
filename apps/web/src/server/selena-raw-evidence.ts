@@ -9,7 +9,7 @@ import { createSelenaRepositories } from "@workspace/lib/selena-visibility-repos
 import { z } from "zod";
 import { resolveSessionAuthContext } from "../lib/selena-auth-context";
 
-const repositories = createSelenaRepositories(db);
+const repositories = /* @__PURE__ */ createSelenaRepositories(db);
 
 const SIGNED_URL_TTL_SECONDS = 600;
 

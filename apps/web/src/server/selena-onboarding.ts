@@ -9,7 +9,7 @@ import { type GoogleMapsLocationSnapshot, parseGoogleMapsLocation } from "@works
 import { questionLanguagePrefix, SUGGESTION_LIMITS } from "@/lib/selena-suggestion";
 import { resolveSessionAuthContext } from "../lib/selena-auth-context";
 
-const repositories = createSelenaRepositories(db);
+const repositories = /* @__PURE__ */ createSelenaRepositories(db);
 const profileSchema = z.object({
 	projectId: z.string().uuid(),
 	brandName: z.string().trim().min(1).max(160),

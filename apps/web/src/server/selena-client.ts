@@ -14,7 +14,7 @@ import { z } from "zod";
 import { readStoredGoogleMapsLocation } from "@workspace/lib/google-maps-location";
 import { resolveSessionAuthContext } from "../lib/selena-auth-context";
 
-const repositories = createSelenaRepositories(db);
+const repositories = /* @__PURE__ */ createSelenaRepositories(db);
 
 export const listSelenaProjectsFn = createServerFn({ method: "GET" }).handler(async () => {
 	const context = await resolveSessionAuthContext();
