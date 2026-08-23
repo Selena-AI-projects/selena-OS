@@ -21,7 +21,10 @@ import { validateWebsiteUrl } from "@/lib/brand-website";
 import { resetPostHog } from "@/lib/posthog";
 import { SUGGESTION_LIMITS } from "@/lib/selena-suggestion";
 import { humanizeSelenaError } from "@/lib/selena-workspace-errors";
+import type { LedgerReport } from "@workspace/lib/selena-ledger-metrics";
+import { groupView, formatShare, type GroupView } from "@/lib/selena-measurement-view";
 import { createSelenaProjectFn, getSelenaWorkspaceFn } from "../../../server/selena-client";
+import { getSelenaMeasurementFn, type MeasurementView } from "../../../server/selena-measurement-view";
 import {
 	cancelSelenaProfileSuggestionFn,
 	confirmSelenaProfileFn,
@@ -490,6 +493,7 @@ function SelenaWorkspace() {
 								feedback={feedbackScope === "website" ? { notice, error } : undefined}
 								onCollect={collectWebsite}
 							/>
+							<MeasurementPanel project={selectedProject} locale={locale} />
 							<ResultsPanel project={selectedProject} locale={locale} />
 						</>
 					)}
@@ -880,6 +884,176 @@ function WebsiteEvidence({
 			)}
 			<FormFeedback feedback={feedback} className="mt-5" />
 		</section>
+	);
+}
+
+/**
+ * Step 4 of the cabinet: the paid measurement. Locked (shown, not hidden)
+ * until the project has a cycle; once one exists, renders the ledger report
+ * with branded and non-branded apart, UNKNOWN for an empty group, and no
+ * composite score anywhere — the CABINET_MODEL rules the backend already
+ * enforces, made visible.
+ */
+function MeasurementPanel({ project, locale }: { project: WorkspaceProject; locale: WorkspaceLocale }) {
+	const [view, setView] = useState<MeasurementView | null>(null);
+	const [failed, setFailed] = useState(false);
+	const hasCycle = project.measurement !== null;
+
+	useEffect(() => {
+		if (!hasCycle) return;
+		let cancelled = false;
+		getSelenaMeasurementFn({ data: { projectId: project.project.id } })
+			.then((data) => {
+				if (!cancelled) setView(data);
+			})
+			.catch(() => {
+				if (!cancelled) setFailed(true);
+			});
+		return () => {
+			cancelled = true;
+		};
+	}, [hasCycle, project.project.id]);
+
+	return (
+		<section className="selena-section" aria-labelledby="measurement-title">
+			<div className="flex gap-4">
+				<div className="selena-icon-disc">
+					<IconSparkles className="size-5" />
+				</div>
+				<div>
+					<h2 id="measurement-title" className="selena-heading text-2xl">
+						{tr(locale, "Measurement", "Замер")}
+					</h2>
+					<p className="mt-2 max-w-2xl text-sm leading-6 text-[#6e6258]">
+						{tr(
+							locale,
+							"What the ordered AI measurement observed. Questions naming the brand and category questions are counted separately and never merged into one score.",
+							"Что показал заказанный AI-замер. Вопросы с названием бренда и вопросы про категорию считаются раздельно и никогда не сводятся в один балл.",
+						)}
+					</p>
+				</div>
+			</div>
+			{!hasCycle ? (
+				<p className="mt-5 rounded-lg border border-dashed border-[#cdbdac] bg-[#fffdf8] px-4 py-3 text-sm text-[#6e6258]">
+					{tr(
+						locale,
+						"This step opens after a measurement order is confirmed. No cycle has been ordered yet.",
+						"Этот шаг откроется после подтверждения заказа на замер. Цикл ещё не заказан.",
+					)}
+				</p>
+			) : failed ? (
+				<p className="mt-5 text-sm text-[#9a5f14]">
+					{tr(locale, "Could not load the measurement.", "Не удалось загрузить замер.")}
+				</p>
+			) : view === null ? (
+				<p className="mt-5 text-sm text-[#6e6258]">{tr(locale, "Loading…", "Загружаем…")}</p>
+			) : (
+				<MeasurementReport view={view} locale={locale} />
+			)}
+		</section>
+	);
+}
+
+function MeasurementReport({ view, locale }: { view: MeasurementView; locale: WorkspaceLocale }) {
+	const latest = view.latest;
+	const cycle = view.cycles[0];
+	if (!latest || !cycle) {
+		return (
+			<p className="mt-5 text-sm text-[#6e6258]">
+				{tr(locale, "No measurement cycle recorded yet.", "Ни одного цикла замера ещё не записано.")}
+			</p>
+		);
+	}
+	const statusLabel: Record<string, [string, string]> = {
+		SCHEDULED: ["Scheduled", "Запланирован"],
+		RUNNING: ["Running", "Выполняется"],
+		QC_REQUIRED: ["Awaiting quality review", "Ожидает проверку качества"],
+		READY: ["Ready", "Готов"],
+		DELIVERED: ["Delivered", "Выдан"],
+	};
+	const [en, ru] = statusLabel[cycle.status] ?? [cycle.status, cycle.status];
+	return (
+		<div className="mt-5 flex flex-col gap-4">
+			<p className="text-sm text-[#6e6258]">
+				{tr(locale, "Cycle status", "Статус цикла")}: <strong>{tr(locale, en, ru)}</strong> ·{" "}
+				{tr(locale, "runs completed", "прогонов завершено")}: {cycle.completedRuns} / {cycle.expectedRuns}
+			</p>
+			<div className="grid gap-4 sm:grid-cols-2">
+				<MeasurementGroup
+					locale={locale}
+					title={tr(locale, "Category questions (no brand name)", "Вопросы про категорию (без названия бренда)")}
+					group={groupView(latest.report.nonBranded)}
+				/>
+				<MeasurementGroup
+					locale={locale}
+					title={tr(locale, "Questions naming the brand", "Вопросы с названием бренда")}
+					group={groupView(latest.report.branded)}
+				/>
+			</div>
+			<VisitorApiSplit locale={locale} report={latest.report} />
+			{latest.report.unclassifiedRuns > 0 && (
+				<p className="text-xs text-[#6e6258]">
+					{tr(locale, "Runs outside both groups", "Прогоны вне обеих групп")}: {latest.report.unclassifiedRuns}
+				</p>
+			)}
+		</div>
+	);
+}
+
+function MeasurementGroup({ locale, title, group }: { locale: WorkspaceLocale; title: string; group: GroupView }) {
+	return (
+		<div className="rounded-lg border border-[#e5dbcd] bg-[#fffdf8] p-4">
+			<h3 className="text-sm font-semibold text-[#3d362e]">{title}</h3>
+			{group.state === "unknown" ? (
+				<p className="mt-2 text-sm text-[#6e6258]">
+					{tr(
+						locale,
+						"Unknown — no measured answers in this group yet. Not shown as 0%.",
+						"Неизвестно — в этой группе пока нет измеренных ответов. Это не 0%.",
+					)}
+				</p>
+			) : (
+				<dl className="mt-2 grid gap-1 text-sm text-[#3d362e]">
+					<div className="flex justify-between gap-3">
+						<dt className="text-[#6e6258]">{tr(locale, "Answers mentioning the brand", "Ответы с упоминанием бренда")}</dt>
+						<dd>{group.mentionCoverage ?? tr(locale, "unknown", "неизвестно")}</dd>
+					</div>
+					<div className="flex justify-between gap-3">
+						<dt className="text-[#6e6258]">{tr(locale, "Average position among mentions", "Средняя позиция среди упоминаний")}</dt>
+						<dd>{group.averageBrandPosition ?? "—"}</dd>
+					</div>
+					<div className="flex justify-between gap-3">
+						<dt className="text-[#6e6258]">{tr(locale, "Measured answers", "Измеренных ответов")}</dt>
+						<dd>{group.measuredRuns}</dd>
+					</div>
+					{group.unmeasuredRuns > 0 && (
+						<div className="flex justify-between gap-3">
+							<dt className="text-[#6e6258]">{tr(locale, "Stored but not measured", "Сохранено, но не измерено")}</dt>
+							<dd>{group.unmeasuredRuns}</dd>
+						</div>
+					)}
+				</dl>
+			)}
+		</div>
+	);
+}
+
+function VisitorApiSplit({ locale, report }: { locale: WorkspaceLocale; report: LedgerReport }) {
+	const mixed = report.mixed.group;
+	if (mixed.status !== "MEASURED") return null;
+	const { visitorMentionRate, apiMentionRate } = mixed.metrics.visitorApiDivergence;
+	return (
+		<div className="rounded-lg border border-[#e5dbcd] bg-[#fffdf8] p-4 text-sm">
+			<h3 className="font-semibold text-[#3d362e]">
+				{tr(locale, "Visitor View and API View, separately", "Visitor View и API View, раздельно")}
+			</h3>
+			<p className="mt-2 text-[#6e6258]">
+				{tr(locale, "What a visitor is shown", "Что видит посетитель")}:{" "}
+				{formatShare(visitorMentionRate) ?? tr(locale, "unknown", "неизвестно")} ·{" "}
+				{tr(locale, "what the model answers directly", "что модель отвечает напрямую")}:{" "}
+				{formatShare(apiMentionRate) ?? tr(locale, "unknown", "неизвестно")}
+			</p>
+		</div>
 	);
 }
 
