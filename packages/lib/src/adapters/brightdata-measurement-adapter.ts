@@ -199,10 +199,8 @@ export function extractBrightDataSources(record: Record<string, unknown>): Brigh
  * collector: it never falls back to stringifying an unknown record into an
  * "answer", because that would store a measurement of something nobody read.
  *
- * Exported because RunOutcome has nowhere to carry `sources`: a layer that
- * persists citations calls this parser itself (or injects its own) and stores
- * them next to the run. This adapter does not widen the run contract to smuggle
- * them through.
+ * Exported so the owner's shape-pinning path (parseAnswer injection) can wrap
+ * or replace it without editing the adapter.
  */
 export function parseBrightDataAnswer(raw: unknown): BrightDataAnswer | null {
 	// Snapshot-style payloads arrive as a single-record array.
@@ -435,6 +433,10 @@ export function createBrightDataAdapter(deps: BrightDataAdapterDeps): SelenaMeas
 				status: "SUCCEEDED",
 				validity: "VALID",
 				rawResponseReference: rawResponseReference(answer.providerRequestId, raw),
+				// Displayed-source evidence survives independently of extraction:
+				// a run whose context failed to resolve still keeps what the
+				// surface showed, so the citation record is recoverable offline.
+				...(answer.sources.length > 0 ? { sources: answer.sources } : {}),
 				// No tokenUsage: a scraped visitor surface reports no token
 				// accounting, and a zero would read as a measured value.
 				...costFields(answer.costUsd),

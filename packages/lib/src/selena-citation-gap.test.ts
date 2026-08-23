@@ -53,6 +53,23 @@ describe("computeCitationGaps", () => {
 		expect(gap.evidenceRunIds).toEqual(["r1", "r2"]);
 	});
 
+	it("feeds Visitor View evidence into the same canonical formula", () => {
+		// Surface-displayed sources arrive as extraction citations on
+		// visitor_view rows; there is one gap number, not a per-channel fork.
+		const report = computeCitationGaps({
+			rows: [
+				row("v1", { channel: "visitor_view", system: "chatgpt", citations: [cite("guide.example")] }),
+				row("v2", { channel: "visitor_view", system: "perplexity", citations: [cite("guide.example")] }),
+			],
+			mentions: [competitor("v1", "Rival Cafe"), competitor("v2", "Rival Cafe")],
+			ownedDomains: OWNED,
+		});
+		expect(report.formulaVersion).toBe(CITATION_GAP_FORMULA_VERSION);
+		expect(report.gaps).toHaveLength(1);
+		expect(report.gaps[0].domain).toBe("guide.example");
+		expect(report.gaps[0].competitorCitationCount).toBe(2);
+	});
+
 	it("does not call a source a gap once it has turned up in an answer naming the brand", () => {
 		const report = computeCitationGaps({
 			rows: [
