@@ -398,6 +398,32 @@ function SelenaAdminOrders() {
 								</Button>
 							</div>
 
+							{/* Repeated beside the buttons on purpose: the page banner sits a
+							    screen away, so a refused action reads as a dead button. */}
+							{(notice || error || measurementDisabled) && (
+								<div className="space-y-2">
+									{notice && (
+										<p className="rounded-md border border-emerald-300 bg-emerald-50 px-3 py-2 text-sm text-emerald-900">
+											{notice}
+										</p>
+									)}
+									{error && (
+										<p className="rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2 text-sm text-destructive">
+											{error}
+										</p>
+									)}
+									{measurementDisabled && (
+										<p className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+											{tr(
+												locale,
+												"Execution is off on this service: set SELENA_MEASUREMENT_ENABLED=true on both web and worker. Nothing was queued.",
+												"Исполнение выключено на этом сервисе: поставьте SELENA_MEASUREMENT_ENABLED=true и на web, и на worker. В очередь ничего не поставлено.",
+											)}
+										</p>
+									)}
+								</div>
+							)}
+
 							{analysis && (
 								<div className="space-y-4 border-t pt-4 text-sm">
 									<p className="text-muted-foreground">
