@@ -5,15 +5,17 @@ import { Checkbox } from "@workspace/ui/components/checkbox";
 import { Label } from "@workspace/ui/components/label";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-	createSelenaOrderDraftFn,
 	decideSelenaScenariosFn,
 	getSelenaOrderDeskFn,
 	prepareSelenaScenariosFn,
+	startSelenaMeasurementFn,
 } from "@/server/selena-order-desk";
 
-// The desk that turns a confirmed brand profile into an order the queue below
-// can approve. Everything here stops at PAID_REVIEW_REQUIRED: no permit is
-// minted and no provider is contacted from this card.
+// The desk that turns a confirmed brand profile into a running measurement.
+// Approving the questions is the judgement; ordering, approving and queueing
+// are one act on a decision already made, so they are one button — behind a
+// confirmation that states the answer count and the ceiling, because this is
+// where money starts moving.
 
 type DeskProject = Awaited<ReturnType<typeof getSelenaOrderDeskFn>>[number];
 type DeskScenario = DeskProject["scenarios"][number];
@@ -21,9 +23,9 @@ type DeskLocale = "en" | "ru";
 
 /** Kept in step with the catalog plans an operator sells from this desk. */
 const PLANS = [
-	{ id: "visitor-local" as const, label: "Snapshot · $49/mo", systems: 3, repeats: 1 },
-	{ id: "full-ai-landscape" as const, label: "Landscape · $79/mo", systems: 8, repeats: 1 },
-	{ id: "expert-verified" as const, label: "Expert Verified · $399", systems: 8, repeats: 5 },
+	{ id: "visitor-local" as const, label: "Snapshot · $49/mo", systems: 3, repeats: 1, budgetCap: 12 },
+	{ id: "full-ai-landscape" as const, label: "Landscape · $79/mo", systems: 8, repeats: 1, budgetCap: 28 },
+	{ id: "expert-verified" as const, label: "Expert Verified · $399", systems: 8, repeats: 5, budgetCap: 140 },
 ];
 
 function tr(locale: DeskLocale, english: string, russian: string): string {
@@ -101,7 +103,7 @@ export function SelenaOrderDesk({ locale, onOrderCreated }: { locale: DeskLocale
 	return (
 		<Card>
 			<CardHeader>
-				<CardTitle>{tr(locale, "Create an order", "Оформить заказ")}</CardTitle>
+				<CardTitle>{tr(locale, "Order a measurement", "Заказать замер")}</CardTitle>
 				<CardDescription>
 					{tr(
 						locale,
@@ -290,9 +292,19 @@ export function SelenaOrderDesk({ locale, onOrderCreated }: { locale: DeskLocale
 							<Button
 								type="button"
 								disabled={selectedApproved.length === 0 || pending !== "" || expectedRuns === 0}
-								onClick={() =>
-									run("order", async () => {
-										const result = await createSelenaOrderDraftFn({
+								onClick={() => {
+									// The one place money starts moving, so the count and the
+									// ceiling are stated before it does.
+									const confirmed = window.confirm(
+										tr(
+											locale,
+											`This orders and starts a measurement: ${expectedRuns} answers from AI providers, capped at $${plan.budgetCap}. Continue?`,
+											`Это оформит заказ и запустит замер: ${expectedRuns} ответов от AI-провайдеров, потолок $${plan.budgetCap}. Продолжить?`,
+										),
+									);
+									if (!confirmed) return;
+									void run("order", async () => {
+										const result = await startSelenaMeasurementFn({
 											data: {
 												projectId,
 												planId,
@@ -302,17 +314,29 @@ export function SelenaOrderDesk({ locale, onOrderCreated }: { locale: DeskLocale
 										});
 										setDraftKey(crypto.randomUUID());
 										onOrderCreated();
+										if (result.stoppedAt === "payment")
+											return tr(
+												locale,
+												"The order was created but the payment was not recorded, so nothing was started.",
+												"Заказ создан, но платёж не зафиксирован — запуск не производился.",
+											);
+										if (result.stoppedAt === "execution")
+											return tr(
+												locale,
+												"Ordered and approved, but execution is off: set SELENA_MEASUREMENT_ENABLED=true on web and worker. Nothing was queued.",
+												"Заказ оформлен и одобрен, но исполнение выключено: поставьте SELENA_MEASUREMENT_ENABLED=true на web и worker. В очередь ничего не поставлено.",
+											);
 										return tr(
 											locale,
-											`Order ${result.orderId} created: ${result.planName}, ${result.expectedRuns} planned answers, status ${result.status}. Review it in the queue below.`,
-											`Заказ ${result.orderId} создан: ${result.planName}, запланировано ответов: ${result.expectedRuns}, статус ${result.status}. Проверьте его в очереди ниже.`,
+											`Started: ${result.expectedRuns} answers ordered, ${result.approved?.permits ?? 0} permits issued, ${result.queued?.enqueued ?? 0} runs queued. Watch the count in the queue below.`,
+											`Запущено: заказано ответов ${result.expectedRuns}, выпущено разрешений ${result.approved?.permits ?? 0}, поставлено в очередь ${result.queued?.enqueued ?? 0}. Следите за счётчиком в очереди ниже.`,
 										);
-									})
-								}
+									});
+								}}
 							>
 								{pending === "order"
-									? tr(locale, "Creating…", "Создаём…")
-									: tr(locale, "Create paid order", "Создать оплаченный заказ")}
+									? tr(locale, "Starting…", "Запускаем…")
+									: tr(locale, "Order and start the measurement", "Заказать и запустить замер")}
 							</Button>
 						</div>
 					</>
