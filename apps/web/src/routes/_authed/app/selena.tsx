@@ -21,7 +21,23 @@ import { validateWebsiteUrl } from "@/lib/brand-website";
 import { resetPostHog } from "@/lib/posthog";
 import { SUGGESTION_LIMITS } from "@/lib/selena-suggestion";
 import { humanizeSelenaError } from "@/lib/selena-workspace-errors";
+import type { LedgerReport } from "@workspace/lib/selena-ledger-metrics";
+import { groupView, formatShare, type GroupView } from "@/lib/selena-measurement-view";
 import { createSelenaProjectFn, getSelenaWorkspaceFn } from "../../../server/selena-client";
+import { getSelenaMeasurementFn, type MeasurementView } from "../../../server/selena-measurement-view";
+import type { CycleDiffChange } from "@workspace/lib/selena-cycle-diff";
+import { getSelenaCycleCompareFn, type CycleCompareResult } from "../../../server/selena-cycle-compare";
+import {
+	getSelenaRunDetailFn,
+	listSelenaRunsFn,
+	type RunDetail,
+	type RunListItem,
+} from "../../../server/selena-run-explorer";
+import {
+	listSelenaScenariosFn as getSelenaScenariosListFn,
+	reviewSelenaScenarioFn,
+	type ScenarioListItem,
+} from "../../../server/selena-scenarios";
 import {
 	cancelSelenaProfileSuggestionFn,
 	confirmSelenaProfileFn,
@@ -490,6 +506,8 @@ function SelenaWorkspace() {
 								feedback={feedbackScope === "website" ? { notice, error } : undefined}
 								onCollect={collectWebsite}
 							/>
+							<QuestionsPanel project={selectedProject} locale={locale} />
+							<MeasurementPanel project={selectedProject} locale={locale} />
 							<ResultsPanel project={selectedProject} locale={locale} />
 						</>
 					)}
@@ -880,6 +898,585 @@ function WebsiteEvidence({
 			)}
 			<FormFeedback feedback={feedback} className="mt-5" />
 		</section>
+	);
+}
+
+/**
+ * Step 2 of the cabinet: approving the questions a paid cycle will ask. The
+ * backend has always refused to order unapproved scenarios; this screen makes
+ * that decision the customer's. Text can be edited only as part of the
+ * decision — the same single repository path the operator desk uses.
+ */
+function QuestionsPanel({ project, locale }: { project: WorkspaceProject; locale: WorkspaceLocale }) {
+	const [scenarios, setScenarios] = useState<ScenarioListItem[] | null>(null);
+	const [failed, setFailed] = useState(false);
+	const [drafts, setDrafts] = useState<Record<string, string>>({});
+	const [busyId, setBusyId] = useState("");
+	const [rowError, setRowError] = useState("");
+
+	const load = () => {
+		getSelenaScenariosListFn({ data: { projectId: project.project.id } })
+			.then((data) => setScenarios(data.scenarios))
+			.catch(() => setFailed(true));
+	};
+	// biome-ignore lint/correctness/useExhaustiveDependencies: reload only when the project changes
+	useEffect(load, [project.project.id]);
+
+	const decide = async (scenario: ScenarioListItem, decision: "APPROVED" | "REJECTED") => {
+		setBusyId(scenario.id);
+		setRowError("");
+		try {
+			const draft = drafts[scenario.id];
+			await reviewSelenaScenarioFn({
+				data: {
+					scenarioId: scenario.id,
+					decision,
+					...(draft !== undefined && draft !== scenario.text ? { text: draft } : {}),
+				},
+			});
+			load();
+		} catch (cause) {
+			setRowError(
+				humanizeSelenaError(
+					cause,
+					locale,
+					tr(locale, "Could not save the decision. Try again.", "Не удалось сохранить решение. Попробуйте ещё раз."),
+				),
+			);
+		} finally {
+			setBusyId("");
+		}
+	};
+
+	const proposed = scenarios?.filter((item) => item.status === "PROPOSED") ?? [];
+	const decided = scenarios?.filter((item) => item.status !== "PROPOSED") ?? [];
+
+	return (
+		<section className="selena-section" aria-labelledby="questions-title">
+			<div className="flex gap-4">
+				<div className="selena-icon-disc">
+					<IconCheck className="size-5" />
+				</div>
+				<div>
+					<h2 id="questions-title" className="selena-heading text-2xl">
+						{tr(locale, "Approve the questions", "Утвердите вопросы")}
+					</h2>
+					<p className="mt-2 max-w-2xl text-sm leading-6 text-[#6e6258]">
+						{tr(
+							locale,
+							"A paid measurement asks only questions you approved. Edit the wording if needed, then approve or reject each one — nothing runs on unapproved questions.",
+							"Платный замер задаёт только утверждённые вами вопросы. Поправьте формулировку, если нужно, и утвердите или отклоните каждый — по неутверждённым вопросам ничего не запускается.",
+						)}
+					</p>
+				</div>
+			</div>
+			{failed ? (
+				<p className="mt-5 text-sm text-[#9a5f14]">
+					{tr(locale, "Could not load the questions.", "Не удалось загрузить вопросы.")}
+				</p>
+			) : scenarios === null ? (
+				<p className="mt-5 text-sm text-[#6e6258]">{tr(locale, "Loading…", "Загружаем…")}</p>
+			) : scenarios.length === 0 ? (
+				<p className="mt-5 rounded-lg border border-dashed border-[#cdbdac] bg-[#fffdf8] px-4 py-3 text-sm text-[#6e6258]">
+					{tr(
+						locale,
+						"No questions proposed yet. They appear here after the profile is confirmed and questions are prepared.",
+						"Вопросов пока не предложено. Они появятся здесь после подтверждения профиля и подготовки вопросов.",
+					)}
+				</p>
+			) : (
+				<div className="mt-5 flex flex-col gap-3">
+					{rowError && <p className="text-sm text-[#9a5f14]">{rowError}</p>}
+					{proposed.map((scenario) => (
+						<div key={scenario.id} className="rounded-lg border border-[#e5dbcd] bg-[#fffdf8] p-4">
+							<p className="text-xs uppercase tracking-wide text-[#6e6258]">
+								{scenario.language.toUpperCase()} ·{" "}
+								{scenario.intentType === "branded"
+									? tr(locale, "names the brand", "с названием бренда")
+									: tr(locale, "category question", "вопрос про категорию")}
+							</p>
+							<Input
+								className="mt-2"
+								value={drafts[scenario.id] ?? scenario.text}
+								onChange={(event) =>
+									setDrafts((current) => ({ ...current, [scenario.id]: event.target.value }))
+								}
+							/>
+							<div className="mt-3 flex gap-2">
+								<Button
+									type="button"
+									size="sm"
+									disabled={busyId === scenario.id}
+									onClick={() => decide(scenario, "APPROVED")}
+								>
+									{tr(locale, "Approve", "Утвердить")}
+								</Button>
+								<Button
+									type="button"
+									size="sm"
+									variant="outline"
+									disabled={busyId === scenario.id}
+									onClick={() => decide(scenario, "REJECTED")}
+								>
+									{tr(locale, "Reject", "Отклонить")}
+								</Button>
+							</div>
+						</div>
+					))}
+					{decided.length > 0 && (
+						<div className="rounded-lg border border-[#e5dbcd] bg-[#fffdf8] p-4">
+							<h3 className="text-sm font-semibold text-[#3d362e]">{tr(locale, "Decided", "Решённые")}</h3>
+							<ul className="mt-2 flex flex-col gap-1 text-sm text-[#3d362e]">
+								{decided.map((scenario) => (
+									<li key={scenario.id} className="flex items-start justify-between gap-3">
+										<span>{scenario.text}</span>
+										<span className="shrink-0 text-xs text-[#6e6258]">
+											{scenario.status === "APPROVED"
+												? tr(locale, "approved", "утверждён")
+												: tr(locale, "rejected", "отклонён")}
+										</span>
+									</li>
+								))}
+							</ul>
+						</div>
+					)}
+				</div>
+			)}
+		</section>
+	);
+}
+
+/**
+ * Step 4 of the cabinet: the paid measurement. Locked (shown, not hidden)
+ * until the project has a cycle; once one exists, renders the ledger report
+ * with branded and non-branded apart, UNKNOWN for an empty group, and no
+ * composite score anywhere — the CABINET_MODEL rules the backend already
+ * enforces, made visible.
+ */
+function MeasurementPanel({ project, locale }: { project: WorkspaceProject; locale: WorkspaceLocale }) {
+	const [view, setView] = useState<MeasurementView | null>(null);
+	const [failed, setFailed] = useState(false);
+	const hasCycle = project.measurement !== null;
+
+	useEffect(() => {
+		if (!hasCycle) return;
+		let cancelled = false;
+		getSelenaMeasurementFn({ data: { projectId: project.project.id } })
+			.then((data) => {
+				if (!cancelled) setView(data);
+			})
+			.catch(() => {
+				if (!cancelled) setFailed(true);
+			});
+		return () => {
+			cancelled = true;
+		};
+	}, [hasCycle, project.project.id]);
+
+	return (
+		<section className="selena-section" aria-labelledby="measurement-title">
+			<div className="flex gap-4">
+				<div className="selena-icon-disc">
+					<IconSparkles className="size-5" />
+				</div>
+				<div>
+					<h2 id="measurement-title" className="selena-heading text-2xl">
+						{tr(locale, "Measurement", "Замер")}
+					</h2>
+					<p className="mt-2 max-w-2xl text-sm leading-6 text-[#6e6258]">
+						{tr(
+							locale,
+							"What the ordered AI measurement observed. Questions naming the brand and category questions are counted separately and never merged into one score.",
+							"Что показал заказанный AI-замер. Вопросы с названием бренда и вопросы про категорию считаются раздельно и никогда не сводятся в один балл.",
+						)}
+					</p>
+				</div>
+			</div>
+			{!hasCycle ? (
+				<p className="mt-5 rounded-lg border border-dashed border-[#cdbdac] bg-[#fffdf8] px-4 py-3 text-sm text-[#6e6258]">
+					{tr(
+						locale,
+						"This step opens after a measurement order is confirmed. No cycle has been ordered yet.",
+						"Этот шаг откроется после подтверждения заказа на замер. Цикл ещё не заказан.",
+					)}
+				</p>
+			) : failed ? (
+				<p className="mt-5 text-sm text-[#9a5f14]">
+					{tr(locale, "Could not load the measurement.", "Не удалось загрузить замер.")}
+				</p>
+			) : view === null ? (
+				<p className="mt-5 text-sm text-[#6e6258]">{tr(locale, "Loading…", "Загружаем…")}</p>
+			) : (
+				<MeasurementReport view={view} locale={locale} projectId={project.project.id} />
+			)}
+		</section>
+	);
+}
+
+function MeasurementReport({ view, locale, projectId }: { view: MeasurementView; locale: WorkspaceLocale; projectId: string }) {
+	const latest = view.latest;
+	const cycle = view.cycles[0];
+	if (!latest || !cycle) {
+		return (
+			<p className="mt-5 text-sm text-[#6e6258]">
+				{tr(locale, "No measurement cycle recorded yet.", "Ни одного цикла замера ещё не записано.")}
+			</p>
+		);
+	}
+	const statusLabel: Record<string, [string, string]> = {
+		SCHEDULED: ["Scheduled", "Запланирован"],
+		RUNNING: ["Running", "Выполняется"],
+		QC_REQUIRED: ["Awaiting quality review", "Ожидает проверку качества"],
+		READY: ["Ready", "Готов"],
+		DELIVERED: ["Delivered", "Выдан"],
+	};
+	const [en, ru] = statusLabel[cycle.status] ?? [cycle.status, cycle.status];
+	return (
+		<div className="mt-5 flex flex-col gap-4">
+			<p className="text-sm text-[#6e6258]">
+				{tr(locale, "Cycle status", "Статус цикла")}: <strong>{tr(locale, en, ru)}</strong> ·{" "}
+				{tr(locale, "runs completed", "прогонов завершено")}: {cycle.completedRuns} / {cycle.expectedRuns}
+			</p>
+			<div className="grid gap-4 sm:grid-cols-2">
+				<MeasurementGroup
+					locale={locale}
+					title={tr(locale, "Category questions (no brand name)", "Вопросы про категорию (без названия бренда)")}
+					group={groupView(latest.report.nonBranded)}
+				/>
+				<MeasurementGroup
+					locale={locale}
+					title={tr(locale, "Questions naming the brand", "Вопросы с названием бренда")}
+					group={groupView(latest.report.branded)}
+				/>
+			</div>
+			<RelativeMentionShare locale={locale} report={latest.report} />
+			<VisitorApiSplit locale={locale} report={latest.report} />
+			{latest.report.unclassifiedRuns > 0 && (
+				<p className="text-xs text-[#6e6258]">
+					{tr(locale, "Runs outside both groups", "Прогоны вне обеих групп")}: {latest.report.unclassifiedRuns}
+				</p>
+			)}
+			<RunExplorer cycleId={latest.cycleId} locale={locale} />
+			<CycleComparePanel cycleCount={view.cycles.length} locale={locale} projectId={projectId} />
+		</div>
+	);
+}
+
+/**
+ * Step 7: what changed between the two newest cycles — and in which measured
+ * answers. Deliberately never "thanks to us": engines and competitors change
+ * over the same weeks, and the diff states observations, not causes.
+ */
+function CycleComparePanel({
+	cycleCount,
+	locale,
+	projectId,
+}: {
+	cycleCount: number;
+	locale: WorkspaceLocale;
+	projectId: string;
+}) {
+	const [result, setResult] = useState<CycleCompareResult | null>(null);
+
+	useEffect(() => {
+		if (cycleCount < 2 || !projectId) return;
+		let cancelled = false;
+		getSelenaCycleCompareFn({ data: { projectId } })
+			.then((data) => {
+				if (!cancelled) setResult(data);
+			})
+			.catch(() => {});
+		return () => {
+			cancelled = true;
+		};
+	}, [cycleCount, projectId]);
+
+	if (cycleCount < 2)
+		return (
+			<p className="rounded-lg border border-dashed border-[#cdbdac] bg-[#fffdf8] px-4 py-3 text-sm text-[#6e6258]">
+				{tr(
+					locale,
+					"Comparison between measurements opens after the second cycle.",
+					"Сравнение между замерами откроется после второго цикла.",
+				)}
+			</p>
+		);
+	if (!result || !result.comparable) return null;
+
+	const label = (change: CycleDiffChange): string => {
+		switch (change.type) {
+			case "MENTION_APPEARED":
+				return tr(locale, "the brand is now mentioned", "бренд теперь упоминается");
+			case "MENTION_DISAPPEARED":
+				return tr(locale, "the brand is no longer mentioned", "бренд больше не упоминается");
+			case "POSITION_SHIFTED":
+				return `${tr(locale, "position", "позиция")} ${change.basePosition} → ${change.comparePosition}`;
+			case "SOURCE_APPEARED":
+				return `${tr(locale, "new cited source", "новый цитируемый источник")}: ${change.domain}`;
+			case "SOURCE_DISAPPEARED":
+				return `${tr(locale, "source no longer cited", "источник больше не цитируется")}: ${change.domain}`;
+		}
+	};
+
+	const unknownGroups = result.report.groups.filter((group) => group.status === "UNKNOWN");
+	return (
+		<div className="rounded-lg border border-[#e5dbcd] bg-[#fffdf8] p-4">
+			<h3 className="text-sm font-semibold text-[#3d362e]">
+				{tr(locale, "What changed between the measurements", "Что изменилось между замерами")}
+			</h3>
+			<p className="mt-1 text-xs text-[#6e6258]">
+				{tr(
+					locale,
+					"Observed differences only — engines and competitors also change over the same period.",
+					"Только наблюдаемые различия — за то же время меняются и движки, и конкуренты.",
+				)}
+			</p>
+			{result.report.changes.length === 0 ? (
+				<p className="mt-2 text-sm text-[#6e6258]">
+					{tr(locale, "No differences in the compared groups.", "В сравнимых группах различий нет.")}
+				</p>
+			) : (
+				<ul className="mt-2 flex flex-col gap-1 text-sm text-[#3d362e]">
+					{result.report.changes.map((change, index) => (
+						<li key={`${change.type}-${change.scenarioId}-${change.system}-${index}`}>
+							{change.system} · {label(change)}{" "}
+							<span className="text-xs text-[#6e6258]">
+								({tr(locale, "measured in", "измерено в")} {change.evidence.baseRunIds.length}+
+								{change.evidence.compareRunIds.length} {tr(locale, "answers", "ответах")})
+							</span>
+						</li>
+					))}
+				</ul>
+			)}
+			{unknownGroups.length > 0 && (
+				<p className="mt-2 text-xs text-[#6e6258]">
+					{tr(locale, "Groups not comparable between the cycles", "Группы, несравнимые между циклами")}:{" "}
+					{unknownGroups.length}
+				</p>
+			)}
+		</div>
+	);
+}
+
+/**
+ * Addendum §7 made visible: each answer behind the numbers, with the verbatim
+ * text while it is inside its retention window and an honest marker after.
+ */
+function RunExplorer({ cycleId, locale }: { cycleId: string; locale: WorkspaceLocale }) {
+	const [runs, setRuns] = useState<RunListItem[] | null>(null);
+	const [openRunId, setOpenRunId] = useState("");
+	const [detail, setDetail] = useState<RunDetail | null>(null);
+
+	useEffect(() => {
+		let cancelled = false;
+		listSelenaRunsFn({ data: { cycleId } })
+			.then((data) => {
+				if (!cancelled) setRuns(data.runs);
+			})
+			.catch(() => {
+				if (!cancelled) setRuns([]);
+			});
+		return () => {
+			cancelled = true;
+		};
+	}, [cycleId]);
+
+	const openRun = async (runId: string) => {
+		if (openRunId === runId) {
+			setOpenRunId("");
+			setDetail(null);
+			return;
+		}
+		setOpenRunId(runId);
+		setDetail(null);
+		try {
+			setDetail(await getSelenaRunDetailFn({ data: { runId } }));
+		} catch {
+			setOpenRunId("");
+		}
+	};
+
+	if (!runs || runs.length === 0) return null;
+	return (
+		<div className="rounded-lg border border-[#e5dbcd] bg-[#fffdf8] p-4">
+			<h3 className="text-sm font-semibold text-[#3d362e]">
+				{tr(locale, "Answers behind the numbers", "Ответы, из которых собраны цифры")}
+			</h3>
+			<ul className="mt-2 flex flex-col gap-1">
+				{runs.map((run) => (
+					<li key={run.id}>
+						<button
+							type="button"
+							className="flex w-full items-center justify-between gap-3 rounded px-2 py-1.5 text-left text-sm hover:bg-[#f5eee2]"
+							onClick={() => openRun(run.id)}
+						>
+							<span className="text-[#3d362e]">
+								{run.system ?? "—"} · {run.channel === "VISITOR" || run.channel.toLowerCase().startsWith("visitor")
+									? "Visitor View"
+									: "API View"}
+							</span>
+							<span className="shrink-0 text-xs text-[#6e6258]">
+								{run.validity ?? run.status}
+								{run.finishedAt ? ` · ${formatDate(run.finishedAt, locale)}` : ""}
+							</span>
+						</button>
+						{openRunId === run.id && (
+							<div className="mt-1 rounded border border-[#e5dbcd] bg-white p-3 text-sm">
+								{detail === null ? (
+									<p className="text-[#6e6258]">{tr(locale, "Loading…", "Загружаем…")}</p>
+								) : (
+									<div className="flex flex-col gap-2">
+										{detail.scenarioText && (
+											<p>
+												<span className="text-[#6e6258]">{tr(locale, "Question", "Вопрос")}: </span>
+												{detail.scenarioText}
+											</p>
+										)}
+										{detail.mentions.length > 0 ? (
+											<p>
+												<span className="text-[#6e6258]">{tr(locale, "Named", "Названы")}: </span>
+												{detail.mentions
+													.map((m) => `${m.name}${m.ordinalPosition ? ` (#${m.ordinalPosition})` : ""}`)
+													.join(", ")}
+											</p>
+										) : (
+											<p className="text-[#6e6258]">
+												{tr(
+													locale,
+													"No tracked entity was named, or the answer is stored but not measured.",
+													"Ни одна отслеживаемая сущность не названа, либо ответ сохранён, но не измерен.",
+												)}
+											</p>
+										)}
+										{detail.citations.length > 0 && (
+											<p>
+												<span className="text-[#6e6258]">{tr(locale, "Cited", "Процитированы")}: </span>
+												{detail.citations.map((c) => c.domain).join(", ")}
+											</p>
+										)}
+										{detail.sources.length > 0 && (
+											<p>
+												<span className="text-[#6e6258]">
+													{tr(locale, "Shown as sources", "Показаны как источники")}:{" "}
+												</span>
+												{detail.sources.map((s) => s.domain).join(", ")}
+											</p>
+										)}
+										{detail.answer.state === "present" ? (
+											<blockquote className="whitespace-pre-wrap rounded bg-[#faf6ee] p-2 text-[#3d362e]">
+												{detail.answer.text}
+											</blockquote>
+										) : detail.answer.state === "deleted" ? (
+											<p className="text-[#6e6258]">
+												{tr(
+													locale,
+													"The verbatim text was deleted at the end of its retention window; the findings above remain.",
+													"Дословный текст удалён по окончании срока хранения; находки выше сохранены.",
+												)}
+											</p>
+										) : null}
+										{detail.rawResponseReference && (
+											<p className="text-xs text-[#6e6258]">
+												{tr(locale, "Answer reference", "Ссылка на ответ")}: {detail.rawResponseReference}
+											</p>
+										)}
+									</div>
+								)}
+							</div>
+						)}
+					</li>
+				))}
+			</ul>
+		</div>
+	);
+}
+
+function MeasurementGroup({ locale, title, group }: { locale: WorkspaceLocale; title: string; group: GroupView }) {
+	return (
+		<div className="rounded-lg border border-[#e5dbcd] bg-[#fffdf8] p-4">
+			<h3 className="text-sm font-semibold text-[#3d362e]">{title}</h3>
+			{group.state === "unknown" ? (
+				<p className="mt-2 text-sm text-[#6e6258]">
+					{tr(
+						locale,
+						"Unknown — no measured answers in this group yet. Not shown as 0%.",
+						"Неизвестно — в этой группе пока нет измеренных ответов. Это не 0%.",
+					)}
+				</p>
+			) : (
+				<dl className="mt-2 grid gap-1 text-sm text-[#3d362e]">
+					<div className="flex justify-between gap-3">
+						<dt className="text-[#6e6258]">{tr(locale, "Answers mentioning the brand", "Ответы с упоминанием бренда")}</dt>
+						<dd>{group.mentionCoverage ?? tr(locale, "unknown", "неизвестно")}</dd>
+					</div>
+					<div className="flex justify-between gap-3">
+						<dt className="text-[#6e6258]">{tr(locale, "Average position among mentions", "Средняя позиция среди упоминаний")}</dt>
+						<dd>{group.averageBrandPosition ?? "—"}</dd>
+					</div>
+					<div className="flex justify-between gap-3">
+						<dt className="text-[#6e6258]">{tr(locale, "Measured answers", "Измеренных ответов")}</dt>
+						<dd>{group.measuredRuns}</dd>
+					</div>
+					{group.unmeasuredRuns > 0 && (
+						<div className="flex justify-between gap-3">
+							<dt className="text-[#6e6258]">{tr(locale, "Stored but not measured", "Сохранено, но не измерено")}</dt>
+							<dd>{group.unmeasuredRuns}</dd>
+						</div>
+					)}
+				</dl>
+			)}
+		</div>
+	);
+}
+
+/**
+ * The Share-of-Voice analog on ledger evidence (addendum §6.2): the brand's
+ * share among tracked-entity mentions, next to each confirmed competitor.
+ * Rendered under the mixed label because it pools branded and non-branded —
+ * the two group cards above stay the primary reading.
+ */
+function RelativeMentionShare({ locale, report }: { locale: WorkspaceLocale; report: LedgerReport }) {
+	const mixed = report.mixed.group;
+	if (mixed.status !== "MEASURED") return null;
+	const share = mixed.metrics.relativeMentionShare;
+	if (share.brand === null && share.competitors.length === 0) return null;
+	return (
+		<div className="rounded-lg border border-[#e5dbcd] bg-[#fffdf8] p-4 text-sm">
+			<h3 className="font-semibold text-[#3d362e]">
+				{tr(locale, "Share among tracked mentions (both groups pooled)", "Доля среди отслеживаемых упоминаний (обе группы вместе)")}
+			</h3>
+			<dl className="mt-2 grid gap-1 text-[#3d362e]">
+				<div className="flex justify-between gap-3">
+					<dt className="text-[#6e6258]">{tr(locale, "Your brand", "Ваш бренд")}</dt>
+					<dd>{formatShare(share.brand) ?? tr(locale, "unknown", "неизвестно")}</dd>
+				</div>
+				{share.competitors.map((competitor) => (
+					<div key={competitor.name} className="flex justify-between gap-3">
+						<dt className="text-[#6e6258]">{competitor.name}</dt>
+						<dd>{formatShare(competitor.share)}</dd>
+					</div>
+				))}
+			</dl>
+		</div>
+	);
+}
+
+function VisitorApiSplit({ locale, report }: { locale: WorkspaceLocale; report: LedgerReport }) {
+	const mixed = report.mixed.group;
+	if (mixed.status !== "MEASURED") return null;
+	const { visitorMentionRate, apiMentionRate } = mixed.metrics.visitorApiDivergence;
+	return (
+		<div className="rounded-lg border border-[#e5dbcd] bg-[#fffdf8] p-4 text-sm">
+			<h3 className="font-semibold text-[#3d362e]">
+				{tr(locale, "Visitor View and API View, separately", "Visitor View и API View, раздельно")}
+			</h3>
+			<p className="mt-2 text-[#6e6258]">
+				{tr(locale, "What a visitor is shown", "Что видит посетитель")}:{" "}
+				{formatShare(visitorMentionRate) ?? tr(locale, "unknown", "неизвестно")} ·{" "}
+				{tr(locale, "what the model answers directly", "что модель отвечает напрямую")}:{" "}
+				{formatShare(apiMentionRate) ?? tr(locale, "unknown", "неизвестно")}
+			</p>
+		</div>
 	);
 }
 

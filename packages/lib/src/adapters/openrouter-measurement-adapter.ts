@@ -268,11 +268,15 @@ export function createOpenRouterAdapter(deps: OpenRouterAdapterDeps): SelenaMeas
 			} catch {
 				return invalidOutcome(permit, "MALFORMED_RESPONSE", costFields());
 			}
-			const content = data.choices?.[0]?.message?.content;
+			const rawContent = data.choices?.[0]?.message?.content;
 			// The payload carries the real usage even when the answer is unusable:
 			// bill what was reported, not the estimate.
-			if (typeof content !== "string" || content.trim() === "")
+			if (typeof rawContent !== "string" || rawContent.trim() === "")
 				return invalidOutcome(permit, "EMPTY_RESPONSE", costFields(data.usage));
+			// The stored answer text must never store the credential: a response
+			// that echoes request material back would otherwise write the key
+			// into a retained row.
+			const content = rawContent.split(deps.apiKey).join("[redacted-credential]");
 			// Extraction is an enrichment of a call that already succeeded and was
 			// paid for: a context failure must not turn paid evidence into a
 			// FAILED row. The raw response is stored either way, so a missing

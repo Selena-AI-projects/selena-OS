@@ -1,7 +1,7 @@
 import { runMeasurementSchema } from "@workspace/selena-visibility-contracts";
 import { describe, expect, it } from "vitest";
 import { extractMeasurement } from "./selena-answer-extraction";
-import { buildExtractionContext, hostOf, parseLockedProfile } from "./selena-extraction-context";
+import { buildExtractionContext, hostOf, lockedProfileBlock, parseLockedProfile } from "./selena-extraction-context";
 
 const profile = {
 	brandName: "KORA Food Hall",
@@ -111,5 +111,36 @@ describe("parseLockedProfile", () => {
 
 	it("throws on a corrupt block rather than falling back to the live profile", () => {
 		expect(() => parseLockedProfile({ profile: { brandName: 7 } })).toThrow();
+	});
+});
+
+describe("lockedProfileBlock", () => {
+	it("round-trips through parseLockedProfile", () => {
+		const block = lockedProfileBlock({
+			brandName: "KORA Food Hall",
+			primaryDomain: "https://korafoodhall.com",
+			competitorSnapshot: [
+				{ name: "Rival Cafe", domains: ["rivalcafe.id"] },
+				{ name: "Other Place", domains: [] },
+			],
+		});
+		expect(parseLockedProfile({ profile: block })).toEqual(block);
+	});
+
+	it("accepts the older single-domain competitor form", () => {
+		const block = lockedProfileBlock({
+			brandName: "KORA",
+			primaryDomain: "korafoodhall.com",
+			competitorSnapshot: [{ name: "Rival Cafe", domain: "rivalcafe.id" }],
+		});
+		expect(block.competitorSnapshot).toEqual([{ name: "Rival Cafe", domains: ["rivalcafe.id"] }]);
+	});
+
+	it("drops nameless entries and non-arrays instead of freezing garbage", () => {
+		expect(lockedProfileBlock({ brandName: "K", primaryDomain: "k.com", competitorSnapshot: "oops" }).competitorSnapshot).toEqual([]);
+		expect(
+			lockedProfileBlock({ brandName: "K", primaryDomain: "k.com", competitorSnapshot: [{ domains: ["x.com"] }, null] })
+				.competitorSnapshot,
+		).toEqual([]);
 	});
 });

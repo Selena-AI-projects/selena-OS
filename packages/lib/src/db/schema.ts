@@ -212,6 +212,11 @@ export const reports = pgTable(
 		id: uuid("id").defaultRandom().primaryKey().notNull(),
 		brandName: text("brand_name").notNull(),
 		brandWebsite: text("brand_website").notNull(),
+		// Nullable on purpose (DS-P0-15): legacy rows have no recoverable owner
+		// — the brand name is free text, so inferring an org would attribute
+		// one tenant's report to another on a name collision. NULL means
+		// legacy, admin-only forever; every new write sets it.
+		organizationId: text("organization_id").references(() => organization.id),
 		status: reportStatusEnum().notNull().default("pending"),
 		progress: integer("progress").notNull().default(0),
 		rawOutput: json("raw_output"),
@@ -224,6 +229,7 @@ export const reports = pgTable(
 	},
 	(table) => ({
 		createdAtIdx: index("reports_created_at_idx").on(table.createdAt),
+		organizationIdx: index("reports_organization_idx").on(table.organizationId),
 	}),
 ).enableRLS();
 
@@ -455,7 +461,7 @@ export const svIncidents = pgTable("sv_incidents", {
 // whether the amount is the provider's actual figure or our estimate; cap
 // alerts read sums from here rather than trusting run rows to be complete.
 export const svCostEvents = pgTable("sv_cost_events", {
-	id: uuid("id").defaultRandom().primaryKey().notNull(), organizationId: text("organization_id").notNull().references(() => organization.id), cycleId: uuid("cycle_id").notNull().references(() => svCycles.id), runId: uuid("run_id").references(() => svRuns.id), provider: text("provider").notNull(), amountUsd: numeric("amount_usd", { precision: 12, scale: 6 }).notNull(), basis: text("basis").notNull(), createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+	id: uuid("id").defaultRandom().primaryKey().notNull(), organizationId: text("organization_id").notNull().references(() => organization.id), cycleId: uuid("cycle_id").references(() => svCycles.id), runId: uuid("run_id").references(() => svRuns.id), provider: text("provider").notNull(), amountUsd: numeric("amount_usd", { precision: 12, scale: 6 }).notNull(), basis: text("basis").notNull(), kind: text("kind").notNull().default("measurement"), createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 }, (table) => ({ orgCycleIdx: index("sv_cost_events_org_cycle_idx").on(table.organizationId, table.cycleId), runIdx: index("sv_cost_events_run_idx").on(table.runId) })).enableRLS();
 
 export const svRecommendationRunStatusEnum = pgEnum("sv_recommendation_run_status", ["RUNNING", "READY", "FAILED"]);

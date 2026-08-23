@@ -69,6 +69,35 @@ export function parseLockedProfile(snapshot: unknown): ExtractionProfile | null 
 }
 
 /**
+ * The profile block an order freezes into its configuration lock, in exactly
+ * the shape parseLockedProfile reads back. Built when the lock is minted, so a
+ * profile edited after purchase cannot change what the cycle's runs are
+ * measured against. Tolerates both stored competitor forms ({domains: []} and
+ * the older {domain}) because the block must capture what the customer
+ * actually confirmed, not what the latest writer happened to store.
+ */
+export function lockedProfileBlock(profile: ExtractionProfile): {
+	brandName: string;
+	primaryDomain: string;
+	competitorSnapshot: { name: string; domains: string[] }[];
+} {
+	const raw = Array.isArray(profile.competitorSnapshot) ? profile.competitorSnapshot : [];
+	const competitorSnapshot = raw.flatMap((entry) => {
+		if (typeof entry !== "object" || entry === null) return [];
+		const record = entry as Record<string, unknown>;
+		const name = typeof record.name === "string" ? record.name.trim() : "";
+		if (name === "") return [];
+		const domains = Array.isArray(record.domains)
+			? record.domains.filter((domain): domain is string => typeof domain === "string" && domain.trim() !== "")
+			: typeof record.domain === "string" && record.domain.trim() !== ""
+				? [record.domain]
+				: [];
+		return [{ name, domains }];
+	});
+	return { brandName: profile.brandName, primaryDomain: profile.primaryDomain, competitorSnapshot };
+}
+
+/**
  * The domains a citation counts as the brand's own. Only the brand's own site:
  * a public profile on a shared platform is not owned, and counting it would
  * mark a citation of any competitor's page there as the brand's own source.

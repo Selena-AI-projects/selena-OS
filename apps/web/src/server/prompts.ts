@@ -11,7 +11,7 @@ import { assertPromptSaveAllowed, type PromptSaveDelta } from "@workspace/lib/en
 import { computeSystemTags, getEffectiveBrandedStatus } from "@workspace/lib/tag-utils";
 import { and, count, desc, eq, gte, sql } from "drizzle-orm";
 import { z } from "zod";
-import { requireAuthSession, requireBrandAccess } from "@/lib/auth/helpers";
+import { BRAND_WRITER_ROLES, promptForUser, requireAuthSession, requireBrandAccess, requireBrandRole } from "@/lib/auth/helpers";
 import type { LookbackPeriod } from "@/lib/chart-utils";
 import { generateDateRange } from "@/lib/chart-utils";
 import { rollUpCitationDomains, rollUpCitationUrls, tallyCitations } from "@/lib/citation-rollup";
@@ -303,14 +303,11 @@ export const getPromptStatsFn = createServerFn({ method: "GET" })
 	.handler(async ({ data }) => {
 		const session = await requireAuthSession();
 
-		const prompt = await db
-			.select({ id: prompts.id, brandId: prompts.brandId, value: prompts.value })
-			.from(prompts)
-			.where(eq(prompts.id, data.promptId))
-			.limit(1);
-
-		if (prompt.length === 0) throw new Error("Prompt not found");
-		await requireBrandAccess(session.user.id, prompt[0].brandId);
+		// DS-P1-28: authorization lives inside the read — a foreign prompt and a
+		// missing one are the same "not found".
+		const owned = await promptForUser(session.user.id, data.promptId);
+		if (!owned) throw new Error("Prompt not found");
+		const prompt = [{ id: owned.id, brandId: owned.brandId, value: owned.value }];
 
 		const fromDate = new Date();
 		fromDate.setDate(fromDate.getDate() - data.days);
@@ -454,13 +451,9 @@ export const getPromptRunsFn = createServerFn({ method: "GET" })
 		}),
 	)
 	.handler(async ({ data }) => {
-		const prompt = await db.query.prompts.findFirst({
-			where: eq(prompts.id, data.promptId),
-		});
-		if (!prompt) throw new Error("Prompt not found");
-
 		const session = await requireAuthSession();
-		await requireBrandAccess(session.user.id, prompt.brandId);
+		const prompt = await promptForUser(session.user.id, data.promptId);
+		if (!prompt) throw new Error("Prompt not found");
 
 		const fromDate = new Date();
 		fromDate.setDate(fromDate.getDate() - data.days);
@@ -515,7 +508,7 @@ export const updatePromptsFn = createServerFn({ method: "POST" })
 	)
 	.handler(async ({ data }) => {
 		const session = await requireAuthSession();
-		await requireBrandAccess(session.user.id, data.brandId);
+		await requireBrandRole(session.user.id, data.brandId, BRAND_WRITER_ROLES);
 
 		const brand = await db.query.brands.findFirst({
 			where: eq(brands.id, data.brandId),
@@ -655,15 +648,12 @@ export const getPromptChartDataFn = createServerFn({ method: "GET" })
 		}
 
 		// Get metadata from DB
-		const [promptData, brandData, competitorsData] = await Promise.all([
-			db
-				.select({ id: prompts.id, value: prompts.value, brandId: prompts.brandId })
-				.from(prompts)
-				.where(eq(prompts.id, data.promptId))
-				.limit(1),
+		const [ownedPrompt, brandData, competitorsData] = await Promise.all([
+			promptForUser(session.user.id, data.promptId),
 			db.select().from(brands).where(eq(brands.id, data.brandId)).limit(1),
 			db.select().from(competitors).where(eq(competitors.brandId, data.brandId)),
 		]);
+		const promptData = ownedPrompt ? [{ id: ownedPrompt.id, value: ownedPrompt.value, brandId: ownedPrompt.brandId }] : [];
 
 		if (promptData.length === 0) throw new Error("Prompt not found");
 		if (brandData.length === 0) throw new Error("Brand not found");

@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import {
+	answerRetainUntil,
 	type RunOutcome,
 	runMeasurementSchema,
 	runOutcomeSchema,
@@ -401,6 +402,20 @@ export function createBrightDataAdapter(deps: BrightDataAdapterDeps): SelenaMeas
 				answer = null;
 			}
 			if (!answer) return invalidOutcome(permit, "MALFORMED_RESPONSE", costFields());
+			// Storing the answer text (CABINET_MODEL §4a) must never store the
+			// credential: a surface that echoes request material back would
+			// otherwise write the key into a row read by more people than hold
+			// it. Everything destined for the run row is scrubbed.
+			const scrub = (value: string) => value.split(deps.apiKey).join("[redacted-credential]");
+			answer = {
+				...answer,
+				answerText: scrub(answer.answerText),
+				sources: answer.sources.map((source) => ({
+					...source,
+					url: scrub(source.url),
+					...(source.title ? { title: scrub(source.title) } : {}),
+				})),
+			};
 			// A parsed payload may name its own charge even when the answer is
 			// unusable: bill what was reported, not the estimate.
 			if (answer.answerText.trim() === "") return invalidOutcome(permit, "EMPTY_RESPONSE", costFields(answer.costUsd));
@@ -433,6 +448,12 @@ export function createBrightDataAdapter(deps: BrightDataAdapterDeps): SelenaMeas
 				status: "SUCCEEDED",
 				validity: "VALID",
 				rawResponseReference: rawResponseReference(answer.providerRequestId, raw),
+				// CABINET_MODEL §4a: the answer text is retained with the run for
+				// the owner's window so findings can be recomputed without buying
+				// a second measurement; the reference stays for provider-side
+				// lookup after the text expires. Only the answer body — an error
+				// body is never stored (see the !response.ok path above).
+				answer: { text: answer.answerText, retainUntil: answerRetainUntil(now()) },
 				// Displayed-source evidence survives independently of extraction:
 				// a run whose context failed to resolve still keeps what the
 				// surface showed, so the citation record is recoverable offline.

@@ -18,7 +18,9 @@ import { and, eq } from "drizzle-orm";
 import { createStubMeasurementAdapter } from "../src/adapters/stub-measurement-adapter";
 import { db } from "../src/db/db";
 import * as schema from "../src/db/schema";
-import { createSelenaMeasurementResolvers } from "../src/selena-extraction-context";
+import { expireAnswerTexts } from "../src/selena-answer-retention";
+import { assertSuggestBudget, recordSuggestCost } from "../src/selena-suggest-metering";
+import { createSelenaMeasurementResolvers, lockedProfileBlock } from "../src/selena-extraction-context";
 import { computeLedgerReport, type LedgerScenarioKind } from "../src/selena-ledger-metrics";
 import { runMeasurementForPermit } from "../src/selena-run-executor";
 import { createSelenaRepositories, type SelenaRepositoryContext } from "../src/selena-visibility-repositories";
@@ -224,6 +226,68 @@ async function main(): Promise<void> {
 		scenarioSnapshot: [],
 	});
 
+	// The suggest-spend meter: every suggestion books an estimated ledger row,
+	// and the monthly ceiling refuses the call that would cross it.
+	{
+		await recordSuggestCost(db, { organizationId: ORG, provider: "onboarding-llm" });
+		const [meterRow] = await db
+			.select()
+			.from(schema.svCostEvents)
+			.where(and(eq(schema.svCostEvents.organizationId, ORG), eq(schema.svCostEvents.kind, "suggest")));
+		check(
+			meterRow !== undefined && meterRow.basis === "estimated" && meterRow.cycleId === null,
+			"the suggestion booked an estimated ledger row outside any cycle",
+		);
+		await assertSuggestBudget(db, { SELENA_SUGGEST_BUDGET_USD: "100" });
+		let refused = false;
+		try {
+			await assertSuggestBudget(db, { SELENA_SUGGEST_BUDGET_USD: "0.05" });
+		} catch (error) {
+			refused = error instanceof Error && error.message === "SUGGEST_BUDGET_EXHAUSTED";
+		}
+		check(refused, "the ceiling refuses the next call once spending reaches it");
+	}
+
+	// The question-approval path (cabinet step 2): only a PROPOSED question can
+	// be decided, editing is part of the decision, every decision leaves an
+	// audit row, and a decided question cannot be silently re-decided.
+	{
+		const reviewFamily = await repositories.families.create(ctx, {
+			projectId: project.id,
+			intentType: "discovery",
+			source: "stub-cycle",
+			status: "APPROVED",
+		});
+		const proposed = await repositories.scenarios.create(ctx, {
+			familyId: reviewFamily.id,
+			text: "Where is good coffee in Canggu?",
+			language: "en",
+			status: "PROPOSED",
+		});
+		const approved = await repositories.scenarios.review(ctx, proposed.id, {
+			decision: "APPROVED",
+			text: "Where is the best coffee in Canggu?",
+		});
+		check(approved.status === "APPROVED" && approved.text === "Where is the best coffee in Canggu?",
+			"review approved the question with its edited text");
+		let reReviewRefused = false;
+		try {
+			await repositories.scenarios.review(ctx, proposed.id, { decision: "REJECTED" });
+		} catch (error) {
+			reReviewRefused = error instanceof Error && error.message === "SELENA_SCENARIO_NOT_REVIEWABLE";
+		}
+		check(reReviewRefused, "a decided question cannot be silently re-decided");
+		const reviewAudit = await db
+			.select()
+			.from(schema.svAuditEvents)
+			.where(and(eq(schema.svAuditEvents.organizationId, ORG), eq(schema.svAuditEvents.event, "SCENARIO_APPROVED")));
+		check(
+			reviewAudit.length === 1 &&
+				(reviewAudit[0]?.details as { textEdited?: boolean })?.textEdited === true,
+			"the approval left one audit row recording the text edit",
+		);
+	}
+
 	const scenarioKinds = new Map<string, LedgerScenarioKind>();
 	for (const kind of ["branded", "discovery"] as const) {
 		const family = await repositories.families.create(ctx, {
@@ -253,7 +317,19 @@ async function main(): Promise<void> {
 	const lock = await repositories.locks.create(ctx, {
 		projectId: project.id,
 		version: 1,
-		snapshot: { measurementScope: { scenarios, systems, repeats: REPEATS } },
+		snapshot: {
+			measurementScope: { scenarios, systems, repeats: REPEATS },
+			// Same block the order desk freezes: the rehearsal must exercise the
+			// resolver's preferred path, not its fallback to the live profile.
+			profile: lockedProfileBlock({
+				brandName: "KORA Food Hall",
+				primaryDomain: "https://korafoodhall.com",
+				competitorSnapshot: [
+					{ name: "Rival Cafe", domains: ["rivalcafe.id"] },
+					{ name: "Other Place", domains: [] },
+				],
+			}),
+		},
 		engineSha: "stub-cycle",
 		expectedRuns,
 		budgetCap: "0",
@@ -299,6 +375,16 @@ async function main(): Promise<void> {
 		"every permit carries the system it was sold as",
 	);
 
+	// A profile renamed after approval must not change what the cycle measures:
+	// the resolver prefers the lock's profile block, so every run below still
+	// extracts for the locked brand even though the live profile now names
+	// another one. If the fallback were used, no brand mention would match and
+	// the mention checks after the loop would fail.
+	await db
+		.update(schema.svProjectProfiles)
+		.set({ brandName: "Renamed After Approval" })
+		.where(eq(schema.svProjectProfiles.projectId, project.id));
+
 	for (const permit of dispatch.permits) {
 		const result = await runMeasurementForPermit({
 			permitId: permit.id,
@@ -321,6 +407,10 @@ async function main(): Promise<void> {
 	);
 	check(mentions.length > 0, `${mentions.length} mention rows written`);
 	check(
+		mentions.some((mention) => mention.entityType === "BRAND" && mention.name === "KORA Food Hall"),
+		"extraction followed the locked profile, not the renamed live one",
+	);
+	check(
 		mentions.every((mention) => runIds.has(mention.runId)),
 		"every mention row belongs to a run of this cycle",
 	);
@@ -332,6 +422,43 @@ async function main(): Promise<void> {
 	check(
 		costEvents.every((event) => event.provider === "stub" && Number(event.amountUsd) === 0),
 		"every charge is zero and attributed to the stub provider",
+	);
+
+	// CABINET_MODEL §4a: the answer text is stored with the run, and expiry
+	// removes only the text — findings, citations and the reference outlive it.
+	const storedRuns = await db.select().from(schema.svRuns).where(eq(schema.svRuns.organizationId, ORG));
+	const payloadOf = (run: (typeof storedRuns)[number]) => run.canonicalPayload as Record<string, any>;
+	check(
+		storedRuns.every((run) => typeof payloadOf(run).answer?.text === "string" && payloadOf(run).answer.text !== ""),
+		"every completed run retained its answer text",
+	);
+	const { expired } = await expireAnswerTexts(db, {
+		now: new Date(Date.now() + (13 * 31 + 40) * 24 * 60 * 60 * 1000),
+	});
+	check(expired === expectedRuns, `expiry cleaned ${expectedRuns} texts`);
+	const cleanedRuns = await db.select().from(schema.svRuns).where(eq(schema.svRuns.organizationId, ORG));
+	check(
+		cleanedRuns.every((run) => payloadOf(run).answer?.text === undefined),
+		"no answer text survives its retention window",
+	);
+	check(
+		cleanedRuns.every(
+			(run) =>
+				typeof payloadOf(run).answer?.textDeletedAt === "string" &&
+				typeof run.rawResponseReference === "string" &&
+				payloadOf(run).measurement !== undefined,
+		),
+		"expiry left the deletion stamp, the reference and the findings in place",
+	);
+	const retentionAudit = await db
+		.select()
+		.from(schema.svAuditEvents)
+		.where(and(eq(schema.svAuditEvents.organizationId, ORG), eq(schema.svAuditEvents.event, "ANSWER_TEXT_EXPIRED")));
+	check(retentionAudit.length === expectedRuns, "every deletion left an audit row");
+	const mentionsAfterExpiry = await repositories.runs.ledgerForCycle(ctx, dispatch.cycleId);
+	check(
+		mentionsAfterExpiry.mentions.length === mentions.length,
+		"mention rows are untouched by answer-text expiry",
 	);
 
 	const [cycle] = await db
