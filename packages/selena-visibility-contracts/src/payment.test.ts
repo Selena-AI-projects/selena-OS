@@ -21,7 +21,13 @@ describe("Selena payment boundary", () => {
 
 	it("uses stable provider event idempotency and verifies signatures", async () => {
 		const payload = JSON.stringify({ event: "payment_succeeded" });
-		const key = await globalThis.crypto.subtle.importKey("raw", new TextEncoder().encode("test-secret"), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+		const key = await globalThis.crypto.subtle.importKey(
+			"raw",
+			new TextEncoder().encode("test-secret"),
+			{ name: "HMAC", hash: "SHA-256" },
+			false,
+			["sign"],
+		);
 		const digest = new Uint8Array(await globalThis.crypto.subtle.sign("HMAC", key, new TextEncoder().encode(payload)));
 		const signature = [...digest].map((byte) => byte.toString(16).padStart(2, "0")).join("");
 		expect(paymentIdempotencyKey("test", "evt-1")).toBe("test:evt-1");

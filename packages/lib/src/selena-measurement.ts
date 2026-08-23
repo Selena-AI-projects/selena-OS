@@ -19,6 +19,8 @@ export type SelenaExecutablePermit = {
 	cycleId: string;
 	scenarioId: string;
 	channel: string;
+	/** The sold system this permit authorizes, fixed at planning time. Null on permits minted before P0-07. */
+	systemId: string | null;
 	dispatchKey: string;
 	expiresAt: Date;
 	consumedAt: Date | null;

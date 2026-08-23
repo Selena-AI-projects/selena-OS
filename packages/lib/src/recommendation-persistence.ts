@@ -2,7 +2,7 @@ import { and, asc, eq } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import { buildActionPlan, buildManifest, validateGrounding } from "./recommendation-engine";
 import * as schema from "./db/schema";
-import type { ActionPlan, EvidenceItem, InputManifest } from "@workspace/selena-visibility-contracts";
+import { type ActionPlan, type EvidenceItem, type InputManifest, actionPlanSchema } from "@workspace/selena-visibility-contracts";
 
 type Db = NodePgDatabase<typeof schema>;
 export type RecommendationContext = { actorId: string; tenantId: string; role: "owner" | "member" | "viewer"; authType: "session" | "api_key"; permissions: string[] };
@@ -33,7 +33,8 @@ export function createRecommendationRepositories(db: Db) {
 			if (existing[0]) { if (existing[0].inputHash !== hash) throw new Error("RECOMMENDATION_IMMUTABLE_INPUT_MISMATCH"); return existing[0]; }
 			const manifest = input.manifest ?? buildManifest(ctx.tenantId, input.datasetId, input.evidence, version);
 			if (manifest.tenantId !== ctx.tenantId || manifest.datasetId !== input.datasetId || manifest.evidenceIds.length !== input.evidence.length) throw new Error("RECOMMENDATION_MANIFEST_INPUT_MISMATCH");
-			const plan = input.actionPlan ?? buildActionPlan(ctx.tenantId, manifest, input.evidence);
+			// Parsed here, not trusted from the caller: the store is what refuses to keep a recommendation or task with no evidence behind it.
+			const plan = actionPlanSchema.parse(input.actionPlan ?? buildActionPlan(ctx.tenantId, manifest, input.evidence));
 			if (plan.tenantId !== ctx.tenantId || plan.manifestId !== manifest.id) throw new Error("RECOMMENDATION_MANIFEST_MISMATCH");
 			const groundingErrors = validateGrounding(plan, input.evidence);
 			if (groundingErrors.length) throw new Error(`RECOMMENDATION_GROUNDING_FAILED:${groundingErrors.join(",")}`);

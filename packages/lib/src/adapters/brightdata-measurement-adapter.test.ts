@@ -28,6 +28,7 @@ function permitFor(overrides: Partial<SelenaExecutablePermit> = {}): SelenaExecu
 		organizationId: "org-1",
 		cycleId: "cycle-1",
 		scenarioId: "scenario-1",
+		systemId: "chatgpt",
 		channel: "VISITOR",
 		dispatchKey: "order-1:scenario-1:ChatGPT:0:1",
 		expiresAt: new Date("2026-08-19T11:00:00.000Z"),
@@ -118,6 +119,8 @@ describe("Bright Data measurement adapter", () => {
 			validity: "VALID",
 			rawResponseReference: "brightdata:s_01HZY",
 			costUsd: estimateRunCostUsd("brightdata", true),
+			costBasis: "estimated",
+			provider: "brightdata",
 		});
 		// A scraped surface reports no token accounting, so none is claimed.
 		expect(outcome.tokenUsage).toBeUndefined();
@@ -227,11 +230,16 @@ describe("Bright Data measurement adapter", () => {
 			const fetchImpl = respondWith(() => jsonResponse({ error: `boom ${API_KEY}` }, status));
 			const outcome = await adapterWith(fetchImpl).execute(permitFor());
 
+			// §10.2: the request was dispatched, so a worst-case estimated charge
+			// is recorded rather than letting a broken cycle ledger as $0.
 			expect(outcome).toEqual({
 				dispatchKey: permitFor().dispatchKey,
 				status: "FAILED",
 				validity: "INVALID",
 				invalidReason: `PROVIDER_HTTP_${status}`,
+				costUsd: estimateRunCostUsd("brightdata", true),
+				costBasis: "estimated",
+				provider: "brightdata",
 			});
 			// The provider's error body is never read into the run row.
 			expect(JSON.stringify(outcome)).not.toContain(API_KEY);
@@ -288,6 +296,9 @@ describe("Bright Data measurement adapter", () => {
 			status: "FAILED",
 			validity: "INVALID",
 			invalidReason: "TRANSPORT_ERROR",
+			costUsd: estimateRunCostUsd("brightdata", true),
+			costBasis: "estimated",
+			provider: "brightdata",
 		});
 	});
 
@@ -390,5 +401,81 @@ describe("Bright Data measurement adapter", () => {
 		expect(() => assertAdapterAllowed("brightdata", ["noop", "brightdata"])).toThrow(
 			"SELENA_LIVE_ADAPTER_REQUIRES_OWNER_GO",
 		);
+	});
+
+	it("attaches a measurement when an extraction context is supplied, and stays silent without one", async () => {
+		const payload = successPayload({
+			answer_text_markdown: "1. KORA Food Hall\n2. Rival Cafe",
+			citations: [{ url: "https://korafoodhall.com/menu", title: "Menu" }],
+		});
+		const extraction = {
+			brandTerms: ["KORA Food Hall"],
+			ownedDomains: ["korafoodhall.com"],
+			competitors: [{ name: "Rival Cafe", terms: ["Rival Cafe"] }],
+			language: "en",
+			region: "ID",
+		};
+
+		const withContext = await adapterWith(respondWith(jsonResponse(payload)), {
+			resolveExtractionContext: () => extraction,
+		}).execute(permitFor());
+		expect(() => runOutcomeSchema.parse(withContext)).not.toThrow();
+		expect(withContext.measurement).toEqual({
+			system: "chatgpt",
+			language: "en",
+			region: "ID",
+			extractorVersion: "selena-extract/1",
+			captureMode: "live_search",
+			brand: "KORA Food Hall",
+			mention: true,
+			position: 1,
+			ownedCitation: true,
+			citations: [{ url: "https://korafoodhall.com/menu", domain: "korafoodhall.com" }],
+			competitors: [{ name: "Rival Cafe", position: 2 }],
+			factualErrors: [],
+		});
+
+		const withoutContext = await adapterWith(respondWith(jsonResponse(payload))).execute(permitFor());
+		expect(withoutContext.measurement).toBeUndefined();
+	});
+
+	it("keeps a paid answer VALID when the extraction context cannot be resolved", async () => {
+		const outcome = await adapterWith(respondWith(jsonResponse(successPayload())), {
+			resolveExtractionContext: () => {
+				throw new Error("LOCK_UNREACHABLE");
+			},
+		}).execute(permitFor());
+		expect(outcome.status).toBe("SUCCEEDED");
+		expect(outcome.validity).toBe("VALID");
+		expect(outcome.measurement).toBeUndefined();
+	});
+
+	it("records a charge for an empty or malformed answer instead of a $0 ledger row", async () => {
+		const empty = await adapterWith(respondWith(jsonResponse(successPayload({ answer_text_markdown: "  " })))).execute(
+			permitFor(),
+		);
+		expect(empty.invalidReason).toBe("EMPTY_RESPONSE");
+		expect(empty.costUsd).toBe(estimateRunCostUsd("brightdata", true));
+		expect(empty.costBasis).toBe("estimated");
+		expect(empty.provider).toBe("brightdata");
+
+		const malformed = await adapterWith(respondWith(jsonResponse({ unexpected: true }))).execute(permitFor());
+		expect(malformed.invalidReason).toBe("MALFORMED_RESPONSE");
+		expect(malformed.costUsd).toBe(estimateRunCostUsd("brightdata", true));
+		expect(malformed.provider).toBe("brightdata");
+	});
+
+	it("drops a contract-invalid extraction instead of failing the paid run", async () => {
+		const outcome = await adapterWith(respondWith(jsonResponse(successPayload())), {
+			resolveExtractionContext: () => ({
+				brandTerms: ["KORA"],
+				ownedDomains: [],
+				competitors: [],
+				language: "",
+			}),
+		}).execute(permitFor());
+		expect(outcome.status).toBe("SUCCEEDED");
+		expect(outcome.validity).toBe("VALID");
+		expect(outcome.measurement).toBeUndefined();
 	});
 });

@@ -1,5 +1,11 @@
 import { createHash } from "node:crypto";
-import { type RunOutcome, runOutcomeSchema, type visitorSurfaces } from "@workspace/selena-visibility-contracts";
+import {
+	type RunOutcome,
+	runMeasurementSchema,
+	runOutcomeSchema,
+	type visitorSurfaces,
+} from "@workspace/selena-visibility-contracts";
+import { type ExtractionContext, extractMeasurement } from "../selena-answer-extraction";
 import type { SelenaExecutablePermit, SelenaMeasurementAdapter, SelenaMeasurementPermit } from "../selena-measurement";
 import { estimateRunCostUsd } from "../usage/cost";
 
@@ -82,6 +88,12 @@ export type BrightDataAdapterDeps = {
 	 * that owns the permit.
 	 */
 	resolveScenarioText: (permit: SelenaExecutablePermit) => Promise<string> | string;
+	/**
+	 * Brand, competitor and domain terms for extraction, resolved per permit
+	 * like the scenario text. Optional: without it the run is stored with its
+	 * raw response only, and extraction can be re-run from that later.
+	 */
+	resolveExtractionContext?: (permit: SelenaExecutablePermit) => Promise<ExtractionContext> | ExtractionContext;
 	now?: () => Date;
 	timeoutMs?: number;
 	maxResponseBytes?: number;
@@ -96,12 +108,7 @@ export type BrightDataAdapterDeps = {
 	parseAnswer?: (raw: unknown) => BrightDataAnswer | null;
 };
 
-/**
- * Whether a stored cost came from the provider or from the local estimate.
- * RunOutcome is a strict schema with a bare `costUsd`, so this basis cannot be
- * persisted alongside it today; callers that need the distinction must read it
- * here rather than assume a stored number is billed fact.
- */
+/** Whether a cost came from the provider or from the local estimate. */
 export type BrightDataCostBasis = "provider_reported" | "estimated";
 
 class ResponseTooLargeError extends Error {}
@@ -249,12 +256,32 @@ function isAbortError(error: unknown): boolean {
 	return error instanceof Error && (error.name === "AbortError" || error.name === "TimeoutError");
 }
 
-function invalidOutcome(permit: SelenaExecutablePermit, reason: string): RunOutcome {
-	return { dispatchKey: permit.dispatchKey, status: "INVALID", validity: "INVALID", invalidReason: reason };
+type CostFields = Pick<RunOutcome, "costUsd" | "costBasis" | "provider">;
+
+/**
+ * §10.2: once a request has been dispatched the charge may exist whether or
+ * not a usable answer came back, so every post-dispatch outcome carries a
+ * cost — the provider's reported figure when the payload names one, the
+ * estimate otherwise. An unrecorded charge is how a cap alert reads $0 while
+ * a broken cycle burns real budget.
+ */
+function costFields(reportedCostUsd?: number | null): CostFields {
+	const { costUsd, basis } = resolveBrightDataCost(reportedCostUsd);
+	return costUsd === null
+		? {}
+		: {
+				costUsd,
+				costBasis: basis === "provider_reported" ? ("actual" as const) : ("estimated" as const),
+				provider: "brightdata",
+			};
 }
 
-function failedOutcome(permit: SelenaExecutablePermit, reason: string): RunOutcome {
-	return { dispatchKey: permit.dispatchKey, status: "FAILED", validity: "INVALID", invalidReason: reason };
+function invalidOutcome(permit: SelenaExecutablePermit, reason: string, cost: CostFields = {}): RunOutcome {
+	return { dispatchKey: permit.dispatchKey, status: "INVALID", validity: "INVALID", invalidReason: reason, ...cost };
+}
+
+function failedOutcome(permit: SelenaExecutablePermit, reason: string, cost: CostFields = {}): RunOutcome {
+	return { dispatchKey: permit.dispatchKey, status: "FAILED", validity: "INVALID", invalidReason: reason, ...cost };
 }
 
 async function readBodyWithinLimit(response: Response, limitBytes: number): Promise<string> {
@@ -342,23 +369,23 @@ export function createBrightDataAdapter(deps: BrightDataAdapterDeps): SelenaMeas
 				// The provider error is classified, never quoted: a thrown request
 				// error can carry the request headers, and this text is stored.
 				return isAbortError(error) || controller.signal.aborted
-					? invalidOutcome(permit, "TIMEOUT")
-					: failedOutcome(permit, "TRANSPORT_ERROR");
+					? invalidOutcome(permit, "TIMEOUT", costFields())
+					: failedOutcome(permit, "TRANSPORT_ERROR", costFields());
 			}
 			if (!response.ok) {
 				// The error body can echo request material back, so it is dropped
 				// rather than read into the run row.
 				await response.body?.cancel().catch(() => {});
-				return failedOutcome(permit, `PROVIDER_HTTP_${response.status}`);
+				return failedOutcome(permit, `PROVIDER_HTTP_${response.status}`, costFields());
 			}
 			let raw: string;
 			try {
 				raw = await readBodyWithinLimit(response, maxResponseBytes);
 			} catch (error) {
-				if (error instanceof ResponseTooLargeError) return invalidOutcome(permit, "RESPONSE_TOO_LARGE");
+				if (error instanceof ResponseTooLargeError) return invalidOutcome(permit, "RESPONSE_TOO_LARGE", costFields());
 				return isAbortError(error) || controller.signal.aborted
-					? invalidOutcome(permit, "TIMEOUT")
-					: failedOutcome(permit, "TRANSPORT_ERROR");
+					? invalidOutcome(permit, "TIMEOUT", costFields())
+					: failedOutcome(permit, "TRANSPORT_ERROR", costFields());
 			}
 			// A non-JSON body is handed to the parser as the raw string rather
 			// than refused here: the confirmed shape may not be JSON, and the
@@ -375,14 +402,34 @@ export function createBrightDataAdapter(deps: BrightDataAdapterDeps): SelenaMeas
 			} catch {
 				answer = null;
 			}
-			if (!answer) return invalidOutcome(permit, "MALFORMED_RESPONSE");
-			if (answer.answerText.trim() === "") return invalidOutcome(permit, "EMPTY_RESPONSE");
-			// `answer.sources` is deliberately not returned: runOutcomeSchema is a
-			// strict object with no citation field, and widening it from an
-			// adapter would let provider-shaped data into stored run state
-			// without the contract changing first. Citations need their own
-			// storage layer, which reads them from the parser above.
-			const { costUsd } = resolveBrightDataCost(answer.costUsd);
+			if (!answer) return invalidOutcome(permit, "MALFORMED_RESPONSE", costFields());
+			// A parsed payload may name its own charge even when the answer is
+			// unusable: bill what was reported, not the estimate.
+			if (answer.answerText.trim() === "") return invalidOutcome(permit, "EMPTY_RESPONSE", costFields(answer.costUsd));
+			// Extraction is an enrichment of a call that already succeeded and was
+			// paid for: a context failure must not turn paid evidence into a
+			// FAILED row. The raw response is stored either way, so a missing
+			// measurement is recoverable offline rather than lost.
+			let measurement: ReturnType<typeof extractMeasurement> | null = null;
+			if (deps.resolveExtractionContext) {
+				try {
+					const extracted = extractMeasurement({
+						answerText: answer.answerText,
+						sources: answer.sources,
+						system: deps.system,
+						// Visitor View is the public surface answering a live query, so
+						// what it returned is a live-search observation.
+						captureMode: "live_search",
+						context: await deps.resolveExtractionContext(permit),
+					});
+					// Validated here, not in the executor: a context that produces a
+					// contract-invalid measurement (an empty language, a blank term)
+					// must cost the measurement, never the paid run.
+					measurement = runMeasurementSchema.safeParse(extracted).success ? extracted : null;
+				} catch {
+					measurement = null;
+				}
+			}
 			return {
 				dispatchKey: permit.dispatchKey,
 				status: "SUCCEEDED",
@@ -390,7 +437,8 @@ export function createBrightDataAdapter(deps: BrightDataAdapterDeps): SelenaMeas
 				rawResponseReference: rawResponseReference(answer.providerRequestId, raw),
 				// No tokenUsage: a scraped visitor surface reports no token
 				// accounting, and a zero would read as a measured value.
-				...(costUsd === null ? {} : { costUsd }),
+				...costFields(answer.costUsd),
+				...(measurement === null ? {} : { measurement }),
 			};
 		} finally {
 			clearTimeout(timer);

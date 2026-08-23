@@ -10,9 +10,7 @@ const measurementChannels = ["VISITOR", "API"] as const satisfies readonly Syste
 export const measurementScopeSchema = z
 	.object({
 		scenarios: z.array(z.string().uuid()).min(1),
-		systems: z
-			.array(z.object({ systemId: z.string().min(1), channel: z.enum(measurementChannels) }))
-			.min(1),
+		systems: z.array(z.object({ systemId: z.string().min(1), channel: z.enum(measurementChannels) })).min(1),
 		repeats: z.number().int().min(1),
 	})
 	.refine((scope) => new Set(scope.scenarios).size === scope.scenarios.length, "Scenarios must be unique")

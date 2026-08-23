@@ -284,24 +284,16 @@ export async function approveOrder(
 	// Approval never runs past a blocker: the same evaluation the operator
 	// saw is recomputed here and decides.
 	assertApprovable(preflight);
-	const [approved] = await db
-		.update(svOrders)
-		.set({ status: "APPROVED", updatedAt: new Date() })
-		.where(
-			and(
-				eq(svOrders.id, orderId),
-				eq(svOrders.organizationId, context.tenantId),
-				eq(svOrders.status, "PAID_REVIEW_REQUIRED"),
-			),
-		)
-		.returning({ id: svOrders.id });
-	if (!approved) throw new Error("SELENA_ORDER_STATUS_CHANGED");
-	const dispatch = await repositories.dispatch.createPermits(context, orderId);
-	await recordAdminAudit(context, "ORDER_APPROVED", orderId, {
-		cycleId: dispatch.cycleId,
-		created: dispatch.created,
-		expected: dispatch.expected,
-		idempotencyKey: idempotencyKey ?? null,
+	// The status change, the permits it authorizes and the record of the
+	// decision commit together: an approval stored without its audit row is a
+	// decision nobody can prove was taken, and permits without the approval
+	// are permission nobody gave.
+	const dispatch = await repositories.dispatch.createPermits(context, orderId, {
+		approval: {
+			fromStatus: "PAID_REVIEW_REQUIRED",
+			auditEvent: "ORDER_APPROVED",
+			auditDetails: { idempotencyKey: idempotencyKey ?? null },
+		},
 	});
 	const order = await getOwnedOrder(context, orderId);
 	return {
@@ -414,6 +406,19 @@ export const stopSelenaOrderFn = createServerFn({ method: "POST" })
 			idempotencyKey: data.idempotencyKey ?? null,
 		});
 		return { orderId: data.orderId, status: "CANCELLED" as const, stoppedCycles: stopped.length, replay: false };
+	});
+
+/**
+ * Hands a published order to the client. Separate from QC on purpose: the
+ * reviewer decides whether the work is sound, and releasing it is a second,
+ * recorded action that refuses to run without their approval.
+ */
+export const deliverSelenaOrderFn = createServerFn({ method: "POST" })
+	.validator(orderIdSchema)
+	.handler(async ({ data }) => {
+		const context = await requireAdminContext();
+		const delivered = await repositories.orders.deliver(context, data.orderId);
+		return { orderId: data.orderId, status: delivered.status };
 	});
 
 export const recordSelenaQcFn = createServerFn({ method: "POST" })

@@ -1,6 +1,4 @@
 import { createHash } from "node:crypto";
-import { lookup } from "node:dns/promises";
-import { isIP } from "node:net";
 import {
 	type ActionPlan,
 	actionPlanSchema,
@@ -9,16 +7,19 @@ import {
 	type RecommendationFinding,
 	stableId,
 } from "@workspace/selena-visibility-contracts";
+import {
+	assertPublicWebsiteTarget,
+	assertWebsiteUrl,
+	normalizeWebsiteUrl,
+	WEBSITE_MAX_REDIRECTS,
+	WEBSITE_MAX_RESPONSE_BYTES,
+} from "./website-security";
 
-const MAX_HTML_BYTES = 1_000_000;
-const MAX_REDIRECTS = 3;
 const MAX_PAGES = 10;
 const MAX_DEPTH = 1;
 const MAX_LINKS = 200;
 const MAX_TEXT = 100_000;
 const ALLOWED_MIME = new Set(["text/html", "application/xhtml+xml", "text/plain"]);
-const PRIVATE_IPV4 =
-	/^(0\.|10\.|127\.|169\.254\.|192\.0\.0\.|192\.0\.2\.|192\.168\.|198\.18\.|198\.19\.|198\.51\.100\.|203\.0\.113\.|22[4-9]\.|23\d\.|24\d\.|25[0-5]\.)/;
 
 export type WebsiteSnapshot = {
 	id: string;
@@ -62,47 +63,15 @@ export type WebsiteCollectionOptions = {
 	userAgent?: string;
 };
 
-function normalizeUrl(value: string): URL {
-	const url = new URL(value);
-	url.hash = "";
-	url.hostname = url.hostname.toLowerCase();
-	if (!/^https?:$/.test(url.protocol)) throw new Error("WEBSITE_PRIVATE_OR_INVALID_URL");
-	if (url.username || url.password || url.port === "0") throw new Error("WEBSITE_PRIVATE_OR_INVALID_URL");
-	return url;
-}
-function unsafeIp(ip: string): boolean {
-	ip = ip.replace(/^\[|\]$/g, "");
-	if (isIP(ip) === 4) return PRIVATE_IPV4.test(ip);
-	if (isIP(ip) === 6) {
-		const value = ip.toLowerCase();
-		return (
-			value === "::1" ||
-			value === "::" ||
-			value.startsWith("fc") ||
-			value.startsWith("fd") ||
-			value.startsWith("fe8") ||
-			value.startsWith("fe9") ||
-			value.startsWith("fea") ||
-			value.startsWith("feb") ||
-			value.startsWith("2001:db8:") ||
-			value.startsWith("ff")
-		);
-	}
-	return false;
-}
+/**
+ * The crawler follows redirects itself so it can revalidate every hop, but the
+ * rule it validates against is the shared one — a second copy of "which hosts
+ * are public" is a second copy that drifts.
+ */
 async function assertPublicUrl(value: string): Promise<URL> {
-	const url = normalizeUrl(value);
-	const hostname = url.hostname.replace(/^\[|\]$/g, "");
-	assertSyntacticallyPublic(url);
-	const addresses = await lookup(hostname, { all: true, verbatim: true }).catch(() => []);
-	if (!addresses.length) throw new Error("WEBSITE_DNS_FAILED");
-	if (addresses.some(({ address }) => unsafeIp(address))) throw new Error("WEBSITE_PRIVATE_OR_INVALID_URL");
+	const url = normalizeWebsiteUrl(value);
+	await assertPublicWebsiteTarget(url.href);
 	return url;
-}
-function assertSyntacticallyPublic(url: URL): void {
-	const hostname = url.hostname.replace(/^\[|\]$/g, "");
-	if (hostname === "localhost" || hostname.endsWith(".local") || hostname.endsWith(".internal") || unsafeIp(hostname))
-		throw new Error("WEBSITE_PRIVATE_OR_INVALID_URL");
 }
 function decodeEntities(value: string): string {
 	return value.replaceAll(
@@ -206,7 +175,7 @@ async function fetchDefault(
 ): Promise<{ status: number; headers: Headers; body: string; finalUrl: URL; redirectChain: string[] }> {
 	let current = url;
 	const redirectChain = [url.href];
-	for (let i = 0; i <= MAX_REDIRECTS; i++) {
+	for (let i = 0; i <= WEBSITE_MAX_REDIRECTS; i++) {
 		await assertPublicUrl(current.href);
 		const response = await fetch(current, {
 			redirect: "manual",
@@ -217,13 +186,14 @@ async function fetchDefault(
 			const mime = (response.headers.get("content-type") ?? "").split(";", 1)[0].toLowerCase();
 			if (mime && !ALLOWED_MIME.has(mime)) throw new Error("WEBSITE_MIME_NOT_ALLOWED");
 			const length = Number(response.headers.get("content-length") ?? "0");
-			if (length > MAX_HTML_BYTES) throw new Error("WEBSITE_RESPONSE_TOO_LARGE");
+			if (length > WEBSITE_MAX_RESPONSE_BYTES) throw new Error("WEBSITE_RESPONSE_TOO_LARGE");
 			const body = await response.text();
-			if (new TextEncoder().encode(body).byteLength > MAX_HTML_BYTES) throw new Error("WEBSITE_RESPONSE_TOO_LARGE");
+			if (new TextEncoder().encode(body).byteLength > WEBSITE_MAX_RESPONSE_BYTES)
+				throw new Error("WEBSITE_RESPONSE_TOO_LARGE");
 			return { status: response.status, headers: response.headers, body, finalUrl: current, redirectChain };
 		}
 		const location = response.headers.get("location");
-		if (!location || i === MAX_REDIRECTS) throw new Error("WEBSITE_REDIRECT_LIMIT");
+		if (!location || i === WEBSITE_MAX_REDIRECTS) throw new Error("WEBSITE_REDIRECT_LIMIT");
 		current = await assertPublicUrl(new URL(location, current).href);
 		if (redirectChain.includes(current.href)) throw new Error("WEBSITE_REDIRECT_LOOP");
 		redirectChain.push(current.href);
@@ -234,13 +204,13 @@ async function fetchWithPolicy(url: URL, fetcher: WebsiteFetcher | undefined, us
 	if (!fetcher) return fetchDefault(url, userAgent);
 	let current = url;
 	const redirectChain = [url.href];
-	for (let i = 0; i <= MAX_REDIRECTS; i++) {
-		assertSyntacticallyPublic(current);
+	for (let i = 0; i <= WEBSITE_MAX_REDIRECTS; i++) {
+		assertWebsiteUrl(current.href);
 		const page = await fetcher(current.href);
 		if (page.status < 300 || page.status >= 400) return { ...page, finalUrl: current, redirectChain };
 		const location = page.headers.get("location");
-		if (!location || i === MAX_REDIRECTS) throw new Error("WEBSITE_REDIRECT_LIMIT");
-		current = normalizeUrl(new URL(location, current).href);
+		if (!location || i === WEBSITE_MAX_REDIRECTS) throw new Error("WEBSITE_REDIRECT_LIMIT");
+		current = normalizeWebsiteUrl(new URL(location, current).href);
 		if (redirectChain.includes(current.href)) throw new Error("WEBSITE_REDIRECT_LOOP");
 		redirectChain.push(current.href);
 	}
@@ -276,13 +246,14 @@ export async function collectWebsite(
 	const maxPages = options.maxPages ?? MAX_PAGES;
 	const maxDepth = options.maxDepth ?? MAX_DEPTH;
 	if (maxPages < 1 || maxDepth < 0) throw new Error("WEBSITE_CRAWL_POLICY_INVALID");
-	const url = options.fetcher ? normalizeUrl(website) : await assertPublicUrl(website);
+	const url = options.fetcher ? normalizeWebsiteUrl(website) : await assertPublicUrl(website);
 	const userAgent = options.userAgent ?? "SelenaWebsiteCollector/1.0 (+https://selenasystems.com/ai-visibility)";
 	const page = await fetchWithPolicy(url, options.fetcher, userAgent);
 	if (page.status < 200 || page.status >= 400) throw new Error(`WEBSITE_HTTP_${page.status}`);
 	const mime = (page.headers.get("content-type") ?? "").split(";", 1)[0].toLowerCase();
 	if (mime && !ALLOWED_MIME.has(mime)) throw new Error("WEBSITE_MIME_NOT_ALLOWED");
-	if (new TextEncoder().encode(page.body).byteLength > MAX_HTML_BYTES) throw new Error("WEBSITE_RESPONSE_TOO_LARGE");
+	if (new TextEncoder().encode(page.body).byteLength > WEBSITE_MAX_RESPONSE_BYTES)
+		throw new Error("WEBSITE_RESPONSE_TOO_LARGE");
 	let robots: string | null = null;
 	try {
 		const robotsPage = await fetchWithPolicy(new URL("/robots.txt", page.finalUrl), options.fetcher, userAgent);

@@ -1,4 +1,5 @@
 import { analyzeBrand, type OnboardingSuggestion } from "@workspace/lib/onboarding";
+import { assertSuggestSpendAllowed } from "@workspace/lib/run-policy";
 import type { Job } from "pg-boss";
 
 export interface AnalyzeBrandData {
@@ -28,6 +29,10 @@ export async function analyzeBrandJob(jobs: Job<AnalyzeBrandData>[]): Promise<On
 		throw new Error("analyze-brand handler received an empty batch");
 	}
 
-	const { website, brandName, maxCompetitors, maxPrompts } = job.data;
+	const { requestKey, website, brandName, maxCompetitors, maxPrompts } = job.data;
+	// A job already on the queue when the gate closed must not spend either:
+	// the request key carries which product asked, and the Selena suggestion is
+	// the one whose spending is budget-classed.
+	if (requestKey.startsWith("selena:")) assertSuggestSpendAllowed();
 	return analyzeBrand({ website, brandName, maxCompetitors, maxPrompts });
 }

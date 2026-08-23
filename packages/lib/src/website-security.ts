@@ -25,7 +25,10 @@ export function isBlockedWebsiteIp(value: string): boolean {
 			(a === 192 && b === 168) ||
 			(a === 192 && b === 0) ||
 			(a === 198 && (b === 18 || b === 19 || b === 51)) ||
-			(a === 203 && b === 0)
+			(a === 203 && b === 0) ||
+			// Multicast and the reserved top of the space: not a website, and a
+			// crawler that follows one is doing something nobody asked for.
+			a >= 224
 		);
 	}
 	if (isIP(ip) === 6)
@@ -38,7 +41,9 @@ export function isBlockedWebsiteIp(value: string): boolean {
 			ip.startsWith("fe9") ||
 			ip.startsWith("fea") ||
 			ip.startsWith("feb") ||
-			ip.startsWith("2001:db8")
+			ip.startsWith("2001:db8") ||
+			// Multicast, for the same reason as its IPv4 counterpart.
+			ip.startsWith("ff")
 		);
 	return false;
 }
@@ -49,10 +54,30 @@ export function assertWebsiteUrl(value: string): URL {
 		!/^https?:$/.test(url.protocol) ||
 		url.hostname === "localhost" ||
 		url.hostname.endsWith(".local") ||
-		url.hostname === "metadata.google.internal" ||
-		isBlockedWebsiteIp(url.hostname)
+		// Covers metadata.google.internal and every other private-suffix name a
+		// cloud or corporate network resolves internally.
+		url.hostname.endsWith(".internal") ||
+		isBlockedWebsiteIp(url.hostname) ||
+		// Credentials in the URL would be sent to whatever the redirect chain
+		// ends at, and port 0 is not a destination.
+		url.username !== "" ||
+		url.password !== "" ||
+		url.port === "0"
 	)
 		throw new Error("WEBSITE_PRIVATE_OR_INVALID_URL");
+	return url;
+}
+
+/**
+ * The same boundary plus the hygiene a crawler needs before it compares URLs:
+ * a fragment never reaches the server, and a host differing only in case is
+ * the same host — leaving either in place makes a redirect loop look like
+ * progress.
+ */
+export function normalizeWebsiteUrl(value: string): URL {
+	const url = assertWebsiteUrl(value);
+	url.hash = "";
+	url.hostname = url.hostname.toLowerCase();
 	return url;
 }
 

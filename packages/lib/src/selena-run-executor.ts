@@ -47,6 +47,14 @@ export async function executePermit(input: ExecutePermitInput): Promise<RunOutco
 	if (permit.consumedAt !== null) throw new Error("SELENA_PERMIT_ALREADY_CONSUMED");
 	const outcome = runOutcomeSchema.parse(await adapter.execute(permit));
 	if (outcome.dispatchKey !== permit.dispatchKey) throw new Error("SELENA_DISPATCH_KEY_MISMATCH");
+	// P0-07: evidence attributed to a system the permit did not authorize must
+	// not enter the ledger — but the run itself is paid and valid, so the
+	// measurement is dropped (recoverable offline from the raw response)
+	// rather than turning the run into a FAILED row.
+	if (outcome.measurement && permit.systemId !== null && outcome.measurement.system !== permit.systemId) {
+		const { measurement: _dropped, ...withoutMeasurement } = outcome;
+		return withoutMeasurement;
+	}
 	return outcome;
 }
 

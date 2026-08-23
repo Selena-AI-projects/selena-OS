@@ -1,13 +1,20 @@
 import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { type MeasurementScope, expectedRunsFromScope, measurementScopeSchema } from "@workspace/selena-visibility-contracts";
+import {
+	expectedRunsFromScope,
+	type MeasurementScope,
+	measurementScopeSchema,
+} from "@workspace/selena-visibility-contracts";
 import { describe, expect, it } from "vitest";
 import {
 	assertLockExpectedRuns,
+	assertOrderDeliverable,
+	assertQcApprovable,
 	assertQcDecision,
 	type DispatchablePermit,
 	planOrderDispatch,
+	type QcReviewableCycle,
 	selectEnqueueablePermits,
 } from "./selena-dispatch";
 
@@ -121,6 +128,50 @@ describe("selectEnqueueablePermits", () => {
 	it("preserves the caller's permit objects so the dispatch key survives selection", () => {
 		const one = permit({ id: "one", dispatchKey: "order:scenario:chatgpt:0:1" });
 		expect(selectEnqueueablePermits([one], now)[0]).toBe(one);
+	});
+});
+
+describe("assertQcApprovable", () => {
+	const cycle = (overrides: Partial<QcReviewableCycle> = {}): QcReviewableCycle => ({
+		id: "cycle-1",
+		status: "QC_REQUIRED",
+		expectedRuns: 12,
+		completedRuns: 12,
+		...overrides,
+	});
+
+	it("lets a finished cycle be signed off", () => {
+		expect(() => assertQcApprovable("QC_REQUIRED", [cycle()])).not.toThrow();
+	});
+
+	it("treats a second approval of a published order as a replay", () => {
+		expect(() => assertQcApprovable("READY", [cycle({ status: "READY" })])).not.toThrow();
+	});
+
+	it("refuses to publish an order whose cycle is still producing runs", () => {
+		expect(() => assertQcApprovable("QC_REQUIRED", [cycle({ completedRuns: 11 })])).toThrow(
+			"SELENA_QC_CYCLE_UNFINISHED",
+		);
+	});
+
+	it("refuses an order that never ran and one that is not in review", () => {
+		expect(() => assertQcApprovable("QC_REQUIRED", [])).toThrow("SELENA_QC_NO_CYCLE");
+		expect(() => assertQcApprovable("RUNNING", [cycle()])).toThrow("SELENA_QC_ORDER_NOT_IN_REVIEW");
+		expect(() => assertQcApprovable("CANCELLED", [cycle()])).toThrow("SELENA_QC_ORDER_NOT_IN_REVIEW");
+	});
+});
+
+describe("assertOrderDeliverable", () => {
+	it("hands over an order a human signed off", () => {
+		expect(() => assertOrderDeliverable("READY", true)).not.toThrow();
+	});
+
+	it("refuses to deliver without the expert QC record the label rests on", () => {
+		expect(() => assertOrderDeliverable("READY", false)).toThrow("EXPERT_QC_REQUIRED");
+	});
+
+	it("refuses to deliver an order that is not ready", () => {
+		expect(() => assertOrderDeliverable("QC_REQUIRED", true)).toThrow("SELENA_ORDER_NOT_READY");
 	});
 });
 
