@@ -232,6 +232,20 @@
 			"when": 1787421600000,
 			"tag": "0032_suggest_cost_metering",
 			"breakpoints": true
+		},
+		{
+			"idx": 33,
+			"version": "7",
+			"when": 1787508000000,
+			"tag": "0033_reports_organization",
+			"breakpoints": true
+		},
+		{
+			"idx": 34,
+			"version": "7",
+			"when": 1787594400000,
+			"tag": "0034_tenant_rls_policies",
+			"breakpoints": true
 		}
 	]
 }

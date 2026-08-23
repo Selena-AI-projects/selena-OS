@@ -212,6 +212,11 @@ export const reports = pgTable(
 		id: uuid("id").defaultRandom().primaryKey().notNull(),
 		brandName: text("brand_name").notNull(),
 		brandWebsite: text("brand_website").notNull(),
+		// Nullable on purpose (DS-P0-15): legacy rows have no recoverable owner
+		// — the brand name is free text, so inferring an org would attribute
+		// one tenant's report to another on a name collision. NULL means
+		// legacy, admin-only forever; every new write sets it.
+		organizationId: text("organization_id").references(() => organization.id),
 		status: reportStatusEnum().notNull().default("pending"),
 		progress: integer("progress").notNull().default(0),
 		rawOutput: json("raw_output"),
@@ -224,6 +229,7 @@ export const reports = pgTable(
 	},
 	(table) => ({
 		createdAtIdx: index("reports_created_at_idx").on(table.createdAt),
+		organizationIdx: index("reports_organization_idx").on(table.organizationId),
 	}),
 ).enableRLS();
 
