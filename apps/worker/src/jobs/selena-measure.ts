@@ -1,4 +1,4 @@
-import { createOpenRouterAdapter } from "@workspace/lib/adapters/openrouter-measurement-adapter";
+import { createOpenRouterAdapter, resolveCatalogApiModel } from "@workspace/lib/adapters/openrouter";
 import { db } from "@workspace/lib/db/db";
 import { isMaintenanceEnabled } from "@workspace/lib/run-policy";
 import { createNoopMeasurementAdapter } from "@workspace/lib/selena-measurement";
@@ -9,7 +9,6 @@ import {
 	runMeasurementForPermit,
 } from "@workspace/lib/selena-run-executor";
 import { type SelenaRepositoryContext, createSelenaRepositories } from "@workspace/lib/selena-visibility-repositories";
-import { apiModelIds } from "@workspace/selena-visibility-contracts";
 import type { Job } from "pg-boss";
 
 export interface SelenaMeasureData {
@@ -25,14 +24,6 @@ export interface SelenaMeasureData {
 // the contracts package — "Turning measurement on" in
 // SELENA_OWNER_OPERATING_GUIDE.md walks the full chain.
 const ADAPTERS: MeasurementAdapterRegistry = { noop: createNoopMeasurementAdapter() };
-
-/** A run measures the model the customer bought, so only catalog ids pass. */
-function openRouterModelFromEnv(env: Record<string, string | undefined>): string {
-	const requested = env.SELENA_OPENROUTER_MODEL ?? "anthropic/claude-haiku-4.5";
-	if (!(apiModelIds as readonly string[]).includes(requested))
-		throw new Error(`SELENA_OPENROUTER_MODEL must be a catalog API View model id, got "${requested}"`);
-	return requested;
-}
 
 /**
  * Executes one already-minted run permit. Nothing enqueues this job on a
@@ -61,7 +52,7 @@ export async function selenaMeasureJob(jobs: Job<SelenaMeasureData>[]): Promise<
 			...ADAPTERS,
 			openrouter: createOpenRouterAdapter({
 				apiKey: process.env.OPENROUTER_API_KEY ?? "",
-				model: openRouterModelFromEnv(process.env),
+				model: resolveCatalogApiModel(process.env.SELENA_OPENROUTER_MODEL),
 				fetchImpl: fetch,
 				resolveScenarioText: (permit) => repositories.scenarios.textFor(ctx, permit.scenarioId),
 			}),
