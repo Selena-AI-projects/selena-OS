@@ -142,7 +142,11 @@ function SelenaWorkspace() {
 		setProfileForm((current) => ({ ...current, ...patch }));
 
 	// Research runs in the worker (roughly a minute), so the page polls for it.
-	const suggestProfile = async () => {
+	// `auto` is the confirm-with-empty-questions path: confirming the profile is
+	// the deliberate action, so it may start the paid suggestion; the questions
+	// still come back as a draft and the profile is confirmed on a second,
+	// informed click.
+	const runSuggestion = async (auto: boolean) => {
 		if (!selectedProject || suggesting) return;
 		const website = validateWebsiteUrl(profileForm.primaryDomain);
 		if (!website.isValid) {
@@ -177,7 +181,15 @@ function SelenaWorkspace() {
 		const projectId = selectedProject.project.id;
 		setFeedbackScope("profile");
 		setError("");
-		setNotice("");
+		setNotice(
+			auto
+				? tr(
+						locale,
+						"Picking customer questions from the website — about a minute. Review them below, then confirm the profile.",
+						"Подбираем вопросы по сайту — около минуты. Они появятся ниже: поправьте и подтвердите профиль.",
+					)
+				: "",
+		);
 		setSuggesting(true);
 		try {
 			await startSelenaProfileSuggestionFn({ data: { projectId, website: website.formattedUrl, mapsLocationUrl } });
@@ -226,6 +238,8 @@ function SelenaWorkspace() {
 			setSuggesting(false);
 		}
 	};
+
+	const suggestProfile = () => runSuggestion(false);
 
 	const createProject = async (event: React.FormEvent) => {
 		event.preventDefault();
@@ -328,6 +342,18 @@ function SelenaWorkspace() {
 			publicProfiles: publicProfiles.join(", "),
 		});
 
+		// An empty questions box is not a validation error: confirming is the
+		// deliberate action, so it starts the suggestion instead, and the
+		// questions come back below for the same review-then-confirm.
+		const scenarioSnapshot = profileForm.scenarios
+			.split("\n")
+			.map((line) => parseScenario(line, selectedProject.project.languages[0] ?? "en"))
+			.filter((item): item is { text: string; language: string; intentType: string } => item !== null);
+		if (scenarioSnapshot.length === 0) {
+			await runSuggestion(true);
+			return;
+		}
+
 		setPendingAction("profile");
 		try {
 			await confirmSelenaProfileFn({
@@ -338,10 +364,7 @@ function SelenaWorkspace() {
 					publicProfiles: publicProfiles.map((url) => ({ platform: "public", url })),
 					mapsLocationUrl,
 					competitorSnapshot: splitList(profileForm.competitors).map((name) => ({ name, domains: [] })),
-					scenarioSnapshot: profileForm.scenarios
-						.split("\n")
-						.map((line) => parseScenario(line, selectedProject.project.languages[0] ?? "en"))
-						.filter((item): item is { text: string; language: string; intentType: string } => item !== null),
+					scenarioSnapshot,
 				},
 			});
 			setNotice(
@@ -862,14 +885,13 @@ function BrandProfileForm({
 						label={tr(locale, "Customer questions", "Вопросы клиентов")}
 						hint={tr(
 							locale,
-							"One per line. Add EN: or RU: to specify the language.",
-							"Один вопрос в строке. Добавьте EN: или RU:, чтобы указать язык.",
+							"One per line. Add EN: or RU: to specify the language. Leave it empty — questions are suggested when you confirm.",
+							"Один вопрос в строке. Добавьте EN: или RU:, чтобы указать язык. Оставьте пустым — вопросы подберутся сами при подтверждении.",
 						)}
 						htmlFor="scenarios"
 					>
 						<textarea
 							id="scenarios"
-							required
 							className="selena-textarea"
 							value={form.scenarios}
 							onChange={(event) => onChange({ ...form, scenarios: event.target.value })}
