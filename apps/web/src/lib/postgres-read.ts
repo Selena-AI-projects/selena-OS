@@ -15,6 +15,7 @@ import {
 	type FanoutPromptTotalRow,
 } from "@/lib/fanout-analysis";
 import { parseModelFilter } from "@/lib/model-filter";
+import { usesWholeHourOffsets } from "@/lib/timezone-offsets";
 
 const db = drizzle(process.env.DATABASE_URL!);
 
@@ -137,6 +138,11 @@ function dateFilter(fromDate: string | null, toDate: string | null, timezone: st
 	return sql`AND created_at >= (${fromDate}::date AT TIME ZONE ${timezone}) AND created_at < ((${toDate}::date + interval '1 day') AT TIME ZONE ${timezone})`;
 }
 
+function hourBucketDateFilter(fromDate: string | null, toDate: string | null, timezone: string): SQL {
+	if (!fromDate || !toDate) return sql``;
+	return sql`AND hour_bucket >= (${fromDate}::date AT TIME ZONE ${timezone}) AND hour_bucket < ((${toDate}::date + interval '1 day') AT TIME ZONE ${timezone})`;
+}
+
 function uuidList(ids: string[]): SQL {
 	return sql.join(
 		ids.map((id) => sql`${id}::uuid`),
@@ -246,6 +252,24 @@ export async function getPerPromptVisibilityTimeSeries(
 	model?: string,
 ): Promise<PerPromptVisibilityPoint[]> {
 	if (!enabledPromptIds?.length) return [];
+	// The hourly rollup serves any timezone whose local midnights sit on hour
+	// boundaries; fractional-offset zones scan prompt_runs as before.
+	if (usesWholeHourOffsets(timezone, fromDate, toDate)) {
+		return queryPg<PerPromptVisibilityPoint>(sql`
+			SELECT
+				prompt_id,
+				(hour_bucket AT TIME ZONE ${timezone})::date AS date,
+				sum(total_runs)::int AS total_runs,
+				sum(brand_mentioned_count)::int AS brand_mentioned_count
+			FROM prompt_run_hourly_aggregates
+			WHERE brand_id = ${brandId}
+				${hourBucketDateFilter(fromDate, toDate, timezone)}
+				${promptIdFilter(enabledPromptIds)}
+				${modelFilter(model)}
+			GROUP BY prompt_id, date
+			ORDER BY prompt_id, date
+		`);
+	}
 	const rows = await queryPg<PerPromptVisibilityPoint>(sql`
 		SELECT
 			prompt_id,
@@ -320,6 +344,38 @@ export async function getVisibilityDailyAggregate(
 			)}]::uuid[]) AS bid)`
 		: sql`(SELECT NULL::uuid AS bid WHERE FALSE)`;
 
+	// Same shape from either source. Group by the SELECT alias, not the full
+	// expression: drizzle emits a fresh $N parameter for every timezone
+	// interpolation, so Postgres would not recognize the SELECT and GROUP BY
+	// expressions as identical and errors with "column ... must appear in
+	// GROUP BY". The hourly rollup path serves whole-hour timezones;
+	// fractional offsets scan prompt_runs as before.
+	const observationsSource = usesWholeHourOffsets(timezone, fromDate, toDate)
+		? sql`SELECT
+					prompt_id,
+					(hour_bucket AT TIME ZONE ${timezone})::date AS obs_date,
+					sum(total_runs)::int AS total_runs,
+					sum(brand_mentioned_count)::int AS brand_mentioned_count
+				FROM prompt_run_hourly_aggregates
+				WHERE brand_id = ${brandId}
+					AND prompt_id IN (${uuidList(enabledPromptIds)})
+					AND hour_bucket >= (${fromDate}::date AT TIME ZONE ${timezone})
+					AND hour_bucket < ((${toDate}::date + interval '1 day') AT TIME ZONE ${timezone})
+					${modelFilter(model)}
+				GROUP BY prompt_id, obs_date`
+		: sql`SELECT
+					prompt_id,
+					(created_at AT TIME ZONE ${timezone})::date AS obs_date,
+					count(*)::int AS total_runs,
+					count(*) FILTER (WHERE brand_mentioned)::int AS brand_mentioned_count
+				FROM prompt_runs
+				WHERE brand_id = ${brandId}
+					AND prompt_id IN (${uuidList(enabledPromptIds)})
+					AND created_at >= (${fromDate}::date AT TIME ZONE ${timezone})
+					AND created_at < ((${toDate}::date + interval '1 day') AT TIME ZONE ${timezone})
+					${modelFilter(model)}
+				GROUP BY prompt_id, obs_date`;
+
 	const rows = await queryPg<VisibilityDailyAggregate>(sql`
 		WITH
 			date_range AS (
@@ -337,23 +393,7 @@ export async function getVisibilityDailyAggregate(
 				LEFT JOIN ${brandedIdsRelation} bp ON bp.bid = p.pid
 			),
 			observations AS (
-				SELECT
-					prompt_id,
-					(created_at AT TIME ZONE ${timezone})::date AS obs_date,
-					count(*)::int AS total_runs,
-					count(*) FILTER (WHERE brand_mentioned)::int AS brand_mentioned_count
-				FROM prompt_runs
-				WHERE brand_id = ${brandId}
-					AND prompt_id IN (${uuidList(enabledPromptIds)})
-					AND created_at >= (${fromDate}::date AT TIME ZONE ${timezone})
-					AND created_at < ((${toDate}::date + interval '1 day') AT TIME ZONE ${timezone})
-					${modelFilter(model)}
-				-- Group by the SELECT alias, not the full expression: drizzle
-				-- emits a fresh $N parameter for every timezone interpolation,
-				-- so the SELECT expression and GROUP BY expression aren't
-				-- recognized as identical by Postgres and the query errors
-				-- with "column prompt_runs.created_at must appear in GROUP BY".
-				GROUP BY prompt_id, obs_date
+				${observationsSource}
 			),
 			first_obs AS (
 				SELECT DISTINCT ON (prompt_id)
