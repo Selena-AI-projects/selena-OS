@@ -223,6 +223,10 @@ function SelenaWorkspace() {
 				),
 			);
 		} catch (cause) {
+			// The "we are picking questions" notice was set before the call, so a
+			// refusal has to clear it: leaving both up tells the customer we are
+			// working on something we just declined to do.
+			setNotice("");
 			setError(
 				humanizeSelenaError(
 					cause,
