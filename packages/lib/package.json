@@ -59,6 +59,7 @@
 		"./selena-citation-gap": "./src/selena-citation-gap.ts",
 		"./selena-answer-retention": "./src/selena-answer-retention.ts",
 		"./selena-raw-evidence-storage": "./src/selena-raw-evidence-storage.ts",
+		"./selena-suggest-metering": "./src/selena-suggest-metering.ts",
 		"./selena-extraction-context": "./src/selena-extraction-context.ts",
 		"./selena-ledger-metrics": "./src/selena-ledger-metrics.ts",
 		"./adapters/openrouter": "./src/adapters/openrouter-measurement-adapter.ts",

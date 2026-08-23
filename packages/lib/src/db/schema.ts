@@ -455,7 +455,7 @@ export const svIncidents = pgTable("sv_incidents", {
 // whether the amount is the provider's actual figure or our estimate; cap
 // alerts read sums from here rather than trusting run rows to be complete.
 export const svCostEvents = pgTable("sv_cost_events", {
-	id: uuid("id").defaultRandom().primaryKey().notNull(), organizationId: text("organization_id").notNull().references(() => organization.id), cycleId: uuid("cycle_id").notNull().references(() => svCycles.id), runId: uuid("run_id").references(() => svRuns.id), provider: text("provider").notNull(), amountUsd: numeric("amount_usd", { precision: 12, scale: 6 }).notNull(), basis: text("basis").notNull(), createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+	id: uuid("id").defaultRandom().primaryKey().notNull(), organizationId: text("organization_id").notNull().references(() => organization.id), cycleId: uuid("cycle_id").references(() => svCycles.id), runId: uuid("run_id").references(() => svRuns.id), provider: text("provider").notNull(), amountUsd: numeric("amount_usd", { precision: 12, scale: 6 }).notNull(), basis: text("basis").notNull(), kind: text("kind").notNull().default("measurement"), createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 }, (table) => ({ orgCycleIdx: index("sv_cost_events_org_cycle_idx").on(table.organizationId, table.cycleId), runIdx: index("sv_cost_events_run_idx").on(table.runId) })).enableRLS();
 
 export const svRecommendationRunStatusEnum = pgEnum("sv_recommendation_run_status", ["RUNNING", "READY", "FAILED"]);

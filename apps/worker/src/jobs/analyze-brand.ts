@@ -1,5 +1,9 @@
+import { db } from "@workspace/lib/db/db";
+import { svProjects } from "@workspace/lib/db/schema";
 import { analyzeBrand, type OnboardingSuggestion } from "@workspace/lib/onboarding";
 import { assertSuggestSpendAllowed } from "@workspace/lib/run-policy";
+import { assertSuggestBudget, recordSuggestCost } from "@workspace/lib/selena-suggest-metering";
+import { eq } from "drizzle-orm";
 import type { Job } from "pg-boss";
 
 export interface AnalyzeBrandData {
@@ -33,6 +37,29 @@ export async function analyzeBrandJob(jobs: Job<AnalyzeBrandData>[]): Promise<On
 	// A job already on the queue when the gate closed must not spend either:
 	// the request key carries which product asked, and the Selena suggestion is
 	// the one whose spending is budget-classed.
-	if (requestKey.startsWith("selena:")) assertSuggestSpendAllowed();
-	return analyzeBrand({ website, brandName, maxCompetitors, maxPrompts });
+	if (requestKey.startsWith("selena:")) {
+		assertSuggestSpendAllowed();
+		// Second refusal frontier of the monthly ceiling; the first is at
+		// enqueue time in the web app.
+		await assertSuggestBudget(db);
+	}
+	const suggestion = await analyzeBrand({ website, brandName, maxCompetitors, maxPrompts });
+	if (requestKey.startsWith("selena:")) {
+		// Booked where the spending happened. Attribution follows the project
+		// the request key names; a suggestion for a deleted project is still a
+		// real charge, so the row is written best-effort and never voids the
+		// suggestion itself.
+		try {
+			const projectId = requestKey.slice("selena:".length);
+			const [project] = await db
+				.select({ organizationId: svProjects.organizationId })
+				.from(svProjects)
+				.where(eq(svProjects.id, projectId))
+				.limit(1);
+			if (project) await recordSuggestCost(db, { organizationId: project.organizationId, provider: "onboarding-llm" });
+		} catch (error) {
+			console.error("[analyze-brand] suggest cost row not written:", error);
+		}
+	}
+	return suggestion;
 }

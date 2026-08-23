@@ -19,6 +19,7 @@ import { createStubMeasurementAdapter } from "../src/adapters/stub-measurement-a
 import { db } from "../src/db/db";
 import * as schema from "../src/db/schema";
 import { expireAnswerTexts } from "../src/selena-answer-retention";
+import { assertSuggestBudget, recordSuggestCost } from "../src/selena-suggest-metering";
 import { createSelenaMeasurementResolvers, lockedProfileBlock } from "../src/selena-extraction-context";
 import { computeLedgerReport, type LedgerScenarioKind } from "../src/selena-ledger-metrics";
 import { runMeasurementForPermit } from "../src/selena-run-executor";
@@ -224,6 +225,28 @@ async function main(): Promise<void> {
 		],
 		scenarioSnapshot: [],
 	});
+
+	// The suggest-spend meter: every suggestion books an estimated ledger row,
+	// and the monthly ceiling refuses the call that would cross it.
+	{
+		await recordSuggestCost(db, { organizationId: ORG, provider: "onboarding-llm" });
+		const [meterRow] = await db
+			.select()
+			.from(schema.svCostEvents)
+			.where(and(eq(schema.svCostEvents.organizationId, ORG), eq(schema.svCostEvents.kind, "suggest")));
+		check(
+			meterRow !== undefined && meterRow.basis === "estimated" && meterRow.cycleId === null,
+			"the suggestion booked an estimated ledger row outside any cycle",
+		);
+		await assertSuggestBudget(db, { SELENA_SUGGEST_BUDGET_USD: "100" });
+		let refused = false;
+		try {
+			await assertSuggestBudget(db, { SELENA_SUGGEST_BUDGET_USD: "0.05" });
+		} catch (error) {
+			refused = error instanceof Error && error.message === "SUGGEST_BUDGET_EXHAUSTED";
+		}
+		check(refused, "the ceiling refuses the next call once spending reaches it");
+	}
 
 	// The question-approval path (cabinet step 2): only a PROPOSED question can
 	// be decided, editing is part of the decision, every decision leaves an
