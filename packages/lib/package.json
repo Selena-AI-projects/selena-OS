@@ -44,6 +44,7 @@
 		"./recommendation-engine": "./src/recommendation-engine.ts",
 		"./website-collector": "./src/website-collector.ts",
 		"./website-security": "./src/website-security.ts",
+		"./google-maps-location": "./src/google-maps-location.ts",
 		"./selena-monitoring": "./src/selena-monitoring.ts",
 		"./selena-flow": "./src/selena-flow.ts",
 		"./public-source-adapters": "./src/public-source-adapters.ts",

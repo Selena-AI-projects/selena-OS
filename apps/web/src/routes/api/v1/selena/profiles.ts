@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { db } from "@workspace/lib/db/db";
 import { createSelenaRepositories } from "@workspace/lib/selena-visibility-repositories";
 import { z } from "zod";
-import { parseGoogleMapsLocation } from "../../../../lib/google-maps-location";
+import { parseGoogleMapsLocation } from "@workspace/lib/google-maps-location";
 import { resolveApiKeyAuthContext } from "../../../../lib/selena-auth-context";
 
 const repositories = createSelenaRepositories(db);

@@ -46,10 +46,7 @@ export function parseGoogleMapsLocation(input: string): GoogleMapsLocationResult
 		};
 	}
 
-	const isGoogleHost = /^(?:www\.|maps\.)?google\.[a-z]{2,3}(?:\.[a-z]{2})?$/.test(hostname);
-	const isMapsPath = url.pathname === "/maps" || url.pathname.startsWith("/maps/");
-	const hasCid = /^\d+$/.test(url.searchParams.get("cid") ?? "");
-	if (!isGoogleHost || !(isMapsPath || hostname.startsWith("maps.") || hasCid))
+	if (!isGoogleMapsHostAndPath(url))
 		return { isValid: false, error: "The link does not look like a Google Maps place link" };
 
 	return {
@@ -61,6 +58,29 @@ export function parseGoogleMapsLocation(input: string): GoogleMapsLocationResult
 			cid: extractCid(url),
 		},
 	};
+}
+
+function isGoogleMapsHostAndPath(url: URL): boolean {
+	const hostname = url.hostname.toLowerCase();
+	if (!/^(?:www\.|maps\.)?google\.[a-z]{2,3}(?:\.[a-z]{2})?$/.test(hostname)) return false;
+	const isMapsPath = url.pathname === "/maps" || url.pathname.startsWith("/maps/");
+	const hasCid = /^\d+$/.test(url.searchParams.get("cid") ?? "");
+	return isMapsPath || hostname.startsWith("maps.") || hasCid;
+}
+
+/** Whether an absolute URL points at a Google Maps listing or share link. */
+export function isGoogleMapsLink(href: string): boolean {
+	let url: URL;
+	try {
+		url = new URL(href);
+	} catch {
+		return false;
+	}
+	if (url.protocol !== "https:" && url.protocol !== "http:") return false;
+	const hostname = url.hostname.toLowerCase();
+	if (hostname === "maps.app.goo.gl") return url.pathname !== "/";
+	if (hostname === "goo.gl") return url.pathname.startsWith("/maps");
+	return isGoogleMapsHostAndPath(url);
 }
 
 /** Narrow a stored jsonb value back into the snapshot shape, field by field. */
@@ -111,7 +131,7 @@ function extractCid(url: URL): string | null {
 	if (!hex) return null;
 	try {
 		const cid = BigInt(`0x${hex}`);
-		return cid > 0n ? cid.toString() : null;
+		return cid > BigInt(0) ? cid.toString() : null;
 	} catch {
 		return null;
 	}

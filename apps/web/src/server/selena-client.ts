@@ -11,7 +11,7 @@ import { createSelenaRepositories } from "@workspace/lib/selena-visibility-repos
 import { actionPlanSchema, projectCreateSchema } from "@workspace/selena-visibility-contracts";
 import { and, desc, eq } from "drizzle-orm";
 import { z } from "zod";
-import { readStoredGoogleMapsLocation } from "../lib/google-maps-location";
+import { readStoredGoogleMapsLocation } from "@workspace/lib/google-maps-location";
 import { resolveSessionAuthContext } from "../lib/selena-auth-context";
 
 const repositories = createSelenaRepositories(db);

@@ -57,6 +57,18 @@ describe("analyzeBrand", () => {
 		expect(ctx.website).toBe("example.com");
 	});
 
+	it("scopes the research prompt to the location hint when one is given", async () => {
+		const withLocation = await buildAnalysisContext({
+			website: "https://example.com",
+			locationHint: "Kora Food Hall, Canggu, Indonesia (coordinates -8.65, 115.14)",
+		});
+		expect(withLocation.prompt).toContain("Kora Food Hall, Canggu, Indonesia");
+		expect(withLocation.prompt).toContain("local business");
+
+		const withoutLocation = await buildAnalysisContext({ website: "https://example.com" });
+		expect(withoutLocation.prompt).not.toContain("local business");
+	});
+
 	it("rejects unsupported protocols before calling analysis services", async () => {
 		await expect(buildAnalysisContext({ website: "ftp://example.com/private" })).rejects.toThrow(
 			'Could not parse website "ftp://example.com/private"',

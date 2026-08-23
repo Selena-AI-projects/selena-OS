@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { db } from "@workspace/lib/db/db";
 import { svProjectProfiles, svWebsiteSnapshots } from "@workspace/lib/db/schema";
+import { readStoredGoogleMapsLocation } from "@workspace/lib/google-maps-location";
 import { buildWebsiteActionPlan, collectWebsite } from "@workspace/lib/website-collector";
 import { and, eq } from "drizzle-orm";
 import { z } from "zod";
@@ -19,7 +20,7 @@ export const Route = createFileRoute("/api/v1/selena/website-collector")({
 					if (!parsed.success)
 						return Response.json({ error: "Validation Error", message: parsed.error.message }, { status: 400 });
 					const [profile] = await db
-						.select({ primaryDomain: svProjectProfiles.primaryDomain })
+						.select({ primaryDomain: svProjectProfiles.primaryDomain, mapsLocation: svProjectProfiles.mapsLocation })
 						.from(svProjectProfiles)
 						.where(
 							and(
@@ -57,7 +58,9 @@ export const Route = createFileRoute("/api/v1/selena/website-collector")({
 							},
 							manifest: collection.manifest,
 							evidenceCount: collection.evidence.length,
-							actionPlan: buildWebsiteActionPlan(collection),
+							actionPlan: buildWebsiteActionPlan(collection, {
+								mapsLocation: readStoredGoogleMapsLocation(profile.mapsLocation),
+							}),
 						},
 						{ status: 201 },
 					);

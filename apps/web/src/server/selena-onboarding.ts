@@ -4,7 +4,7 @@ import { assertSuggestSpendAllowed } from "@workspace/lib/run-policy";
 import { createSelenaRepositories } from "@workspace/lib/selena-visibility-repositories";
 import { z } from "zod";
 import { cancelAnalyzeBrand, enqueueAnalyzeBrand, getAnalyzeBrandStatus } from "@/lib/analyze-brand-job";
-import { parseGoogleMapsLocation } from "@/lib/google-maps-location";
+import { type GoogleMapsLocationSnapshot, parseGoogleMapsLocation } from "@workspace/lib/google-maps-location";
 import { questionLanguagePrefix, SUGGESTION_LIMITS } from "@/lib/selena-suggestion";
 import { resolveSessionAuthContext } from "../lib/selena-auth-context";
 
@@ -72,19 +72,58 @@ async function requireProject(projectId: string) {
 	return project;
 }
 
+function countryName(code: string): string {
+	try {
+		return new Intl.DisplayNames(["en"], { type: "region" }).of(code.toUpperCase()) ?? code;
+	} catch {
+		return code;
+	}
+}
+
+/**
+ * Free-text place context for the research prompt. The listing name comes
+ * from the customer's Google Maps link; the area comes from the project,
+ * because a share link often carries no readable fields at all.
+ */
+function buildLocationHint(
+	location: GoogleMapsLocationSnapshot,
+	project: { region: string | null; country: string },
+): string {
+	const parts = [location.placeName, project.region, countryName(project.country)].filter(
+		(part): part is string => typeof part === "string" && part.trim() !== "",
+	);
+	const coordinates =
+		location.latitude !== null && location.longitude !== null
+			? ` (coordinates ${location.latitude}, ${location.longitude})`
+			: "";
+	return `${parts.join(", ")}${coordinates}`.trim();
+}
+
 export const startSelenaProfileSuggestionFn = createServerFn({ method: "POST" })
-	.validator(suggestionScopeSchema.extend({ website: z.string().trim().min(3).max(255) }))
+	.validator(
+		suggestionScopeSchema.extend({
+			website: z.string().trim().min(3).max(255),
+			mapsLocationUrl: z.string().trim().max(2048).default(""),
+		}),
+	)
 	.handler(async ({ data }) => {
 		// The button is free to the customer and not to us: it starts a paid
 		// LLM round trip on a live key. Refused unless the owner has named the
 		// budget class that pays for it.
 		assertSuggestSpendAllowed();
 		const project = await requireProject(data.projectId);
+		let locationHint: string | undefined;
+		if (data.mapsLocationUrl) {
+			const maps = parseGoogleMapsLocation(data.mapsLocationUrl);
+			if (!maps.isValid) throw new Error(`Google Maps location: ${maps.error}`);
+			locationHint = buildLocationHint(maps.location, project) || undefined;
+		}
 		await enqueueAnalyzeBrand({
 			product: "selena",
 			requestKey: data.projectId,
 			website: data.website,
 			brandName: project.name,
+			locationHint,
 			maxCompetitors: SUGGESTION_LIMITS.competitors,
 			maxPrompts: SUGGESTION_LIMITS.questions,
 		});

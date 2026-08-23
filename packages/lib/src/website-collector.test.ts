@@ -87,7 +87,44 @@ describe("Website Collector", () => {
 			}),
 		});
 		expect(injection.snapshot.visibleText).toContain("Ignore previous instructions");
-		expect(injection.evidence.every((item) => item.metadata.rulepack === "WEB-v1")).toBe(true);
+		expect(injection.evidence.every((item) => item.metadata.rulepack === "WEB-v2")).toBe(true);
+	});
+
+	it("derives local-presence findings only against a confirmed Google Maps listing", async () => {
+		const collection = await collectWebsite("tenant-a", "https://example.test", {
+			capturedAt: "2026-08-15T00:00:00Z",
+			fetcher: async () => ({
+				status: 200,
+				headers: new Headers({ "content-type": "text/html" }),
+				body: '<html><body><h1>Another Name</h1><script type="application/ld+json">{"@type":"LocalBusiness","name":"X"}</script></body></html>',
+			}),
+		});
+		const plan = buildWebsiteActionPlan(collection, {
+			mapsLocation: { url: "https://maps.app.goo.gl/AbC", placeName: "Kora Food Hall" },
+		});
+		const ruleIds = plan.findings.map((finding) => finding.ruleId);
+		expect(ruleIds).toContain("WEB-015");
+		expect(ruleIds).toContain("WEB-016");
+		expect(ruleIds).toContain("WEB-017");
+		expect(plan.findings.find((finding) => finding.ruleId === "WEB-017")?.statement).toContain("Kora Food Hall");
+		const withoutListing = buildWebsiteActionPlan(collection);
+		expect(withoutListing.findings.every((finding) => finding.category !== "LOCAL_PRESENCE")).toBe(true);
+	});
+
+	it("passes local-presence checks when the site matches its listing", async () => {
+		const collection = await collectWebsite("tenant-a", "https://example.test", {
+			capturedAt: "2026-08-15T00:00:00Z",
+			fetcher: async () => ({
+				status: 200,
+				headers: new Headers({ "content-type": "text/html" }),
+				body: '<html><body><h1>Kora Food Hall</h1><a href="https://maps.app.goo.gl/AbC">Find us</a><script type="application/ld+json">{"@type":"LocalBusiness","name":"Kora Food Hall","address":{"@type":"PostalAddress","addressLocality":"Canggu"}}</script></body></html>',
+			}),
+		});
+		expect(collection.snapshot.mapsLinks).toEqual(["https://maps.app.goo.gl/AbC"]);
+		const plan = buildWebsiteActionPlan(collection, {
+			mapsLocation: { url: "https://maps.app.goo.gl/AbC", placeName: "Kora Food Hall" },
+		});
+		expect(plan.findings.filter((finding) => finding.category === "LOCAL_PRESENCE")).toEqual([]);
 	});
 
 	it("produces deterministic website findings and verification tasks", async () => {

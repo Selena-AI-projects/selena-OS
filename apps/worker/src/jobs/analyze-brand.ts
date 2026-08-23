@@ -7,6 +7,8 @@ export interface AnalyzeBrandData {
 	requestKey: string;
 	website: string;
 	brandName?: string;
+	/** Free-text place context; scopes competitors and prompts to the area. */
+	locationHint?: string;
 	maxCompetitors?: number;
 	maxPrompts?: number;
 }
@@ -29,10 +31,10 @@ export async function analyzeBrandJob(jobs: Job<AnalyzeBrandData>[]): Promise<On
 		throw new Error("analyze-brand handler received an empty batch");
 	}
 
-	const { requestKey, website, brandName, maxCompetitors, maxPrompts } = job.data;
+	const { requestKey, website, brandName, locationHint, maxCompetitors, maxPrompts } = job.data;
 	// A job already on the queue when the gate closed must not spend either:
 	// the request key carries which product asked, and the Selena suggestion is
 	// the one whose spending is budget-classed.
 	if (requestKey.startsWith("selena:")) assertSuggestSpendAllowed();
-	return analyzeBrand({ website, brandName, maxCompetitors, maxPrompts });
+	return analyzeBrand({ website, brandName, locationHint, maxCompetitors, maxPrompts });
 }

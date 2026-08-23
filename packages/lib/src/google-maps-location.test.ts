@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseGoogleMapsLocation } from "../google-maps-location";
+import { isGoogleMapsLink, parseGoogleMapsLocation } from "./google-maps-location";
 
 describe("parseGoogleMapsLocation", () => {
 	it("reads name, pin coordinates and CID from a full place link", () => {
@@ -71,5 +71,21 @@ describe("parseGoogleMapsLocation", () => {
 		const result = parseGoogleMapsLocation("https://www.google.com/maps/place/Spot/data=!3d123.0!4d456.0");
 		expect(result.isValid && result.location.latitude).toBe(null);
 		expect(result.isValid && result.location.longitude).toBe(null);
+	});
+});
+
+describe("isGoogleMapsLink", () => {
+	it("recognizes listing and share links", () => {
+		expect(isGoogleMapsLink("https://www.google.com/maps/place/Kora+Food+Hall/@-8.64,115.13,17z")).toBe(true);
+		expect(isGoogleMapsLink("https://maps.google.com/?cid=123")).toBe(true);
+		expect(isGoogleMapsLink("https://maps.app.goo.gl/AbCdEf123")).toBe(true);
+		expect(isGoogleMapsLink("https://goo.gl/maps/AbCdEf123")).toBe(true);
+	});
+
+	it("rejects other links, relative paths and non-http schemes", () => {
+		expect(isGoogleMapsLink("https://www.google.com/search?q=maps")).toBe(false);
+		expect(isGoogleMapsLink("https://instagram.com/somebrand")).toBe(false);
+		expect(isGoogleMapsLink("/maps/place/Local")).toBe(false);
+		expect(isGoogleMapsLink("javascript:alert(1)")).toBe(false);
 	});
 });

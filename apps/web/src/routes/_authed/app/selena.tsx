@@ -18,7 +18,7 @@ import { useEffect, useMemo, useState } from "react";
 import { SelenaWordmark } from "@/components/selena-wordmark";
 import { useAuth } from "@/hooks/use-auth";
 import { validateWebsiteUrl } from "@/lib/brand-website";
-import { parseGoogleMapsLocation } from "@/lib/google-maps-location";
+import { parseGoogleMapsLocation } from "@workspace/lib/google-maps-location";
 import { resetPostHog } from "@/lib/posthog";
 import { SUGGESTION_LIMITS } from "@/lib/selena-suggestion";
 import { humanizeSelenaError } from "@/lib/selena-workspace-errors";
@@ -140,13 +140,31 @@ function SelenaWorkspace() {
 			);
 			return;
 		}
+		// The location is optional for the suggestion, but a filled-in link that
+		// cannot be read should stop here rather than silently degrade the result.
+		let mapsLocationUrl = "";
+		if (profileForm.mapsLocation.trim()) {
+			const maps = parseGoogleMapsLocation(profileForm.mapsLocation);
+			if (!maps.isValid) {
+				setFeedbackScope("profile");
+				setError(
+					tr(
+						locale,
+						"«Google Maps location»: we could not read the link. Paste your place's share link, for example https://maps.app.goo.gl/…",
+						"«Локация в Google Maps»: ссылка не распознана. Вставьте ссылку «Поделиться» вашей точки, например https://maps.app.goo.gl/…",
+					),
+				);
+				return;
+			}
+			mapsLocationUrl = maps.location.url;
+		}
 		const projectId = selectedProject.project.id;
 		setFeedbackScope("profile");
 		setError("");
 		setNotice("");
 		setSuggesting(true);
 		try {
-			await startSelenaProfileSuggestionFn({ data: { projectId, website: website.formattedUrl } });
+			await startSelenaProfileSuggestionFn({ data: { projectId, website: website.formattedUrl, mapsLocationUrl } });
 			const deadline = Date.now() + SUGGESTION_TIMEOUT_MS;
 			while (Date.now() < deadline) {
 				await new Promise((resolve) => setTimeout(resolve, SUGGESTION_POLL_MS));
