@@ -1,5 +1,4 @@
 import { CREDENTIAL_ENV_NAMES } from "@workspace/config/env-registry";
-import { db } from "../db/db";
 import { secrets } from "../db/schema";
 import {
 	decryptSecret,
@@ -50,6 +49,10 @@ export async function refreshCredentialOverlay(): Promise<void> {
 		return;
 	}
 
+	// Imported here rather than at module scope: this module is reachable from
+	// client code through the provider registry, and a static edge to the
+	// database handle drags the Postgres driver into the browser bundle.
+	const { db } = await import("@workspace/lib/db/db");
 	const rows = await db.select({ name: secrets.name, encryptedValue: secrets.encryptedValue }).from(secrets);
 
 	const next = new Map<string, string>();
@@ -87,6 +90,7 @@ export async function encryptCredential(name: string, value: string): Promise<En
  * providers in this process. The plaintext is never returned or persisted. */
 export async function storeCredential(name: string, value: string): Promise<{ runtimeRefreshed: boolean }> {
 	const encryptedValue = await encryptCredential(name, value);
+	const { db } = await import("@workspace/lib/db/db");
 	await db
 		.insert(secrets)
 		.values({ name, encryptedValue })

@@ -60,4 +60,4 @@ function getDeploymentAuthOptions(): CreateAuthOptions | undefined {
 	}
 }
 
-export const auth = createAuth(getDeploymentAuthOptions());
+export const auth = /* @__PURE__ */ createAuth(getDeploymentAuthOptions());

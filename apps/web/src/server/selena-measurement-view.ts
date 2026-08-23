@@ -8,7 +8,7 @@ import { z } from "zod";
 import { scenarioKindsFrom } from "@/lib/selena-measurement-view";
 import { resolveSessionAuthContext } from "../lib/selena-auth-context";
 
-const repositories = createSelenaRepositories(db);
+const repositories = /* @__PURE__ */ createSelenaRepositories(db);
 
 export type MeasurementCycleSummary = {
 	id: string;

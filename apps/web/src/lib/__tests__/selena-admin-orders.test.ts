@@ -57,7 +57,7 @@ describe("selena order approval gate", () => {
 		expect(adminOrdersSource).toContain("assertApprovable(preflight)");
 		// Permits are minted by the dispatch repository, which is the only
 		// writer allowed to create them.
-		expect(adminOrdersSource).toContain("repositories.dispatch.createPermits");
+		expect(adminOrdersSource).toContain("getRepositories()).dispatch.createPermits");
 	});
 });
 
