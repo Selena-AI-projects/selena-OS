@@ -1,6 +1,7 @@
 import { createOpenRouterAdapter, resolveCatalogApiModel } from "@workspace/lib/adapters/openrouter";
 import { db } from "@workspace/lib/db/db";
 import { isMaintenanceEnabled } from "@workspace/lib/run-policy";
+import { createSelenaMeasurementResolvers } from "@workspace/lib/selena-extraction-context";
 import { createNoopMeasurementAdapter } from "@workspace/lib/selena-measurement";
 import {
 	type MeasurementAdapterRegistry,
@@ -18,12 +19,18 @@ export interface SelenaMeasureData {
 	actorId?: string;
 }
 
-// The OpenRouter API View adapter is registered per job below (it needs the
-// job's tenant context to read scenario text); selecting it still takes
+// The OpenRouter API View adapter is registered per job below: constructing it
+// reads OPENROUTER_API_KEY, and a missing key must fail the job that needs it,
+// not the worker boot. Selecting it still takes
 // SELENA_MEASUREMENT_ADAPTER=openrouter plus the owner-approved allowlist in
 // the contracts package — "Turning measurement on" in
 // SELENA_OWNER_OPERATING_GUIDE.md walks the full chain.
 const ADAPTERS: MeasurementAdapterRegistry = { noop: createNoopMeasurementAdapter() };
+
+// Both per-permit reads, tenant-scoped by the permit itself. Without the
+// extraction context a run is still stored and billed, but no mention,
+// position or citation is extracted, so no ledger metric moves.
+const resolvers = createSelenaMeasurementResolvers(db);
 
 /**
  * Executes one already-minted run permit. Nothing enqueues this job on a
@@ -54,7 +61,8 @@ export async function selenaMeasureJob(jobs: Job<SelenaMeasureData>[]): Promise<
 				apiKey: process.env.OPENROUTER_API_KEY ?? "",
 				model: resolveCatalogApiModel(process.env.SELENA_OPENROUTER_MODEL),
 				fetchImpl: fetch,
-				resolveScenarioText: (permit) => repositories.scenarios.textFor(ctx, permit.scenarioId),
+				resolveScenarioText: resolvers.resolveScenarioText,
+				resolveExtractionContext: resolvers.resolveExtractionContext,
 			}),
 		};
 		const result = await runMeasurementForPermit({
