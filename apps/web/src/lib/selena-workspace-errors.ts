@@ -26,6 +26,17 @@ const FIELD_LABELS: Record<string, [string, string]> = {
 	languages: ["Languages", "Языки"],
 };
 
+const SUGGEST_MESSAGES: Record<string, [string, string]> = {
+	SUGGEST_LLM_NOT_BUDGETED: [
+		"Automatic suggestions are switched off here. Add the questions by hand — one per line.",
+		"Автоподбор здесь выключен. Добавьте вопросы вручную — по одному в строке.",
+	],
+	SUGGEST_BUDGET_EXHAUSTED: [
+		"This month's suggestion budget is used up. Add the questions by hand, or try again next month.",
+		"Месячный лимит автоподбора исчерпан. Добавьте вопросы вручную или попробуйте в следующем месяце.",
+	],
+};
+
 const WEBSITE_MESSAGES: Record<string, [string, string]> = {
 	WEBSITE_DNS_FAILED: [
 		"We could not find a site at this address. Check the spelling of the primary website.",
@@ -125,6 +136,9 @@ export function humanizeSelenaError(cause: unknown, locale: WorkspaceLocale, fal
 			})
 			.join(" ");
 	}
+
+	const suggest = SUGGEST_MESSAGES[raw];
+	if (suggest) return tr(locale, suggest);
 
 	const website = WEBSITE_MESSAGES[raw];
 	if (website) return tr(locale, website);

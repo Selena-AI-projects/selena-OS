@@ -11,6 +11,8 @@ export interface AnalyzeBrandData {
 	requestKey: string;
 	website: string;
 	brandName?: string;
+	/** Free-text place context; scopes competitors and prompts to the area. */
+	locationHint?: string;
 	maxCompetitors?: number;
 	maxPrompts?: number;
 }
@@ -33,7 +35,7 @@ export async function analyzeBrandJob(jobs: Job<AnalyzeBrandData>[]): Promise<On
 		throw new Error("analyze-brand handler received an empty batch");
 	}
 
-	const { requestKey, website, brandName, maxCompetitors, maxPrompts } = job.data;
+	const { requestKey, website, brandName, locationHint, maxCompetitors, maxPrompts } = job.data;
 	// A job already on the queue when the gate closed must not spend either:
 	// the request key carries which product asked, and the Selena suggestion is
 	// the one whose spending is budget-classed.
@@ -43,7 +45,7 @@ export async function analyzeBrandJob(jobs: Job<AnalyzeBrandData>[]): Promise<On
 		// enqueue time in the web app.
 		await assertSuggestBudget(db);
 	}
-	const suggestion = await analyzeBrand({ website, brandName, maxCompetitors, maxPrompts });
+	const suggestion = await analyzeBrand({ website, brandName, locationHint, maxCompetitors, maxPrompts });
 	if (requestKey.startsWith("selena:")) {
 		// Booked where the spending happened. Attribution follows the project
 		// the request key names; a suggestion for a deleted project is still a

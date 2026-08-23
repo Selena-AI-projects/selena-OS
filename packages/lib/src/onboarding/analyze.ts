@@ -115,6 +115,13 @@ export interface AnalyzeBrandOptions {
 	 */
 	website: string;
 	brandName?: string;
+	/**
+	 * Where the brand physically operates, as free text ("Kora Food Hall,
+	 * Canggu, Indonesia (coordinates -8.65, 115.14)"). When set, competitors and
+	 * prompts are scoped to that area — a local business competes inside an AI
+	 * answer with the places named next to it, not with the global category.
+	 */
+	locationHint?: string;
 	/** 0 disables competitor generation entirely. */
 	maxCompetitors?: number;
 	/** 0 disables prompt generation entirely. */
@@ -145,7 +152,13 @@ export interface AnalysisContext {
 }
 
 export async function buildAnalysisContext(options: AnalyzeBrandOptions): Promise<AnalysisContext> {
-	const { website, brandName, maxCompetitors = DEFAULT_MAX_COMPETITORS, maxPrompts = DEFAULT_MAX_PROMPTS } = options;
+	const {
+		website,
+		brandName,
+		locationHint,
+		maxCompetitors = DEFAULT_MAX_COMPETITORS,
+		maxPrompts = DEFAULT_MAX_PROMPTS,
+	} = options;
 
 	const normalizedWebsite = cleanDomain(website);
 	const analysisUrl = cleanUrl(website);
@@ -163,6 +176,7 @@ export async function buildAnalysisContext(options: AnalyzeBrandOptions): Promis
 		brandNameHint,
 		brandNameWasProvided: providedBrandName !== undefined,
 		websiteExcerpt,
+		locationHint: locationHint?.trim() || undefined,
 		includeCompetitors: maxCompetitors > 0,
 		includePrompts: maxPrompts > 0,
 	});
@@ -250,6 +264,7 @@ function buildPrompt(args: {
 	brandNameHint: string;
 	brandNameWasProvided: boolean;
 	websiteExcerpt: string;
+	locationHint?: string;
 	includeCompetitors: boolean;
 	includePrompts: boolean;
 }): string {
@@ -268,6 +283,12 @@ function buildPrompt(args: {
 		? `\nThis is one page on ${args.trackedDomain}, not the site root. If it covers a sub-brand, product line, or regional arm, scope the brand name, competitors, and prompts to THAT rather than to the parent company.\n`
 		: "";
 
+	// A local business competes with the places an AI answer names next to it,
+	// not with the global category, and the queries that matter name the area.
+	const locationNote = args.locationHint
+		? `\nThe brand is a local business at: ${args.locationHint}. Scope competitors to businesses a customer in that area would actually choose between. Make suggested prompts local discovery queries that name the neighborhood or city (e.g. "best [category] in [area]"), not global ones.\n`
+		: "";
+
 	const skipNotes: string[] = [];
 	if (!args.includeCompetitors) skipNotes.push("Return an empty array for competitors.");
 	if (!args.includePrompts) skipNotes.push("Return an empty array for suggestedPrompts.");
@@ -275,7 +296,7 @@ function buildPrompt(args: {
 	return `Analyze the brand at ${args.analysisUrl}.
 
 ${nameLine}
-${scopeNote}${excerptBlock}
+${scopeNote}${locationNote}${excerptBlock}
 Use web search to verify facts. Never invent information — return empty arrays when uncertain.
 
 You MUST return the structured JSON object — even if you can find nothing about this brand. In that case set brandName to the likely name above and return empty arrays for every other field. Refusing to produce JSON, or replying with prose explaining what you don't know, is a failure mode; an object with mostly-empty arrays is the correct answer when information is genuinely unavailable.${skipNotes.length > 0 ? `\n\n${skipNotes.join(" ")}` : ""}`;

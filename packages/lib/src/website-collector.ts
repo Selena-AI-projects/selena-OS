@@ -7,6 +7,7 @@ import {
 	type RecommendationFinding,
 	stableId,
 } from "@workspace/selena-visibility-contracts";
+import { type GoogleMapsLocationSnapshot, isGoogleMapsLink } from "./google-maps-location";
 import {
 	assertPublicWebsiteTarget,
 	assertWebsiteUrl,
@@ -43,6 +44,7 @@ export type WebsiteSnapshot = {
 	contacts: string[];
 	services: string[];
 	internalLinks: string[];
+	mapsLinks: string[];
 	sitemapReferences: string[];
 	images: Array<{ src: string; alt: string | null }>;
 	pageCount: number;
@@ -52,7 +54,7 @@ export type WebsiteCollection = {
 	snapshot: WebsiteSnapshot;
 	evidence: EvidenceItem[];
 	manifest: InputManifest;
-	rulepack: "WEB-v1";
+	rulepack: "WEB-v2";
 };
 export type WebsiteFetcher = (url: string) => Promise<{ status: number; headers: Headers; body: string }>;
 export type WebsiteCollectionOptions = {
@@ -126,18 +128,26 @@ function parseHtml(html: string, base: URL) {
 			jsonLd.push({ invalid: true });
 		}
 	}
-	const links = [...html.matchAll(/<a\b[^>]*href=["']([^"']+)["'][^>]*>/gi)]
+	const anchors = [...html.matchAll(/<a\b[^>]*href=["']([^"']+)["'][^>]*>/gi)]
 		.map((match) => {
 			try {
-				const href = new URL(match[1] ?? "", base);
-				return href.origin === base.origin && ["http:", "https:"].includes(href.protocol)
-					? href.href.split("#")[0]
-					: null;
+				return new URL(match[1] ?? "", base);
 			} catch {
 				return null;
 			}
 		})
+		.filter((href): href is URL => href !== null);
+	const links = anchors
+		.map((href) =>
+			href.origin === base.origin && ["http:", "https:"].includes(href.protocol) ? href.href.split("#")[0] : null,
+		)
 		.filter((href): href is string => typeof href === "string");
+	// External by definition (the internal-link list drops them), and the signal
+	// the local-presence rules read: whether the site points at its own listing.
+	const mapsLinks = [...new Set(anchors.map((href) => href.href).filter((href) => isGoogleMapsLink(href)))].slice(
+		0,
+		MAX_LINKS,
+	);
 	const images = [...html.matchAll(/<img\b[^>]*>/gi)]
 		.map((match) => ({ src: attr(match[0], "src") ?? "", alt: attr(match[0], "alt") }))
 		.filter((item) => item.src)
@@ -164,6 +174,7 @@ function parseHtml(html: string, base: URL) {
 		contacts,
 		services,
 		internalLinks: [...new Set(links)].slice(0, MAX_LINKS),
+		mapsLinks,
 		sitemapReferences,
 		images,
 	};
@@ -234,7 +245,7 @@ function evidence(
 		capturedAt,
 		subject,
 		text: typeof value === "string" ? value : JSON.stringify(value),
-		metadata: { rulepack: "WEB-v1" },
+		metadata: { rulepack: "WEB-v2" },
 	};
 }
 
@@ -300,6 +311,7 @@ export async function collectWebsite(
 		["headings", parsed.headings],
 		["visible-text", parsed.visibleText],
 		["internal-links", parsed.internalLinks],
+		["maps-links", parsed.mapsLinks],
 		["sitemap-references", parsed.sitemapReferences],
 		["json-ld", parsed.jsonLd],
 		["microdata", parsed.microdata],
@@ -312,19 +324,44 @@ export async function collectWebsite(
 		evidence(tenantId, snapshotId, `${page.finalUrl.href}#${subject}`, subject, value, capturedAt),
 	);
 	const manifest: InputManifest = {
-		id: stableId("manifest", `${tenantId}:${snapshotId}:WEB-v1`),
+		id: stableId("manifest", `${tenantId}:${snapshotId}:WEB-v2`),
 		tenantId,
 		datasetId: snapshotId,
 		evidenceIds: items.map((item) => item.id),
 		snapshotIds: [snapshotId],
-		rulepackVersion: "WEB-v1",
+		rulepackVersion: "WEB-v2",
 		createdAt: capturedAt,
 		immutable: true,
 	};
-	return { snapshot, evidence: items, manifest, rulepack: "WEB-v1" };
+	return { snapshot, evidence: items, manifest, rulepack: "WEB-v2" };
 }
 
-export function buildWebsiteActionPlan(collection: WebsiteCollection): ActionPlan {
+export type WebsiteActionPlanContext = {
+	/** The project's confirmed Google Maps listing, when the profile has one. */
+	mapsLocation?: Pick<GoogleMapsLocationSnapshot, "url" | "placeName"> | null;
+};
+
+function safeJsonParse(text: string): unknown {
+	try {
+		return JSON.parse(text);
+	} catch {
+		return null;
+	}
+}
+
+/** True when any JSON-LD node (including @graph members) declares an address. */
+function declaresAddress(value: unknown, depth = 0): boolean {
+	if (depth > 4 || value === null || typeof value !== "object") return false;
+	if (Array.isArray(value)) return value.some((item) => declaresAddress(item, depth + 1));
+	const record = value as Record<string, unknown>;
+	if (record.address !== null && record.address !== undefined && record.address !== "") return true;
+	return Object.values(record).some((item) => declaresAddress(item, depth + 1));
+}
+
+export function buildWebsiteActionPlan(
+	collection: WebsiteCollection,
+	context: WebsiteActionPlanContext = {},
+): ActionPlan {
 	const bySubject = new Map(collection.evidence.map((item) => [item.subject, item]));
 	const rules: Array<[string, string, string, "HIGH" | "MEDIUM" | "LOW"]> = [
 		["title", "WEB-001", "Add a descriptive page title that identifies the brand and offer.", "MEDIUM"],
@@ -342,6 +379,7 @@ export function buildWebsiteActionPlan(collection: WebsiteCollection): ActionPla
 		["images", "WEB-013", "Add useful alt text to important images.", "LOW"],
 		["robots", "WEB-014", "Keep robots evidence available for future verification.", "LOW"],
 	];
+	const actionByRuleId = new Map<string, string>(rules.map(([, ruleId, action]) => [ruleId, action]));
 	const findings: RecommendationFinding[] = [];
 	for (const [subject, ruleId, _action, severity] of rules) {
 		const item = bySubject.get(subject);
@@ -362,15 +400,73 @@ export function buildWebsiteActionPlan(collection: WebsiteCollection): ActionPla
 			ruleId,
 		});
 	}
+	// Local-presence rules run only against a confirmed Google Maps listing:
+	// without one, "no maps link" is not a defect, and each check must state an
+	// observed mismatch between the site and the listing, never a folk rule.
+	const location = context.mapsLocation;
+	if (location) {
+		const placeName = location.placeName;
+		const localRules: Array<{
+			ruleId: string;
+			subject: string;
+			failed: (text: string) => boolean;
+			statement: string;
+			action: string;
+		}> = [
+			{
+				ruleId: "WEB-015",
+				subject: "maps-links",
+				failed: (text) => text === "[]",
+				statement: "The website does not link to any Google Maps listing.",
+				action: "Link the confirmed Google Maps listing from the website's contact or location section.",
+			},
+			{
+				ruleId: "WEB-016",
+				subject: "json-ld",
+				// A page with no JSON-LD at all is already WEB-009's finding.
+				failed: (text) => text !== "[]" && !declaresAddress(safeJsonParse(text)),
+				statement: "Structured data on the website does not declare a business address.",
+				action: "Add LocalBusiness JSON-LD whose name and address match the Google Maps listing.",
+			},
+			...(placeName
+				? [
+						{
+							ruleId: "WEB-017",
+							subject: "visible-text",
+							failed: (text: string) => !text.toLowerCase().includes(placeName.toLowerCase()),
+							statement: `The Google Maps listing name "${placeName}" does not appear in the website's visible text.`,
+							action: "Use the exact listing name on the website so the site and the listing confirm each other.",
+						},
+					]
+				: []),
+		];
+		for (const rule of localRules) {
+			const item = bySubject.get(rule.subject);
+			if (!item || !rule.failed(item.text)) continue;
+			actionByRuleId.set(rule.ruleId, rule.action);
+			findings.push({
+				id: stableId("finding", `${collection.manifest.id}:${rule.ruleId}`),
+				tenantId: collection.manifest.tenantId,
+				manifestId: collection.manifest.id,
+				category: "LOCAL_PRESENCE",
+				statement: rule.statement,
+				evidenceIds: [item.id],
+				confidence: "MEDIUM",
+				confidenceScore: 0.8,
+				severity: "MEDIUM",
+				unknown: false,
+				ruleId: rule.ruleId,
+			});
+		}
+	}
 	const recommendations = findings.map((finding) => {
-		const rule = rules.find((item) => item[1] === finding.ruleId);
 		return {
 			id: stableId("recommendation", finding.id),
 			tenantId: finding.tenantId,
 			findingId: finding.id,
 			manifestId: finding.manifestId,
 			title: `Improve ${finding.ruleId}`,
-			action: rule?.[2] ?? "Improve the website evidence.",
+			action: actionByRuleId.get(finding.ruleId) ?? "Improve the website evidence.",
 			rationale: finding.statement,
 			evidenceIds: finding.evidenceIds,
 			priority: finding.severity === "HIGH" ? ("NOW" as const) : ("NEXT" as const),

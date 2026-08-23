@@ -11,6 +11,7 @@ import { createSelenaRepositories } from "@workspace/lib/selena-visibility-repos
 import { actionPlanSchema, projectCreateSchema } from "@workspace/selena-visibility-contracts";
 import { and, desc, eq } from "drizzle-orm";
 import { z } from "zod";
+import { readStoredGoogleMapsLocation } from "@workspace/lib/google-maps-location";
 import { resolveSessionAuthContext } from "../lib/selena-auth-context";
 
 const repositories = createSelenaRepositories(db);
@@ -105,6 +106,7 @@ export const getSelenaWorkspaceFn = createServerFn({ method: "GET" }).handler(as
 							brandName: profile.brandName,
 							primaryDomain: profile.primaryDomain,
 							publicProfiles: Array.isArray(profile.publicProfiles) ? profile.publicProfiles : [],
+							mapsLocation: readStoredGoogleMapsLocation(profile.mapsLocation),
 							competitors: Array.isArray(profile.competitorSnapshot) ? profile.competitorSnapshot : [],
 							scenarios: Array.isArray(profile.scenarioSnapshot) ? profile.scenarioSnapshot : [],
 							confirmedAt: profile.confirmedAt?.toISOString() ?? null,

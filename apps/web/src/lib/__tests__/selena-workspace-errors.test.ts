@@ -36,4 +36,10 @@ describe("humanizeSelenaError", () => {
 		expect(humanizeSelenaError(new Error("  "), "en", "fallback")).toBe("fallback");
 		expect(humanizeSelenaError(undefined, "en", "fallback")).toBe("fallback");
 	});
+
+	it("explains the suggestion gates instead of showing machine codes", () => {
+		expect(humanizeSelenaError(new Error("SUGGEST_LLM_NOT_BUDGETED"), "ru", "fallback")).toContain("вручную");
+		expect(humanizeSelenaError(new Error("SUGGEST_BUDGET_EXHAUSTED"), "en", "fallback")).toContain("budget");
+		expect(humanizeSelenaError(new Error("SUGGEST_LLM_NOT_BUDGETED"), "en", "fallback")).not.toContain("SUGGEST_");
+	});
 });

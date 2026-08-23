@@ -18,6 +18,7 @@ import { useEffect, useMemo, useState } from "react";
 import { SelenaWordmark } from "@/components/selena-wordmark";
 import { useAuth } from "@/hooks/use-auth";
 import { validateWebsiteUrl } from "@/lib/brand-website";
+import { parseGoogleMapsLocation } from "@workspace/lib/google-maps-location";
 import { resetPostHog } from "@/lib/posthog";
 import { SUGGESTION_LIMITS } from "@/lib/selena-suggestion";
 import { humanizeSelenaError } from "@/lib/selena-workspace-errors";
@@ -65,6 +66,7 @@ const emptyProjectForm = { name: "", category: "", country: "ID", region: "", la
 const emptyProfileForm = {
 	brandName: "",
 	primaryDomain: "",
+	mapsLocation: "",
 	publicProfiles: "",
 	competitors: "",
 	scenarios: "",
@@ -112,6 +114,7 @@ function SelenaWorkspace() {
 		setProfileForm({
 			brandName: selectedProject.profile.brandName,
 			primaryDomain: selectedProject.profile.primaryDomain,
+			mapsLocation: readObjectString(selectedProject.profile.mapsLocation, "url"),
 			publicProfiles: selectedProject.profile.publicProfiles
 				.map((item) => readObjectString(item, "url"))
 				.filter(Boolean)
@@ -139,7 +142,11 @@ function SelenaWorkspace() {
 		setProfileForm((current) => ({ ...current, ...patch }));
 
 	// Research runs in the worker (roughly a minute), so the page polls for it.
-	const suggestProfile = async () => {
+	// `auto` is the confirm-with-empty-questions path: confirming the profile is
+	// the deliberate action, so it may start the paid suggestion; the questions
+	// still come back as a draft and the profile is confirmed on a second,
+	// informed click.
+	const runSuggestion = async (auto: boolean) => {
 		if (!selectedProject || suggesting) return;
 		const website = validateWebsiteUrl(profileForm.primaryDomain);
 		if (!website.isValid) {
@@ -153,13 +160,39 @@ function SelenaWorkspace() {
 			);
 			return;
 		}
+		// The location is optional for the suggestion, but a filled-in link that
+		// cannot be read should stop here rather than silently degrade the result.
+		let mapsLocationUrl = "";
+		if (profileForm.mapsLocation.trim()) {
+			const maps = parseGoogleMapsLocation(profileForm.mapsLocation);
+			if (!maps.isValid) {
+				setFeedbackScope("profile");
+				setError(
+					tr(
+						locale,
+						"«Google Maps location»: we could not read the link. Paste your place's share link, for example https://maps.app.goo.gl/…",
+						"«Локация в Google Maps»: ссылка не распознана. Вставьте ссылку «Поделиться» вашей точки, например https://maps.app.goo.gl/…",
+					),
+				);
+				return;
+			}
+			mapsLocationUrl = maps.location.url;
+		}
 		const projectId = selectedProject.project.id;
 		setFeedbackScope("profile");
 		setError("");
-		setNotice("");
+		setNotice(
+			auto
+				? tr(
+						locale,
+						"Picking customer questions from the website — about a minute. Review them below, then confirm the profile.",
+						"Подбираем вопросы по сайту — около минуты. Они появятся ниже: поправьте и подтвердите профиль.",
+					)
+				: "",
+		);
 		setSuggesting(true);
 		try {
-			await startSelenaProfileSuggestionFn({ data: { projectId, website: website.formattedUrl } });
+			await startSelenaProfileSuggestionFn({ data: { projectId, website: website.formattedUrl, mapsLocationUrl } });
 			const deadline = Date.now() + SUGGESTION_TIMEOUT_MS;
 			while (Date.now() < deadline) {
 				await new Promise((resolve) => setTimeout(resolve, SUGGESTION_POLL_MS));
@@ -205,6 +238,8 @@ function SelenaWorkspace() {
 			setSuggesting(false);
 		}
 	};
+
+	const suggestProfile = () => runSuggestion(false);
 
 	const createProject = async (event: React.FormEvent) => {
 		event.preventDefault();
@@ -273,6 +308,21 @@ function SelenaWorkspace() {
 			);
 			return;
 		}
+		let mapsLocationUrl = "";
+		if (profileForm.mapsLocation.trim()) {
+			const maps = parseGoogleMapsLocation(profileForm.mapsLocation);
+			if (!maps.isValid) {
+				setError(
+					tr(
+						locale,
+						"«Google Maps location»: we could not read the link. Paste your place's share link, for example https://maps.app.goo.gl/…",
+						"«Локация в Google Maps»: ссылка не распознана. Вставьте ссылку «Поделиться» вашей точки, например https://maps.app.goo.gl/…",
+					),
+				);
+				return;
+			}
+			mapsLocationUrl = maps.location.url;
+		}
 		const publicProfiles: string[] = [];
 		for (const input of splitList(profileForm.publicProfiles)) {
 			const link = validateWebsiteUrl(input);
@@ -286,7 +336,23 @@ function SelenaWorkspace() {
 			}
 			publicProfiles.push(link.formattedUrl);
 		}
-		onProfileNormalized({ primaryDomain: primary.formattedUrl, publicProfiles: publicProfiles.join(", ") });
+		onProfileNormalized({
+			primaryDomain: primary.formattedUrl,
+			mapsLocation: mapsLocationUrl,
+			publicProfiles: publicProfiles.join(", "),
+		});
+
+		// An empty questions box is not a validation error: confirming is the
+		// deliberate action, so it starts the suggestion instead, and the
+		// questions come back below for the same review-then-confirm.
+		const scenarioSnapshot = profileForm.scenarios
+			.split("\n")
+			.map((line) => parseScenario(line, selectedProject.project.languages[0] ?? "en"))
+			.filter((item): item is { text: string; language: string; intentType: string } => item !== null);
+		if (scenarioSnapshot.length === 0) {
+			await runSuggestion(true);
+			return;
+		}
 
 		setPendingAction("profile");
 		try {
@@ -296,11 +362,9 @@ function SelenaWorkspace() {
 					brandName: profileForm.brandName.trim(),
 					primaryDomain: primary.formattedUrl,
 					publicProfiles: publicProfiles.map((url) => ({ platform: "public", url })),
+					mapsLocationUrl,
 					competitorSnapshot: splitList(profileForm.competitors).map((name) => ({ name, domains: [] })),
-					scenarioSnapshot: profileForm.scenarios
-						.split("\n")
-						.map((line) => parseScenario(line, selectedProject.project.languages[0] ?? "en"))
-						.filter((item): item is { text: string; language: string; intentType: string } => item !== null),
+					scenarioSnapshot,
 				},
 			});
 			setNotice(
@@ -767,11 +831,30 @@ function BrandProfileForm({
 					/>
 				</Field>
 				<Field
+					label={tr(locale, "Google Maps location", "Локация в Google Maps")}
+					hint={tr(
+						locale,
+						"Optional. Your place's share link — it pins the exact business for local questions",
+						"Необязательно. Ссылка «Поделиться» вашей точки — она однозначно указывает бизнес в локальных вопросах",
+					)}
+					htmlFor="maps-location"
+				>
+					<Input
+						id="maps-location"
+						inputMode="url"
+						autoCapitalize="none"
+						spellCheck={false}
+						value={form.mapsLocation}
+						onChange={(event) => onChange({ ...form, mapsLocation: event.target.value })}
+						placeholder="https://maps.app.goo.gl/…"
+					/>
+				</Field>
+				<Field
 					label={tr(locale, "Public profile links", "Ссылки на публичные профили")}
 					hint={tr(
 						locale,
-						"Optional. Google Maps, Instagram, TripAdvisor — comma separated",
-						"Необязательно. Google Maps, Instagram, TripAdvisor — через запятую",
+						"Optional. Instagram, TripAdvisor — comma separated",
+						"Необязательно. Instagram, TripAdvisor — через запятую",
 					)}
 					htmlFor="public-profiles"
 				>
@@ -802,14 +885,13 @@ function BrandProfileForm({
 						label={tr(locale, "Customer questions", "Вопросы клиентов")}
 						hint={tr(
 							locale,
-							"One per line. Add EN: or RU: to specify the language.",
-							"Один вопрос в строке. Добавьте EN: или RU:, чтобы указать язык.",
+							"One per line. Add EN: or RU: to specify the language. Leave it empty — questions are suggested when you confirm.",
+							"Один вопрос в строке. Добавьте EN: или RU:, чтобы указать язык. Оставьте пустым — вопросы подберутся сами при подтверждении.",
 						)}
 						htmlFor="scenarios"
 					>
 						<textarea
 							id="scenarios"
-							required
 							className="selena-textarea"
 							value={form.scenarios}
 							onChange={(event) => onChange({ ...form, scenarios: event.target.value })}

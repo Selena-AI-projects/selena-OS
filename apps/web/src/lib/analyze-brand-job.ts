@@ -49,6 +49,8 @@ export interface AnalyzeBrandInput {
 	requestKey: string;
 	website: string;
 	brandName?: string;
+	/** Free-text place context; scopes competitors and prompts to the area. */
+	locationHint?: string;
 	maxCompetitors?: number;
 	maxPrompts?: number;
 }
