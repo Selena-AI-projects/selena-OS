@@ -34,6 +34,7 @@ import { Route as AuthedAppAcademyRouteImport } from './routes/_authed/app/acade
 import { Route as AuthedAppNewRouteImport } from './routes/_authed/app/new'
 import { Route as AuthedAppSelenaRouteImport } from './routes/_authed/app/selena'
 import { Route as AuthedAppSelenaAdminRouteImport } from './routes/_authed/app/selena-admin'
+import { Route as AuthedAppSelenaOrderRouteImport } from './routes/_authed/app/selena-order'
 import { Route as AuthedAppSelenaSourcesRouteImport } from './routes/_authed/app/selena-sources'
 import { Route as AuthedReportsIndexRouteImport } from './routes/_authed/reports/index'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
@@ -217,6 +218,11 @@ const AuthedAppSelenaRoute = AuthedAppSelenaRouteImport.update({
 const AuthedAppSelenaAdminRoute = AuthedAppSelenaAdminRouteImport.update({
   id: '/selena-admin',
   path: '/selena-admin',
+  getParentRoute: () => AuthedAppRoute,
+} as any)
+const AuthedAppSelenaOrderRoute = AuthedAppSelenaOrderRouteImport.update({
+  id: '/selena-order',
+  path: '/selena-order',
   getParentRoute: () => AuthedAppRoute,
 } as any)
 const AuthedAppSelenaSourcesRoute = AuthedAppSelenaSourcesRouteImport.update({
@@ -568,6 +574,7 @@ export interface FileRoutesByFullPath {
   '/app/new': typeof AuthedAppNewRoute
   '/app/selena': typeof AuthedAppSelenaRoute
   '/app/selena-admin': typeof AuthedAppSelenaAdminRoute
+  '/app/selena-order': typeof AuthedAppSelenaOrderRoute
   '/app/selena-sources': typeof AuthedAppSelenaSourcesRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/admin/': typeof AuthedAdminIndexRoute
@@ -649,6 +656,7 @@ export interface FileRoutesByTo {
   '/app/new': typeof AuthedAppNewRoute
   '/app/selena': typeof AuthedAppSelenaRoute
   '/app/selena-admin': typeof AuthedAppSelenaAdminRoute
+  '/app/selena-order': typeof AuthedAppSelenaOrderRoute
   '/app/selena-sources': typeof AuthedAppSelenaSourcesRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/admin': typeof AuthedAdminIndexRoute
@@ -736,6 +744,7 @@ export interface FileRoutesById {
   '/_authed/app/new': typeof AuthedAppNewRoute
   '/_authed/app/selena': typeof AuthedAppSelenaRoute
   '/_authed/app/selena-admin': typeof AuthedAppSelenaAdminRoute
+  '/_authed/app/selena-order': typeof AuthedAppSelenaOrderRoute
   '/_authed/app/selena-sources': typeof AuthedAppSelenaSourcesRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/_authed/admin/': typeof AuthedAdminIndexRoute
@@ -823,6 +832,7 @@ export interface FileRouteTypes {
     | '/app/new'
     | '/app/selena'
     | '/app/selena-admin'
+    | '/app/selena-order'
     | '/app/selena-sources'
     | '/api/auth/$'
     | '/admin/'
@@ -904,6 +914,7 @@ export interface FileRouteTypes {
     | '/app/new'
     | '/app/selena'
     | '/app/selena-admin'
+    | '/app/selena-order'
     | '/app/selena-sources'
     | '/api/auth/$'
     | '/admin'
@@ -990,6 +1001,7 @@ export interface FileRouteTypes {
     | '/_authed/app/new'
     | '/_authed/app/selena'
     | '/_authed/app/selena-admin'
+    | '/_authed/app/selena-order'
     | '/_authed/app/selena-sources'
     | '/api/auth/$'
     | '/_authed/admin/'
@@ -1278,6 +1290,13 @@ declare module '@tanstack/react-router' {
       path: '/selena-admin'
       fullPath: '/app/selena-admin'
       preLoaderRoute: typeof AuthedAppSelenaAdminRouteImport
+      parentRoute: typeof AuthedAppRoute
+    }
+    '/_authed/app/selena-order': {
+      id: '/_authed/app/selena-order'
+      path: '/selena-order'
+      fullPath: '/app/selena-order'
+      preLoaderRoute: typeof AuthedAppSelenaOrderRouteImport
       parentRoute: typeof AuthedAppRoute
     }
     '/_authed/app/selena-sources': {
@@ -1765,6 +1784,7 @@ interface AuthedAppRouteChildren {
   AuthedAppNewRoute: typeof AuthedAppNewRoute
   AuthedAppSelenaRoute: typeof AuthedAppSelenaRoute
   AuthedAppSelenaAdminRoute: typeof AuthedAppSelenaAdminRoute
+  AuthedAppSelenaOrderRoute: typeof AuthedAppSelenaOrderRoute
   AuthedAppSelenaSourcesRoute: typeof AuthedAppSelenaSourcesRoute
   AuthedAppIndexRoute: typeof AuthedAppIndexRoute
 }
@@ -1775,6 +1795,7 @@ const AuthedAppRouteChildren: AuthedAppRouteChildren = {
   AuthedAppNewRoute: AuthedAppNewRoute,
   AuthedAppSelenaRoute: AuthedAppSelenaRoute,
   AuthedAppSelenaAdminRoute: AuthedAppSelenaAdminRoute,
+  AuthedAppSelenaOrderRoute: AuthedAppSelenaOrderRoute,
   AuthedAppSelenaSourcesRoute: AuthedAppSelenaSourcesRoute,
   AuthedAppIndexRoute: AuthedAppIndexRoute,
 }
