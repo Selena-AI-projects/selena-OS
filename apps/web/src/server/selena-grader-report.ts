@@ -35,7 +35,7 @@ export type GraderReportView = {
 		websiteUrl: string;
 		capturedAt: string;
 		checks: { subject: string; ruleId: string; severity: "HIGH" | "MEDIUM" | "LOW"; ok: boolean; unknown: boolean }[];
-		actions: { title: string; action: string; priority: string }[];
+		actions: { ruleId: string; title: string; action: string; priority: string }[];
 	} | null;
 };
 
@@ -91,19 +91,43 @@ export const getSelenaGraderReportFn = createServerFn({ method: "GET" })
 				.then((rows) => rows[0] ?? null),
 		]);
 		const parsedPlan = actionPlanSchema.safeParse(recommendationRun?.actionPlan);
+		const priorityRank: Record<string, number> = { NOW: 0, NEXT: 1, LATER: 2 };
+		const ruleByFinding = new Map(parsedPlan.success ? parsedPlan.data.findings.map((f) => [f.id, f.ruleId]) : []);
+		const baseRuleIds = new Set(WEBSITE_SIGNAL_RULES.map(([, ruleId]) => ruleId));
 		const freeAudit =
 			websiteSnapshot && parsedPlan.success
 				? {
 						websiteUrl: websiteSnapshot.website,
 						capturedAt: websiteSnapshot.capturedAt.toISOString(),
-						checks: WEBSITE_SIGNAL_RULES.map(([subject, ruleId, , severity]) => {
-							const finding = parsedPlan.data.findings.find((item) => item.ruleId === ruleId);
-							return { subject, ruleId, severity, ok: !finding, unknown: finding?.unknown ?? false };
-						}),
+						checks: [
+							...WEBSITE_SIGNAL_RULES.map(([subject, ruleId, , severity]) => {
+								const finding = parsedPlan.data.findings.find((item) => item.ruleId === ruleId);
+								return { subject, ruleId, severity, ok: !finding, unknown: finding?.unknown ?? false };
+							}),
+							// Rules beyond the base table (Maps linkage, AI-crawler access…)
+							// only surface as findings when they fail; a passing one leaves
+							// no record, so it is not shown rather than claimed as ✓.
+							...parsedPlan.data.findings
+								.filter((finding) => !baseRuleIds.has(finding.ruleId))
+								.map((finding) => ({
+									subject: finding.ruleId,
+									ruleId: finding.ruleId,
+									severity: (finding.severity === "CRITICAL" ? "HIGH" : finding.severity) as "HIGH" | "MEDIUM" | "LOW",
+									ok: false,
+									unknown: finding.unknown,
+								})),
+						],
+						// The whole plan, most urgent first — a capped list read as "that
+						// is everything" when it was not.
 						actions: parsedPlan.data.recommendations
 							.filter((item) => !item.blocked)
-							.slice(0, 3)
-							.map((item) => ({ title: item.title, action: item.action, priority: item.priority })),
+							.sort((left, right) => (priorityRank[left.priority] ?? 9) - (priorityRank[right.priority] ?? 9))
+							.map((item) => ({
+								ruleId: ruleByFinding.get(item.findingId) ?? "",
+								title: item.title,
+								action: item.action,
+								priority: item.priority,
+							})),
 					}
 				: null;
 

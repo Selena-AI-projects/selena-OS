@@ -60,6 +60,120 @@ const SIGNAL_LABELS: Record<string, [string, string]> = {
 	robots: ["robots.txt", "Файл robots.txt"],
 };
 
+/**
+ * Every audit rule in the customer's words: what it is and how to fix it.
+ * The rule id stays visible as a small tag for traceability, never as the title.
+ */
+const RULE_HELP: Record<string, { en: [string, string]; ru: [string, string] }> = {
+	"WEB-001": {
+		en: ["Give the page a title that names the brand and the offer", "Put who you are and what you offer into the <title> tag, e.g. “KORA Food Hall — food hall in Ubud”."],
+		ru: ["Дайте странице заголовок с названием бренда и сутью предложения", "В теге <title> напишите, кто вы и что предлагаете: «KORA Food Hall — фуд-холл в Убуде». Это первое, что читают и поисковики, и AI."],
+	},
+	"WEB-002": {
+		en: ["Write a short description of the offer", "A one-to-two sentence meta description: what the place is and who it is for."],
+		ru: ["Напишите короткое описание предложения", "Мета-описание в 1–2 предложения: что это за место и для кого."],
+	},
+	"WEB-003": {
+		en: ["State an explicit robots policy", "Add a meta robots tag or robots.txt entry so it is visible that reading is allowed on purpose."],
+		ru: ["Пропишите явные правила для роботов", "Добавьте meta robots или запись в robots.txt — чтобы было видно, что чтение сайта разрешено сознательно."],
+	},
+	"WEB-004": {
+		en: ["Declare the page's canonical address", "The canonical tag names the one true URL, so duplicates don't split your identity."],
+		ru: ["Укажите каноническую ссылку страницы", "Тег canonical говорит, какой адрес считать основным, — дубли перестают путать системы."],
+	},
+	"WEB-005": {
+		en: ["Declare language alternates where the site has them", "If EN and RU versions exist, link them with hreflang; if not, skip this."],
+		ru: ["Разметьте языковые версии, если они есть", "Если есть EN- и RU-версии — свяжите их hreflang. Если версий нет, пункт можно пропустить."],
+	},
+	"WEB-006": {
+		en: ["Organise the page with descriptive headings", "One H1 with the name, H2/H3 for sections — that is how machines read the structure."],
+		ru: ["Организуйте страницу заголовками H1–H3", "Один H1 с названием, разделы — H2/H3: так AI понимает структуру страницы."],
+	},
+	"WEB-007": {
+		en: ["Publish the offer as readable text, not only images", "What you sell, where and for how much — as text. Text inside pictures is not reliably read."],
+		ru: ["Опубликуйте предложение читаемым текстом", "Что вы предлагаете, где и почём — текстом, не картинками: текст с картинок AI не считывает надёжно."],
+	},
+	"WEB-008": {
+		en: ["Link the service, location and contact pages to each other", "Plain links between pages let crawlers find everything."],
+		ru: ["Свяжите страницы услуг, локации и контактов ссылками", "Обычные ссылки со страницы на страницу — чтобы краулеры нашли всё."],
+	},
+	"WEB-009": {
+		en: ["Describe the business in structured data", "JSON-LD with the organization, address and hours gives machines the same facts the page states. On its own it does not move AI answers."],
+		ru: ["Опишите бизнес структурированной разметкой", "JSON-LD с типом заведения, адресом и часами даёт машинам те же факты, что видят люди. Сама по себе разметка ответы AI не двигает."],
+	},
+	"WEB-010": {
+		en: ["Review the structured data already on the page", "If microdata exists, validate it; adding it from scratch is optional."],
+		ru: ["Проверьте существующую микроразметку", "Если микроразметка уже есть — проверьте её валидность; добавлять с нуля не обязательно."],
+	},
+	"WEB-011": {
+		en: ["Publish a clear way to get in touch", "Phone, address or a form — as visible text."],
+		ru: ["Опубликуйте понятный способ связаться", "Телефон, адрес или форма — текстом, на видном месте."],
+	},
+	"WEB-012": {
+		en: ["Describe the services, menu or booking in readable text", "A page with the menu/services and the area is exactly what answers cite."],
+		ru: ["Опишите услуги, меню и локацию текстом", "Страница с меню/услугами и районом — ровно то, что цитируют в ответах."],
+	},
+	"WEB-013": {
+		en: ["Describe the important images in alt text", "Alt text on the key photos: what is on them."],
+		ru: ["Подпишите важные изображения", "Alt-текст к ключевым фото: что на них изображено."],
+	},
+	"WEB-014": {
+		en: ["Serve a robots.txt that can be checked again later", "The file must open and stay stable."],
+		ru: ["Держите robots.txt доступным", "Файл должен открываться и не меняться незаметно."],
+	},
+	"WEB-015": {
+		en: ["Link the Google Maps listing from the site", "Your place's share link ties the site to the Maps card."],
+		ru: ["Поставьте на сайт ссылку на вашу точку в Google Maps", "Ссылка «Поделиться» вашей точки связывает сайт с карточкой на Картах."],
+	},
+	"WEB-016": {
+		en: ["Put the business address in structured data", "An address field in JSON-LD makes the location machine-readable."],
+		ru: ["Добавьте адрес в структурированную разметку", "Поле address в JSON-LD — чтобы локация читалась машинами."],
+	},
+	"WEB-017": {
+		en: ["Use the exact Google Maps listing name on the site", "The name on the site and on Maps should match letter for letter."],
+		ru: ["Используйте на сайте точное название из Google Maps", "Название на сайте и в Картах должно совпадать буква в букву."],
+	},
+	"WEB-018": {
+		en: ["Let the answer engines' crawlers read the site", "Check robots.txt: ChatGPT/Perplexity/Google AI search bots must not be blocked if you want to appear in answers."],
+		ru: ["Разрешите краулерам AI-поисковиков читать сайт", "Проверьте robots.txt: боты ChatGPT, Perplexity и Google AI не должны быть запрещены, если вы хотите попадать в ответы."],
+	},
+	"WEB-019": {
+		en: ["Let assistants open the site when a customer asks", "Do not block user-fetch bots — that is a customer telling an assistant “open their site”."],
+		ru: ["Разрешите ассистентам открывать сайт по просьбе клиента", "Не блокируйте user-fetch ботов: это клиент просит ассистента «открой их сайт»."],
+	},
+	"WEB-020": {
+		en: ["Stop the page asking engines to ignore or not quote it", "noindex/nosnippet tell systems to skip the page — remove them unless that is deliberate."],
+		ru: ["Уберите запреты на показ и цитирование", "noindex/nosnippet просят системы игнорировать страницу — снимите, если это не сознательное решение."],
+	},
+	"WEB-021": {
+		en: ["Confirm that excluding the site from model training is deliberate", "A training opt-out is a valid choice, but it shapes what models know about you."],
+		ru: ["Подтвердите, что запрет на обучение моделей — осознанный", "Запрет на использование в обучении — допустимый выбор, но он влияет на то, что модели о вас «знают»."],
+	},
+};
+
+const PRIORITY_LABELS: Record<string, [string, string]> = {
+	NOW: ["Now", "Сейчас"],
+	NEXT: ["Next", "Дальше"],
+	LATER: ["Later", "Позже"],
+};
+
+function ruleTitle(locale: ReportLocale, ruleId: string, fallback: string): string {
+	const help = RULE_HELP[ruleId];
+	return help ? (locale === "ru" ? help.ru[0] : help.en[0]) : fallback;
+}
+
+function ruleHow(locale: ReportLocale, ruleId: string, fallback: string): string {
+	const help = RULE_HELP[ruleId];
+	return help ? (locale === "ru" ? help.ru[1] : help.en[1]) : fallback;
+}
+
+/** A ready-to-paste task for a developer or an AI coding agent. */
+function fixPrompt(locale: ReportLocale, websiteUrl: string, title: string, how: string): string {
+	return locale === "ru"
+		? `Сайт: ${websiteUrl}\nЗадача: ${title}.\nЧто сделать: ${how}\nВнеси изменение, покажи диф и объясни, что изменилось.`
+		: `Site: ${websiteUrl}\nTask: ${title}.\nWhat to do: ${how}\nMake the change, show the diff and explain it.`;
+}
+
 const PLAN_LABELS: Record<string, string> = {
 	"visitor-local": "Snapshot · $49",
 	"full-ai-landscape": "Landscape · $79",
@@ -317,14 +431,47 @@ function SelenaReportPage() {
 								</SectionCard>
 
 								<SectionCard>
-									<SectionTitle
-										title={tr(locale, "Is the site ready for AI", "Готовность сайта к AI")}
-										lead={tr(
-											locale,
-											"What AI systems can understand about you from the site. No scores — only concrete observations.",
-											"Что AI-системы смогут понять о вас по сайту. Без баллов — только конкретные наблюдения.",
-										)}
-									/>
+									{(() => {
+										// The technical readiness score, like the agent-readiness graders:
+										// a severity-weighted share of passing checks. It scores the SITE's
+										// technical readiness — it is not an AI-visibility score.
+										const weights: Record<string, number> = { HIGH: 3, MEDIUM: 2, LOW: 1 };
+										const scored = view.freeAudit.checks.filter((check) => !check.unknown);
+										const total = scored.reduce((sum, check) => sum + (weights[check.severity] ?? 1), 0);
+										const earned = scored
+											.filter((check) => check.ok)
+											.reduce((sum, check) => sum + (weights[check.severity] ?? 1), 0);
+										const score = total === 0 ? null : Math.round((earned / total) * 100);
+										const okCount = view.freeAudit.checks.filter((check) => check.ok).length;
+										const failCount = view.freeAudit.checks.filter((check) => !check.ok && !check.unknown).length;
+										const unknownCount = view.freeAudit.checks.filter((check) => check.unknown).length;
+										return (
+											<div className="flex flex-wrap items-start justify-between gap-5">
+												<SectionTitle
+													title={tr(locale, "Is the site ready for AI", "Готовность сайта к AI")}
+													lead={tr(
+														locale,
+														"What AI systems can understand about you from the site. The score is the site's technical readiness — it is not AI visibility.",
+														"Что AI-системы смогут понять о вас по сайту. Балл — техническая готовность сайта, это не видимость в AI.",
+													)}
+												/>
+												<div className="flex items-center gap-5">
+													<Ring
+														fraction={score === null ? null : score / 100}
+														label={score === null ? tr(locale, "UNKNOWN", "НЕИЗВЕСТНО") : `${score}/100`}
+														caption={tr(locale, "technical readiness", "техническая готовность")}
+													/>
+													<div className="text-xs text-[#6e6258]">
+														<p className="font-semibold text-[#2e6b46] tabular-nums">✓ {okCount} {tr(locale, "in place", "на месте")}</p>
+														<p className="mt-1 font-semibold text-[#9a5f14] tabular-nums">✗ {failCount} {tr(locale, "missing", "отсутствует")}</p>
+														{unknownCount > 0 && (
+															<p className="mt-1 tabular-nums">◐ {unknownCount} {tr(locale, "not verifiable — excluded from the score", "не проверено — в балл не входит")}</p>
+														)}
+													</div>
+												</div>
+											</div>
+										);
+									})()}
 									<div className="mt-4">
 										{view.freeAudit.checks.map((check) => (
 											<div key={check.ruleId} className="flex items-baseline gap-3 border-t border-[#e6ddd1] py-2.5 text-sm first:border-t-0">
@@ -342,7 +489,8 @@ function SelenaReportPage() {
 												<span className="flex-1 font-medium">
 													{SIGNAL_LABELS[check.subject]
 														? tr(locale, SIGNAL_LABELS[check.subject][0], SIGNAL_LABELS[check.subject][1])
-														: check.subject}
+														: ruleTitle(locale, check.ruleId, check.subject)}
+													<span className="ml-2 align-middle text-[0.62rem] font-semibold uppercase text-[#b0a294]">{check.ruleId}</span>
 												</span>
 												<span className="shrink-0 text-xs text-[#6e6258]">
 													{check.ok
@@ -357,8 +505,8 @@ function SelenaReportPage() {
 									<p className="mt-4 max-w-3xl text-xs italic text-[#6e6258]">
 										{tr(
 											locale,
-											"The free check does not measure AI visibility and sets no score: it shows whether the site is ready to be cited.",
-											"Бесплатная проверка не измеряет видимость в AI и не выставляет баллов: она показывает, готов ли сайт к тому, чтобы его цитировали.",
+											"The score is transparent: critical checks weigh ×3, medium ×2, light ×1; unverifiable ones are excluded. It measures the site's technical readiness to be cited — AI visibility itself is measured only by the paid measurement.",
+											"Балл прозрачный: критичные проверки весят ×3, средние ×2, лёгкие ×1; непроверяемые в балл не входят. Он измеряет техническую готовность сайта к цитированию — саму видимость в AI измеряет только платный замер.",
 										)}
 									</p>
 								</SectionCard>
@@ -374,17 +522,53 @@ function SelenaReportPage() {
 											)}
 										/>
 										<div className="mt-4 grid gap-3">
-											{view.freeAudit.actions.map((action, index) => (
-												<div key={action.title} className="flex items-start gap-3.5 rounded-xl border border-[#e6ddd1] bg-[#fffdf8] p-4 text-sm">
-													<span className="selena-heading flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#efe3d7] text-[#8f5c34]">
-														{index + 1}
-													</span>
-													<div>
-														<p className="font-semibold">{action.title}</p>
-														<p className="mt-1 text-[#3d362e]">{action.action}</p>
+											{view.freeAudit.actions.map((action, index) => {
+												const title = ruleTitle(locale, action.ruleId, action.title);
+												const how = ruleHow(locale, action.ruleId, action.action);
+												const priority = PRIORITY_LABELS[action.priority];
+												return (
+													<div key={`${action.ruleId}-${action.title}`} className="flex items-start gap-3.5 rounded-xl border border-[#e6ddd1] bg-[#fffdf8] p-4 text-sm">
+														<span className="selena-heading flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#efe3d7] text-[#8f5c34]">
+															{index + 1}
+														</span>
+														<div className="min-w-0 flex-1">
+															<div className="flex flex-wrap items-baseline gap-2">
+																<p className="font-semibold">{title}</p>
+																{priority && (
+																	<span className="rounded-full bg-[#efe3d7] px-2 py-0.5 text-[0.65rem] font-bold uppercase tracking-wide text-[#8f5c34]">
+																		{tr(locale, priority[0], priority[1])}
+																	</span>
+																)}
+																{action.ruleId && (
+																	<span className="text-[0.62rem] font-semibold uppercase text-[#b0a294]">{action.ruleId}</span>
+																)}
+															</div>
+															<p className="mt-1 text-[#3d362e]">{how}</p>
+															<details className="mt-2 print:hidden">
+																<summary className="cursor-pointer text-xs font-semibold text-[#8f5c34] underline underline-offset-4 [&::-webkit-details-marker]:hidden">
+																	{tr(locale, "How to fix →", "Как исправить →")}
+																</summary>
+																<div className="mt-2 rounded-lg border border-[#e6ddd1] bg-[#fbf7ef] p-3">
+																	<p className="text-xs leading-5 text-[#3d362e]">{how}</p>
+																	<button
+																		type="button"
+																		className="mt-2 rounded-full border border-[#cdbdac] bg-[#fffdf8] px-3.5 py-1.5 text-xs font-semibold text-[#8f5c34]"
+																		onClick={(event) => {
+																			void navigator.clipboard.writeText(
+																				fixPrompt(locale, view.freeAudit?.websiteUrl ?? "", title, how),
+																			);
+																			const target = event.currentTarget;
+																			target.textContent = tr(locale, "Copied", "Скопировано");
+																		}}
+																	>
+																		{tr(locale, "Copy a task for an AI developer", "Скопировать задание для AI-разработчика")}
+																	</button>
+																</div>
+															</details>
+														</div>
 													</div>
-												</div>
-											))}
+												);
+											})}
 										</div>
 									</SectionCard>
 								)}
