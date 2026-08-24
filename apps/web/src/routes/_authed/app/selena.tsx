@@ -1199,14 +1199,15 @@ function MeasurementPanel({ project, locale }: { project: WorkspaceProject; loca
 
 	return (
 		<section className="selena-section" aria-labelledby="measurement-title">
-			<div className="flex gap-4">
-				<div className="selena-icon-disc">
-					<IconSparkles className="size-5" />
-				</div>
-				<div>
-					<h2 id="measurement-title" className="selena-heading text-2xl">
-						{tr(locale, "Measurement", "Замер")}
-					</h2>
+			<div className="flex flex-wrap items-start justify-between gap-4">
+				<div className="flex gap-4">
+					<div className="selena-icon-disc">
+						<IconSparkles className="size-5" />
+					</div>
+					<div>
+						<h2 id="measurement-title" className="selena-heading text-2xl">
+							{tr(locale, "Measurement", "Замер")}
+						</h2>
 					<p className="mt-2 max-w-2xl text-sm leading-6 text-[#6e6258]">
 						{tr(
 							locale,
@@ -1214,7 +1215,15 @@ function MeasurementPanel({ project, locale }: { project: WorkspaceProject; loca
 							"Что показал заказанный AI-замер. Вопросы с названием бренда и вопросы про категорию считаются раздельно и никогда не сводятся в один балл.",
 						)}
 					</p>
+					</div>
 				</div>
+				{hasCycle && (
+					<Link to="/app/selena-report" search={{ project: project.project.id }} className="shrink-0">
+						<Button type="button" variant="outline" className="border-[#cdbdac] bg-[#fffdf8]">
+							{tr(locale, "Open the full report", "Открыть полный отчёт")}
+						</Button>
+					</Link>
+				)}
 			</div>
 			{!hasCycle ? (
 				<p className="mt-5 rounded-lg border border-dashed border-[#cdbdac] bg-[#fffdf8] px-4 py-3 text-sm text-[#6e6258]">
