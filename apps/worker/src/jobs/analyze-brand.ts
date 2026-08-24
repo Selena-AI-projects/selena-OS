@@ -1,6 +1,6 @@
 import { db } from "@workspace/lib/db/db";
 import { svProjects } from "@workspace/lib/db/schema";
-import { analyzeBrand, type OnboardingSuggestion } from "@workspace/lib/onboarding";
+import { analyzeBrand, type OnboardingSuggestion, type QuestionStyle } from "@workspace/lib/onboarding";
 import { assertSuggestSpendAllowed } from "@workspace/lib/run-policy";
 import { assertSuggestBudget, recordSuggestCost } from "@workspace/lib/selena-suggest-metering";
 import { eq } from "drizzle-orm";
@@ -15,6 +15,8 @@ export interface AnalyzeBrandData {
 	locationHint?: string;
 	maxCompetitors?: number;
 	maxPrompts?: number;
+	/** How suggested questions are phrased; the analyzer's default when unset. */
+	questionStyle?: QuestionStyle;
 }
 
 /**
@@ -35,7 +37,7 @@ export async function analyzeBrandJob(jobs: Job<AnalyzeBrandData>[]): Promise<On
 		throw new Error("analyze-brand handler received an empty batch");
 	}
 
-	const { requestKey, website, brandName, locationHint, maxCompetitors, maxPrompts } = job.data;
+	const { requestKey, website, brandName, locationHint, maxCompetitors, maxPrompts, questionStyle } = job.data;
 	// A job already on the queue when the gate closed must not spend either:
 	// the request key carries which product asked, and the Selena suggestion is
 	// the one whose spending is budget-classed.
@@ -45,7 +47,14 @@ export async function analyzeBrandJob(jobs: Job<AnalyzeBrandData>[]): Promise<On
 		// enqueue time in the web app.
 		await assertSuggestBudget(db);
 	}
-	const suggestion = await analyzeBrand({ website, brandName, locationHint, maxCompetitors, maxPrompts });
+	const suggestion = await analyzeBrand({
+		website,
+		brandName,
+		locationHint,
+		maxCompetitors,
+		maxPrompts,
+		questionStyle,
+	});
 	if (requestKey.startsWith("selena:")) {
 		// Booked where the spending happened. Attribution follows the project
 		// the request key names; a suggestion for a deleted project is still a

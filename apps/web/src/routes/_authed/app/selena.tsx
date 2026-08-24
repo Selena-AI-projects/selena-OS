@@ -900,7 +900,9 @@ function BrandProfileForm({
 							className="selena-textarea"
 							value={form.scenarios}
 							onChange={(event) => onChange({ ...form, scenarios: event.target.value })}
-							placeholder={"EN: Best cafes in Ubud\nRU: Где позавтракать в Убуде?"}
+							placeholder={
+								"EN: we're in ubud for a week — where do we get breakfast with good coffee?\nRU: мы в Убуде на неделю — где вкусно позавтракать?"
+							}
 						/>
 					</Field>
 				</div>
@@ -1119,12 +1121,13 @@ function QuestionsPanel({ project, locale }: { project: WorkspaceProject; locale
 									? tr(locale, "names the brand", "с названием бренда")
 									: tr(locale, "category question", "вопрос про категорию")}
 							</p>
-							<Input
-								className="mt-2"
+							{/* Customer-style questions run to ~20 words; a one-line input
+							    would hide the tail of the very text being approved. */}
+							<textarea
+								rows={2}
+								className="selena-textarea mt-2"
 								value={drafts[scenario.id] ?? scenario.text}
-								onChange={(event) =>
-									setDrafts((current) => ({ ...current, [scenario.id]: event.target.value }))
-								}
+								onChange={(event) => setDrafts((current) => ({ ...current, [scenario.id]: event.target.value }))}
 							/>
 							<div className="mt-3 flex gap-2">
 								<Button
@@ -1246,7 +1249,15 @@ function MeasurementPanel({ project, locale }: { project: WorkspaceProject; loca
 	);
 }
 
-function MeasurementReport({ view, locale, projectId }: { view: MeasurementView; locale: WorkspaceLocale; projectId: string }) {
+function MeasurementReport({
+	view,
+	locale,
+	projectId,
+}: {
+	view: MeasurementView;
+	locale: WorkspaceLocale;
+	projectId: string;
+}) {
 	const latest = view.latest;
 	const cycle = view.cycles[0];
 	if (!latest || !cycle) {
@@ -1444,7 +1455,8 @@ function RunExplorer({ cycleId, locale }: { cycleId: string; locale: WorkspaceLo
 							onClick={() => openRun(run.id)}
 						>
 							<span className="text-[#3d362e]">
-								{run.system ?? "—"} · {run.channel === "VISITOR" || run.channel.toLowerCase().startsWith("visitor")
+								{run.system ?? "—"} ·{" "}
+								{run.channel === "VISITOR" || run.channel.toLowerCase().startsWith("visitor")
 									? "Visitor View"
 									: "API View"}
 							</span>
@@ -1539,11 +1551,15 @@ function MeasurementGroup({ locale, title, group }: { locale: WorkspaceLocale; t
 			) : (
 				<dl className="mt-2 grid gap-1 text-sm text-[#3d362e]">
 					<div className="flex justify-between gap-3">
-						<dt className="text-[#6e6258]">{tr(locale, "Answers mentioning the brand", "Ответы с упоминанием бренда")}</dt>
+						<dt className="text-[#6e6258]">
+							{tr(locale, "Answers mentioning the brand", "Ответы с упоминанием бренда")}
+						</dt>
 						<dd>{group.mentionCoverage ?? tr(locale, "unknown", "неизвестно")}</dd>
 					</div>
 					<div className="flex justify-between gap-3">
-						<dt className="text-[#6e6258]">{tr(locale, "Average position among mentions", "Средняя позиция среди упоминаний")}</dt>
+						<dt className="text-[#6e6258]">
+							{tr(locale, "Average position among mentions", "Средняя позиция среди упоминаний")}
+						</dt>
 						<dd>{group.averageBrandPosition ?? "—"}</dd>
 					</div>
 					<div className="flex justify-between gap-3">
@@ -1576,7 +1592,11 @@ function RelativeMentionShare({ locale, report }: { locale: WorkspaceLocale; rep
 	return (
 		<div className="rounded-lg border border-[#e5dbcd] bg-[#fffdf8] p-4 text-sm">
 			<h3 className="font-semibold text-[#3d362e]">
-				{tr(locale, "Share among tracked mentions (both groups pooled)", "Доля среди отслеживаемых упоминаний (обе группы вместе)")}
+				{tr(
+					locale,
+					"Share among tracked mentions (both groups pooled)",
+					"Доля среди отслеживаемых упоминаний (обе группы вместе)",
+				)}
 			</h3>
 			<dl className="mt-2 grid gap-1 text-[#3d362e]">
 				<div className="flex justify-between gap-3">

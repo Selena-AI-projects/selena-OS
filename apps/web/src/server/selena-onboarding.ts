@@ -130,6 +130,10 @@ export const startSelenaProfileSuggestionFn = createServerFn({ method: "POST" })
 			locationHint,
 			maxCompetitors: SUGGESTION_LIMITS.competitors,
 			maxPrompts: SUGGESTION_LIMITS.questions,
+			// These questions are re-asked verbatim by the paid measurement, and
+			// a question carrying the asker's context gets a far steadier answer
+			// across runs than a bare keyword query.
+			questionStyle: "customer",
 		});
 		return { ok: true };
 	});
