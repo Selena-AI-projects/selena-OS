@@ -7,6 +7,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Textarea } from "@workspace/ui/components/textarea";
 import { useCallback, useEffect, useState } from "react";
 import { SelenaOrderDesk } from "@/components/selena-order-desk";
+import { humanizeSelenaAdminError } from "@/lib/selena-workspace-errors";
 import { analyzeSelenaOrderFn } from "@/server/selena-order-analysis";
 import {
 	approveSelenaOrderFn,
@@ -61,17 +62,20 @@ function SelenaAdminOrders() {
 		setLocale(saved === "ru" || saved === "en" ? saved : navigator.language.startsWith("ru") ? "ru" : "en");
 	}, []);
 
-	const loadPreflight = useCallback(async (orderId: string) => {
-		setPreflightPending(true);
-		try {
-			setPreflight(await getSelenaOrderPreflightFn({ data: { orderId } }));
-		} catch (cause) {
-			setPreflight(null);
-			setError(cause instanceof Error ? cause.message : String(cause));
-		} finally {
-			setPreflightPending(false);
-		}
-	}, []);
+	const loadPreflight = useCallback(
+		async (orderId: string) => {
+			setPreflightPending(true);
+			try {
+				setPreflight(await getSelenaOrderPreflightFn({ data: { orderId } }));
+			} catch (cause) {
+				setPreflight(null);
+				setError(humanizeSelenaAdminError(cause, locale, "Preflight failed"));
+			} finally {
+				setPreflightPending(false);
+			}
+		},
+		[locale],
+	);
 
 	useEffect(() => {
 		if (!selectedOrder) {
@@ -101,7 +105,7 @@ function SelenaAdminOrders() {
 			await router.invalidate();
 			if (selectedOrder) await loadPreflight(selectedOrder.id);
 		} catch (cause) {
-			setError(cause instanceof Error ? cause.message : String(cause));
+			setError(humanizeSelenaAdminError(cause, locale, tr(locale, "Action failed", "Действие не выполнено")));
 		} finally {
 			setPendingAction("");
 		}
@@ -385,7 +389,9 @@ function SelenaAdminOrders() {
 												setAnalysis(await analyzeSelenaOrderFn({ data: { orderId: selectedOrder.id } }));
 											} catch (cause) {
 												setAnalysis(null);
-												setError(cause instanceof Error ? cause.message : "Analysis failed");
+												setError(
+													humanizeSelenaAdminError(cause, locale, tr(locale, "Analysis failed", "Анализ не выполнен")),
+												);
 											} finally {
 												setPendingAction("");
 											}
@@ -438,7 +444,9 @@ function SelenaAdminOrders() {
 											<dt className="text-xs text-muted-foreground">
 												{tr(locale, "Answers naming the brand", "Ответов с упоминанием бренда")}
 											</dt>
-											<dd className="text-lg font-semibold">{formatShare(analysis.summary.brandMentionRate, locale)}</dd>
+											<dd className="text-lg font-semibold">
+												{formatShare(analysis.summary.brandMentionRate, locale)}
+											</dd>
 										</div>
 										<div>
 											<dt className="text-xs text-muted-foreground">{tr(locale, "Share of voice", "Доля голоса")}</dt>
@@ -463,9 +471,8 @@ function SelenaAdminOrders() {
 											<ul className="mt-2 space-y-1 text-muted-foreground">
 												{analysis.summary.competitors.slice(0, 8).map((competitor) => (
 													<li key={competitor.name}>
-														{competitor.name} — {competitor.answersMentioned}{" "}
-														{tr(locale, "answer(s)", "ответ(ов)")}, {tr(locale, "avg standing", "средняя позиция")}{" "}
-														{competitor.averageOrder.toFixed(2)}
+														{competitor.name} — {competitor.answersMentioned} {tr(locale, "answer(s)", "ответ(ов)")},{" "}
+														{tr(locale, "avg standing", "средняя позиция")} {competitor.averageOrder.toFixed(2)}
 													</li>
 												))}
 											</ul>

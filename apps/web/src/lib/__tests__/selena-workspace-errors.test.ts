@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { humanizeSelenaError } from "../selena-workspace-errors";
+import { humanizeSelenaAdminError, humanizeSelenaError } from "../selena-workspace-errors";
 
 describe("humanizeSelenaError", () => {
 	it("names the field a profile validation issue came from", () => {
@@ -41,5 +41,37 @@ describe("humanizeSelenaError", () => {
 		expect(humanizeSelenaError(new Error("SUGGEST_LLM_NOT_BUDGETED"), "ru", "fallback")).toContain("вручную");
 		expect(humanizeSelenaError(new Error("SUGGEST_BUDGET_EXHAUSTED"), "en", "fallback")).toContain("budget");
 		expect(humanizeSelenaError(new Error("SUGGEST_LLM_NOT_BUDGETED"), "en", "fallback")).not.toContain("SUGGEST_");
+	});
+});
+
+describe("humanizeSelenaAdminError", () => {
+	it("names the env switch for the payment and measurement gates", () => {
+		expect(humanizeSelenaAdminError(new Error("SELENA_PAYMENTS_DISABLED"), "en", "fallback")).toContain(
+			"SELENA_PAYMENTS_ENABLED=true",
+		);
+		expect(humanizeSelenaAdminError(new Error("SELENA_MEASUREMENT_DISABLED"), "ru", "fallback")).toContain(
+			"SELENA_MEASUREMENT_ENABLED=true",
+		);
+	});
+
+	it("explains preflight blockers and points the budget one at its env var", () => {
+		const message = humanizeSelenaAdminError(
+			new Error("SELENA_PREFLIGHT_BLOCKED: WITHIN_PROVIDER_BUDGET"),
+			"en",
+			"fallback",
+		);
+		expect(message).toContain("SELENA_PROVIDER_BUDGET_USD");
+		expect(message).not.toContain("SELENA_PREFLIGHT_BLOCKED");
+	});
+
+	it("keeps an unknown code verbatim, because the operator will quote it", () => {
+		expect(humanizeSelenaAdminError(new Error("SELENA_SOMETHING_NEW"), "en", "fallback")).toBe("SELENA_SOMETHING_NEW");
+		expect(humanizeSelenaAdminError(new Error("  "), "en", "fallback")).toBe("fallback");
+	});
+
+	it("states the plan question limit with its number", () => {
+		expect(humanizeSelenaAdminError(new Error("SELENA_PLAN_SCENARIO_LIMIT_EXCEEDED: 12"), "ru", "fallback")).toContain(
+			"12",
+		);
 	});
 });
