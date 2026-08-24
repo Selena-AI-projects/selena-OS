@@ -529,6 +529,7 @@ function SelenaWorkspace() {
 								>
 									<span className="truncate font-medium">{item.project.name}</span>
 									<span className="text-xs text-[#6e6258]">{projectStageLabel(item, locale)}</span>
+									<span className="text-xs text-[#8a7d70]">{lastAuditLabel(item, locale)}</span>
 								</button>
 							);
 						})}
@@ -599,6 +600,7 @@ function ProjectOverview({ project, locale }: { project: WorkspaceProject; local
 			</div>
 			<div className="mt-8 flex flex-wrap items-center gap-3 text-sm text-[#e9dfd4]">
 				<span className="selena-status-chip">{projectStageLabel(project, locale)}</span>
+				<span>{lastAuditLabel(project, locale)}</span>
 				{project.measurement && (
 					<span>
 						{locale === "ru"
@@ -1869,6 +1871,19 @@ function parseScenario(line: string, fallbackLanguage: string) {
 		language: (match?.[1] || fallbackLanguage).toLowerCase(),
 		intentType: "discovery",
 	};
+}
+
+/**
+ * The most recent check this project has actually had — the AI measurement
+ * when one exists, otherwise the website review. Nothing checked yet reads as
+ * exactly that, not as a blank.
+ */
+function lastAuditLabel(project: WorkspaceProject, locale: WorkspaceLocale): string {
+	if (project.measurement)
+		return `${tr(locale, "AI measurement", "AI-замер")}: ${formatDate(project.measurement.updatedAt, locale)}`;
+	if (project.website)
+		return `${tr(locale, "Website audit", "Аудит сайта")}: ${formatDate(project.website.capturedAt, locale)}`;
+	return tr(locale, "Not audited yet", "Проверок ещё не было");
 }
 
 function projectStageLabel(project: WorkspaceProject, locale: WorkspaceLocale): string {
