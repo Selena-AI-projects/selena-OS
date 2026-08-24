@@ -38,6 +38,21 @@ const SYSTEM_LABELS: Record<string, string> = {
 	"x-ai/grok-4.5": "Grok",
 };
 
+/**
+ * The method line under each system, printed from how the answers were
+ * ACTUALLY captured — the sold channel never overrides the observed capture
+ * mode, so the page cannot claim a visitor's eyes for an API capture.
+ */
+function captureLabel(locale: ReportLocale, channel: "VISITOR" | "API", captureModes: string[]): string {
+	const live = captureModes.includes("live_search");
+	const api = captureModes.includes("training_data");
+	if (channel === "API" || (api && !live))
+		return tr(locale, "captured over the API · model knowledge", "снято через API · знание модели");
+	if (live && !api) return tr(locale, "captured as a live visitor", "снято глазами живого посетителя");
+	if (live && api) return tr(locale, "mixed capture: live and API", "смешанная съёмка: живой поиск и API");
+	return tr(locale, "capture method not recorded", "способ съёмки не записан");
+}
+
 function systemLabel(locale: ReportLocale, systemId: string): string {
 	if (systemId === "unattributed") return tr(locale, "System not recorded", "Система не записана");
 	return SYSTEM_LABELS[systemId] ?? systemId;
@@ -253,11 +268,14 @@ function SelenaReportPage() {
 			.catch(() => {
 				if (!cancelled) setFailed(true);
 			});
+		setCompare(null);
 		getSelenaCycleCompareFn({ data: { projectId } })
 			.then((data) => {
 				if (!cancelled) setCompare(data);
 			})
-			.catch(() => {});
+			.catch(() => {
+				if (!cancelled) setCompare(null);
+			});
 		return () => {
 			cancelled = true;
 		};
@@ -281,12 +299,14 @@ function SelenaReportPage() {
 					: detail.answer.state === "deleted"
 						? tr(locale, "The answer text passed its retention window and was deleted; the findings above remain.", "Текст ответа удалён по сроку хранения; извлечённые факты сохранены.")
 						: tr(locale, "No answer text was stored for this run.", "Текст ответа для этого прогона не сохранялся.");
-			setAnswers((current) => ({ ...current, [runId]: { loading: false, text } }));
+			// Hidden while loading stays hidden: only an entry still on screen updates.
+			setAnswers((current) => (current[runId] ? { ...current, [runId]: { loading: false, text } } : current));
 		} catch {
-			setAnswers((current) => ({
-				...current,
-				[runId]: { loading: false, text: tr(locale, "Could not load the answer.", "Не удалось загрузить ответ.") },
-			}));
+			setAnswers((current) =>
+				current[runId]
+					? { ...current, [runId]: { loading: false, text: tr(locale, "Could not load the answer.", "Не удалось загрузить ответ.") } }
+					: current,
+			);
 		}
 	};
 
@@ -356,9 +376,20 @@ function SelenaReportPage() {
 						<p className="text-sm text-[#9a5f14]">{tr(locale, "Could not load the report.", "Не удалось загрузить отчёт.")}</p>
 					</SectionCard>
 				)}
-				{!failed && view === null && (
+				{!failed && view === null && projectId && (
 					<SectionCard>
 						<p className="text-sm text-[#6e6258]">{tr(locale, "Loading the report…", "Загружаем отчёт…")}</p>
+					</SectionCard>
+				)}
+				{!projectId && (
+					<SectionCard>
+						<SectionTitle title={tr(locale, "No projects yet", "Проектов ещё нет")} />
+						<p className="mt-3 text-sm text-[#6e6258]">
+							{tr(locale, "Create a project in the cabinet — the report lives here once it exists.", "Создайте проект в кабинете — отчёт появится здесь, как только он будет.")}
+						</p>
+						<Link to="/app/selena" className="mt-4 inline-block print:hidden">
+							<Button type="button">{tr(locale, "Open the cabinet", "Открыть кабинет")}</Button>
+						</Link>
 					</SectionCard>
 				)}
 
@@ -635,6 +666,18 @@ function SelenaReportPage() {
 
 				{report && (
 					<>
+						{report.methodology.answersExpected === 0 ? (
+							<SectionCard>
+								<SectionTitle title={tr(locale, "How this was measured", "Как проверялось")} />
+								<p className="mt-3 text-sm text-[#6e6258]">
+									{tr(
+										locale,
+										"The measurement is ordered but its runs have not been created yet — the methodology appears with the first answers.",
+										"Замер заказан, но прогоны ещё не созданы — методика появится с первыми ответами.",
+									)}
+								</p>
+							</SectionCard>
+						) : (
 						<SectionCard>
 							<SectionTitle
 								title={tr(locale, "How this was measured", "Как проверялось")}
@@ -704,6 +747,7 @@ function SelenaReportPage() {
 								</p>
 							)}
 						</SectionCard>
+						)}
 
 						{[
 							{ list: visitorSystems, title: tr(locale, "How AI systems see you — Visitor View", "Как вас видят AI-системы — Visitor View") },
@@ -729,9 +773,8 @@ function SelenaReportPage() {
 														<th key={system.systemId} className="pb-3 pr-4 text-left align-top">
 															<span className="selena-heading text-lg">{systemLabel(locale, system.systemId)}</span>
 															<span className="block text-[0.7rem] font-medium text-[#6e6258]">
-																{system.channel === "VISITOR"
-																	? tr(locale, "Visitor View", "Visitor View · глазами посетителя")
-																	: tr(locale, "API View", "API View · знание модели")}
+																{system.channel === "VISITOR" ? "Visitor View" : "API View"} ·{" "}
+																{captureLabel(locale, system.channel, system.captureModes)}
 															</span>
 														</th>
 													))}
@@ -749,10 +792,10 @@ function SelenaReportPage() {
 																		? tr(locale, "UNKNOWN", "НЕИЗВЕСТНО")
 																		: tr(locale, `${system.brandMentioned} of ${system.answersAnalyzed}`, `${system.brandMentioned} из ${system.answersAnalyzed}`)
 																}
-																caption={
+															caption={
 																	system.answersAnalyzed === 0
 																		? tr(locale, "no analyzed answers yet", "разобранных ответов пока нет")
-																		: tr(locale, "answers name you", "ответов называют вас")
+																		: tr(locale, "answers name you — all questions together, split below", "ответов называют вас — все вопросы вместе, разбивка ниже")
 																}
 															/>
 														</td>
@@ -813,11 +856,17 @@ function SelenaReportPage() {
 							/>
 							{rosterTotal === 0 ? (
 								<p className="mt-4 text-sm font-semibold text-[#9a5f14]">
-									{tr(
-										locale,
-										"UNKNOWN — none of the tracked businesses were named in the analyzed answers.",
-										"НЕИЗВЕСТНО — ни одно из отслеживаемых заведений не прозвучало в разобранных ответах.",
-									)}
+									{report.methodology.answersAnalyzed === 0
+										? tr(
+												locale,
+												"UNKNOWN — no analyzed answers yet, so there is nothing to count.",
+												"НЕИЗВЕСТНО — разобранных ответов пока нет, считать нечего.",
+											)
+										: tr(
+												locale,
+												"Observed: none of the tracked businesses were named in the analyzed answers. That is a finding, not a missing value.",
+												"Наблюдение: ни одно из отслеживаемых заведений не названо в разобранных ответах. Это факт замера, а не отсутствие данных.",
+											)}
 								</p>
 							) : (
 								<div className="mt-5 flex flex-wrap items-center gap-8">
@@ -825,12 +874,12 @@ function SelenaReportPage() {
 										<g transform="rotate(-90 100 100)">
 											{(() => {
 												const circumference = 2 * Math.PI * 80;
-												const top = report.roster.slice(0, 5);
-												const rest = report.roster.slice(5).reduce((total, entry) => total + entry.answersMentioned, 0);
+											const top = report.roster.slice(0, 4);
+												const rest = report.roster.slice(4).reduce((total, entry) => total + entry.answersMentioned, 0);
 												const segments = [
 													...top.map((entry, index) => ({
 														value: entry.answersMentioned,
-														color: entry.isBrand ? DONUT_COLORS[0] : DONUT_COLORS[(index % (DONUT_COLORS.length - 1)) + 1],
+														color: entry.isBrand ? DONUT_COLORS[0] : DONUT_COLORS[Math.min(index, DONUT_COLORS.length - 1)],
 													})),
 													{ value: rest, color: DONUT_OTHER },
 												].filter((segment) => segment.value > 0);
@@ -872,15 +921,14 @@ function SelenaReportPage() {
 										{report.roster.map((entry, index) => (
 											<div key={entry.name} className="grid grid-cols-[1fr_auto_auto] items-baseline gap-x-5 border-t border-[#e6ddd1] py-2 text-sm first:border-t-0">
 												<span className={entry.isBrand ? "font-bold text-[#8f5c34]" : "font-medium"}>
-													<span
+												<span
 														className="mr-2 inline-block h-2.5 w-2.5 rounded-sm align-baseline"
 														style={{
-															background:
-																entry.isBrand
-																	? DONUT_COLORS[0]
-																	: index < 5
-																		? DONUT_COLORS[(index % (DONUT_COLORS.length - 1)) + 1]
-																		: DONUT_OTHER,
+															background: entry.isBrand
+																? DONUT_COLORS[0]
+																: index < 4
+																	? DONUT_COLORS[Math.min(index, DONUT_COLORS.length - 1)]
+																	: DONUT_OTHER,
 														}}
 													/>
 													{entry.name}
@@ -966,7 +1014,9 @@ function SelenaReportPage() {
 							/>
 							{report.overall.citationGap.length === 0 ? (
 								<p className="mt-4 text-sm text-[#6e6258]">
-									{tr(locale, "The analyzed answers cited no sources.", "В разобранных ответах источники не встречались.")}
+									{report.methodology.answersAnalyzed === 0
+										? tr(locale, "UNKNOWN — no analyzed answers yet.", "НЕИЗВЕСТНО — разобранных ответов пока нет.")
+										: tr(locale, "The analyzed answers cited no sources.", "В разобранных ответах источники не встречались.")}
 								</p>
 							) : (
 								<div className="mt-4">
