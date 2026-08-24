@@ -65,6 +65,13 @@ worker.
 That class is a gate, not a meter: nothing counts the calls or the dollars, so
 the limit that actually holds is the spend cap on the provider account.
 
+`SELENA_PROMO_CODES` is a comma-separated list of codes that let a plan request
+through free of charge while there is no online checkout — `AUGUST2026,FRIENDS`
+accepts either, matched case-insensitively. Unset means no code works and every
+request says the payment will be arranged by hand. A code marks the request
+free; it starts nothing, because a request is a lead and the paid order is
+still built on the desk.
+
 Measurement jobs are never scheduled. A run starts from an explicit action on a
 specific permit, and a claimed permit is spent: it cannot be retried into a
 second provider call.
