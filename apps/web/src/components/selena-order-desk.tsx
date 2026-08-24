@@ -108,8 +108,8 @@ export function SelenaOrderDesk({ locale, onOrderCreated }: { locale: DeskLocale
 				<CardDescription>
 					{tr(
 						locale,
-						"Promote the confirmed profile questions into scenarios, approve the ones worth measuring, then lock the scope into a paid order. The order lands in the queue below at PAID_REVIEW_REQUIRED — nothing runs from here.",
-						"Перенесите вопросы подтверждённого профиля в сценарии, утвердите те, что стоит измерять, и зафиксируйте состав в оплаченном заказе. Заказ появится в очереди ниже со статусом PAID_REVIEW_REQUIRED — отсюда ничего не запускается.",
+						"Promote the confirmed profile questions into scenarios, approve the ones worth measuring, then order and start the measurement in one confirmed action. The order and its progress appear in the queue below.",
+						"Перенесите вопросы подтверждённого профиля в сценарии, утвердите те, что стоит измерять, и одним подтверждённым действием оформите заказ и запустите замер. Заказ и его прогресс появятся в очереди ниже.",
 					)}
 				</CardDescription>
 			</CardHeader>

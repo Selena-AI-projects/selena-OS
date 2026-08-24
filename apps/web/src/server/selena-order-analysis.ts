@@ -46,10 +46,10 @@ function readStoredAnalysis(payload: unknown): AnswerAnalysis | null {
 	return record as unknown as AnswerAnalysis;
 }
 
-export const analyzeSelenaOrderFn = createServerFn({ method: "POST" })
-	.validator(z.object({ orderId: z.string().uuid() }))
-	.handler(async ({ data }) => {
-		const context = await requireAdminContext();
+/** The whole read: shared by the operator action and the client's results step. */
+export async function computeOrderAnalysis(context: SelenaRepositoryContext, orderId: string) {
+	const data = { orderId };
+	{
 		const [order] = await db
 			.select({ id: svOrders.id, lockId: svOrders.lockId })
 			.from(svOrders)
@@ -107,4 +107,9 @@ export const analyzeSelenaOrderFn = createServerFn({ method: "POST" })
 			brand: subjects.brand.name,
 			summary: summarizeScenarioSet(analyses, { brandDomain: subjects.brand.domain }),
 		};
-	});
+	}
+}
+
+export const analyzeSelenaOrderFn = createServerFn({ method: "POST" })
+	.validator(z.object({ orderId: z.string().uuid() }))
+	.handler(async ({ data }) => computeOrderAnalysis(await requireAdminContext(), data.orderId));
