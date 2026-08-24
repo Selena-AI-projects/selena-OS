@@ -43,18 +43,34 @@ const competitorSchema = z.object({
 	aliases: z.array(z.string()).describe(`Other names the company is commonly known by. ${ALIAS_GUIDANCE}`),
 });
 
-const promptSchema = z.object({
-	prompt: z
-		.string()
-		.describe(
-			"Short search-style fragment, lowercase, under ~12 words. NOT a full sentence — the kind of thing people actually type into ChatGPT.",
-		),
-	tags: z
-		.array(z.string())
-		.describe(`1-3 tags per prompt (ideally 1-2), drawn from the shared brand-tailored vocabulary. ${TAG_GUIDANCE}`),
-});
+/**
+ * Two ways to phrase a suggested question. "search" is the Elmo default:
+ * short keyword fragments. "customer" phrases each question the way one
+ * concrete customer would ask an assistant, context included — a question
+ * that carries the asker's context gets a markedly more stable answer across
+ * repeated runs (per-persona variance roughly a third of the bare-query
+ * variance in published prompt-tracking data), and Selena's paid measurement
+ * repeats these questions verbatim.
+ */
+export type QuestionStyle = "search" | "customer";
 
-function buildSchema(args: { maxCompetitors: number; maxPrompts: number }) {
+const PROMPT_STYLE_DESCRIPTIONS: Record<QuestionStyle, string> = {
+	search:
+		"Short search-style fragment, lowercase, under ~12 words. NOT a full sentence — the kind of thing people actually type into ChatGPT.",
+	customer:
+		'A question one real customer would ask an AI assistant, in their own words and carrying their context ("we\'re in [area] for a week with kids — where do we get [category] near us?"). One sentence, under ~20 words, lowercase.',
+};
+
+function buildPromptSchema(questionStyle: QuestionStyle) {
+	return z.object({
+		prompt: z.string().describe(PROMPT_STYLE_DESCRIPTIONS[questionStyle]),
+		tags: z
+			.array(z.string())
+			.describe(`1-3 tags per prompt (ideally 1-2), drawn from the shared brand-tailored vocabulary. ${TAG_GUIDANCE}`),
+	});
+}
+
+function buildSchema(args: { maxCompetitors: number; maxPrompts: number; questionStyle: QuestionStyle }) {
 	return z.object({
 		brandName: z
 			.string()
@@ -77,9 +93,17 @@ function buildSchema(args: { maxCompetitors: number; maxPrompts: number }) {
 				`Up to ${args.maxCompetitors} direct competitors that sell similar products to a similar audience. Empty if uncertain.`,
 			),
 		suggestedPrompts: z
-			.array(promptSchema)
+			.array(buildPromptSchema(args.questionStyle))
 			.describe(
-				`Up to ${args.maxPrompts} suggested AI tracking prompts. IMPORTANT: the MAJORITY must be UNBRANDED — generic category/persona queries that do NOT contain the brand name (e.g. "best [category]", "best [category] for [persona]", "[category] vs alternatives", "where to buy [category]"). Only 3-5 should be branded (contain the brand name, e.g. "[brand] alternative", "is [brand] worth it"). The goal is to test whether AI models mention the brand organically in response to unbranded queries. ${TAG_GUIDANCE}`,
+				`Up to ${args.maxPrompts} suggested AI tracking prompts. IMPORTANT: the MAJORITY must be UNBRANDED — generic category/persona queries that do NOT contain the brand name (e.g. ${
+					args.questionStyle === "customer"
+						? `"where do we get good [category] near [area]?", "what's the best [category] for [persona] like me?"`
+						: `"best [category]", "best [category] for [persona]", "[category] vs alternatives", "where to buy [category]"`
+				}). Only 3-5 should be branded (contain the brand name, e.g. ${
+					args.questionStyle === "customer"
+						? `"is [brand] worth going to?", "what's [brand] like?"`
+						: `"[brand] alternative", "is [brand] worth it"`
+				}). The goal is to test whether AI models mention the brand organically in response to unbranded queries. ${TAG_GUIDANCE}`,
 			),
 	});
 }
@@ -126,6 +150,8 @@ export interface AnalyzeBrandOptions {
 	maxCompetitors?: number;
 	/** 0 disables prompt generation entirely. */
 	maxPrompts?: number;
+	/** How suggested questions are phrased; "search" when unset. */
+	questionStyle?: QuestionStyle;
 }
 
 const DEFAULT_MAX_COMPETITORS = 10;
@@ -158,6 +184,7 @@ export async function buildAnalysisContext(options: AnalyzeBrandOptions): Promis
 		locationHint,
 		maxCompetitors = DEFAULT_MAX_COMPETITORS,
 		maxPrompts = DEFAULT_MAX_PROMPTS,
+		questionStyle = "search",
 	} = options;
 
 	const normalizedWebsite = cleanDomain(website);
@@ -179,6 +206,7 @@ export async function buildAnalysisContext(options: AnalyzeBrandOptions): Promis
 		locationHint: locationHint?.trim() || undefined,
 		includeCompetitors: maxCompetitors > 0,
 		includePrompts: maxPrompts > 0,
+		questionStyle,
 	});
 
 	return {
@@ -187,7 +215,7 @@ export async function buildAnalysisContext(options: AnalyzeBrandOptions): Promis
 		brandNameHint,
 		...(providedBrandName !== undefined && { providedBrandName }),
 		prompt,
-		schema: buildSchema({ maxCompetitors, maxPrompts }),
+		schema: buildSchema({ maxCompetitors, maxPrompts, questionStyle }),
 		maxCompetitors,
 		maxPrompts,
 	};
@@ -267,6 +295,7 @@ function buildPrompt(args: {
 	locationHint?: string;
 	includeCompetitors: boolean;
 	includePrompts: boolean;
+	questionStyle: QuestionStyle;
 }): string {
 	const excerptBlock = args.websiteExcerpt
 		? `\nText from ${args.analysisUrl}:\n---\n${args.websiteExcerpt}\n---\n`
@@ -285,9 +314,26 @@ function buildPrompt(args: {
 
 	// A local business competes with the places an AI answer names next to it,
 	// not with the global category, and the queries that matter name the area.
+	// The wording follows the question style — a fragment example here would
+	// pull the model back toward keyword queries in the customer style — and
+	// the search branch stays byte-identical to what it said before styles
+	// existed, so an already-queued job's prompt does not shift under it.
 	const locationNote = args.locationHint
-		? `\nThe brand is a local business at: ${args.locationHint}. Scope competitors to businesses a customer in that area would actually choose between. Make suggested prompts local discovery queries that name the neighborhood or city (e.g. "best [category] in [area]"), not global ones.\n`
+		? `\nThe brand is a local business at: ${args.locationHint}. Scope competitors to businesses a customer in that area would actually choose between. ${
+				args.questionStyle === "customer"
+					? `Make suggested prompts local discovery questions that name the neighborhood or city (e.g. "where do i get good [category] in [area]?"), not global ones.`
+					: `Make suggested prompts local discovery queries that name the neighborhood or city (e.g. "best [category] in [area]"), not global ones.`
+			}\n`
 		: "";
+
+	// An answer engine gives one persona a far steadier answer than it gives a
+	// bare keyword query, and these exact questions are what the paid
+	// measurement re-asks — so the model is told to pick one persona first and
+	// speak as them, rather than sprinkling personas per question.
+	const personaNote =
+		args.includePrompts && args.questionStyle === "customer"
+			? `\nBefore writing the suggested prompts, derive ONE primary customer persona for this business from the website${args.locationHint ? " and location" : ""}: who they are, the occasion, and what they care about. Then phrase MOST of the prompts the way that one person would actually ask an AI assistant, carrying their context inside the question (e.g. "we're in [area] for a week with kids — where do we get breakfast with good coffee?"). Keep every question self-contained: it will be asked verbatim, with no surrounding conversation. Do not name the persona as a label; the question itself carries who is asking.\n`
+			: "";
 
 	const skipNotes: string[] = [];
 	if (!args.includeCompetitors) skipNotes.push("Return an empty array for competitors.");
@@ -296,7 +342,7 @@ function buildPrompt(args: {
 	return `Analyze the brand at ${args.analysisUrl}.
 
 ${nameLine}
-${scopeNote}${locationNote}${excerptBlock}
+${scopeNote}${locationNote}${personaNote}${excerptBlock}
 Use web search to verify facts. Never invent information — return empty arrays when uncertain.
 
 You MUST return the structured JSON object — even if you can find nothing about this brand. In that case set brandName to the likely name above and return empty arrays for every other field. Refusing to produce JSON, or replying with prose explaining what you don't know, is a failure mode; an object with mostly-empty arrays is the correct answer when information is genuinely unavailable.${skipNotes.length > 0 ? `\n\n${skipNotes.join(" ")}` : ""}`;

@@ -7,6 +7,7 @@ import {
 	type RecommendationFinding,
 	stableId,
 } from "@workspace/selena-visibility-contracts";
+import { blockedAiCrawlers, restrictiveMetaRobots } from "./ai-crawler-access";
 import { type GoogleMapsLocationSnapshot, isGoogleMapsLink } from "./google-maps-location";
 import {
 	assertPublicWebsiteTarget,
@@ -359,26 +360,63 @@ function declaresAddress(value: unknown, depth = 0): boolean {
 }
 
 /**
+ * What each rule asks for, in the words of the person who has to do it. The
+ * rule id stays on the finding for traceability; a task board reading
+ * "Improve WEB-001" tells its owner nothing.
+ */
+const recommendationTitles: Record<string, string> = {
+	"WEB-001": "Give the page a title that names the brand and what it offers",
+	"WEB-002": "Write a short description of the offer for search results",
+	"WEB-003": "State an explicit robots policy",
+	"WEB-004": "Declare the page's canonical address",
+	"WEB-005": "Declare language alternates where the site has them",
+	"WEB-006": "Organise the page with descriptive headings",
+	"WEB-007": "Publish the offer as readable text, not only images",
+	"WEB-008": "Link the service, location and contact pages to each other",
+	"WEB-009": "Describe the business in structured data",
+	"WEB-010": "Review the structured data already on the page",
+	"WEB-011": "Publish a clear way to get in touch",
+	"WEB-012": "Describe the services, menu or booking in readable text",
+	"WEB-013": "Describe the important images in alt text",
+	"WEB-014": "Serve a robots.txt that can be checked again later",
+	"WEB-015": "Link the Google Maps listing from the site",
+	"WEB-016": "Put the business address in structured data",
+	"WEB-017": "Use the exact Google Maps listing name on the site",
+	"WEB-018": "Let the answer engines' crawlers read the site",
+	"WEB-019": "Let assistants open the site when a customer asks them to",
+	"WEB-020": "Stop the page asking engines to ignore or not quote it",
+	"WEB-021": "Confirm that excluding the site from model training is deliberate",
+};
+
+/**
  * The free audit's rule table, exported so the customer-facing report can
  * render every check — the passing ones included — instead of only the
  * failures the action plan keeps.
  */
 export const WEBSITE_SIGNAL_RULES: ReadonlyArray<readonly [string, string, string, "HIGH" | "MEDIUM" | "LOW"]> = [
-	["title", "WEB-001", "Add a descriptive page title that identifies the brand and offer.", "MEDIUM"],
-	["meta-description", "WEB-002", "Add a concise meta description describing the confirmed offer.", "MEDIUM"],
-	["meta-robots", "WEB-003", "Publish an explicit reviewable robots policy.", "LOW"],
-	["canonical", "WEB-004", "Add a valid canonical URL to the confirmed website.", "MEDIUM"],
-	["hreflang", "WEB-005", "Add language alternates only where supported by the site.", "LOW"],
-	["headings", "WEB-006", "Organize the website with descriptive H1-H3 headings.", "MEDIUM"],
-	["visible-text", "WEB-007", "Publish crawlable visible text for the confirmed offer.", "HIGH"],
-	["internal-links", "WEB-008", "Connect service, location and contact pages with internal links.", "MEDIUM"],
-	["json-ld", "WEB-009", "Add valid JSON-LD for the confirmed organization or service.", "MEDIUM"],
-	["microdata", "WEB-010", "Review structured data only where it is actually present.", "LOW"],
-	["contacts", "WEB-011", "Publish a clear public contact path.", "MEDIUM"],
-	["services", "WEB-012", "Describe services, menu, booking or location information in crawlable content.", "HIGH"],
-	["images", "WEB-013", "Add useful alt text to important images.", "LOW"],
-	["robots", "WEB-014", "Keep robots evidence available for future verification.", "LOW"],
-];
+		["title", "WEB-001", "Add a descriptive page title that identifies the brand and offer.", "MEDIUM"],
+		["meta-description", "WEB-002", "Add a concise meta description describing the confirmed offer.", "MEDIUM"],
+		["meta-robots", "WEB-003", "Publish an explicit reviewable robots policy.", "LOW"],
+		["canonical", "WEB-004", "Add a valid canonical URL to the confirmed website.", "MEDIUM"],
+		["hreflang", "WEB-005", "Add language alternates only where supported by the site.", "LOW"],
+		["headings", "WEB-006", "Organize the website with descriptive H1-H3 headings.", "MEDIUM"],
+		["visible-text", "WEB-007", "Publish crawlable visible text for the confirmed offer.", "HIGH"],
+		["internal-links", "WEB-008", "Connect service, location and contact pages with internal links.", "MEDIUM"],
+		// Structured data is worth having so agents and directories read the same
+		// facts the page states, but adding it does not by itself move AI
+		// answers, so the action says what it is for and the severity stays low.
+		[
+			"json-ld",
+			"WEB-009",
+			"Add JSON-LD describing the organization or service, so directories and agents read the same facts the page states. Structured data on its own does not move AI answers.",
+			"LOW",
+		],
+		["microdata", "WEB-010", "Review structured data only where it is actually present.", "LOW"],
+		["contacts", "WEB-011", "Publish a clear public contact path.", "MEDIUM"],
+		["services", "WEB-012", "Describe services, menu, booking or location information in crawlable content.", "HIGH"],
+		["images", "WEB-013", "Add useful alt text to important images.", "LOW"],
+		["robots", "WEB-014", "Keep robots evidence available for future verification.", "LOW"],
+	];
 
 export function buildWebsiteActionPlan(
 	collection: WebsiteCollection,
@@ -386,7 +424,6 @@ export function buildWebsiteActionPlan(
 ): ActionPlan {
 	const bySubject = new Map(collection.evidence.map((item) => [item.subject, item]));
 	const rules = WEBSITE_SIGNAL_RULES;
-	
 	const actionByRuleId = new Map<string, string>(rules.map(([, ruleId, action]) => [ruleId, action]));
 	const findings: RecommendationFinding[] = [];
 	for (const [subject, ruleId, _action, severity] of rules) {
@@ -467,13 +504,103 @@ export function buildWebsiteActionPlan(
 			});
 		}
 	}
+	// Access rules read the site's own robots.txt and meta robots: a page
+	// nothing may fetch or quote cannot reach an AI answer whatever else is
+	// fixed, so these outrank the content rules above. Refusing a training
+	// crawler produces nothing here — that is the owner's decision about their
+	// own content, not a defect.
+	const robotsItem = bySubject.get("robots");
+	const blocked = robotsItem ? blockedAiCrawlers(robotsItem.text) : [];
+	const accessRules: Array<{
+		ruleId: string;
+		item: typeof robotsItem;
+		statement: string;
+		action: string;
+		severity: "HIGH" | "MEDIUM" | "LOW";
+	}> = [];
+	const blockedSearch = blocked.filter((crawler) => crawler.crawlerClass === "search");
+	if (robotsItem && blockedSearch.length > 0) {
+		const names = blockedSearch.map((crawler) => crawler.product).join(", ");
+		accessRules.push({
+			ruleId: "WEB-018",
+			item: robotsItem,
+			statement: `robots.txt refuses the crawlers behind ${names}, so those engines cannot read the site.`,
+			action: `Allow the answer-engine crawlers you want to be found in (${blockedSearch
+				.map((crawler) => crawler.token)
+				.join(", ")}) in robots.txt. Refusing training crawlers is a separate decision and can stay as it is.`,
+			severity: "HIGH",
+		});
+	}
+	const blockedUserFetch = blocked.filter((crawler) => crawler.crawlerClass === "user_fetch");
+	if (robotsItem && blockedUserFetch.length > 0) {
+		const names = blockedUserFetch.map((crawler) => crawler.product).join(", ");
+		accessRules.push({
+			ruleId: "WEB-019",
+			item: robotsItem,
+			statement: `robots.txt refuses ${names}, so a customer who opens the site's link in the assistant gets nothing back.`,
+			action: `Allow the user-triggered agents (${blockedUserFetch
+				.map((crawler) => crawler.token)
+				.join(", ")}) in robots.txt: they fetch a page only because a person asked for it.`,
+			severity: "MEDIUM",
+		});
+	}
+	// Refusing a training crawler is a legitimate decision about one's own
+	// content, so this asks the owner to confirm it rather than to undo it:
+	// such a rule is more often inherited with a robots.txt or switched on by a
+	// CDN default than chosen.
+	const blockedTraining = blocked.filter((crawler) => crawler.crawlerClass === "training");
+	if (robotsItem && blockedTraining.length > 0) {
+		accessRules.push({
+			ruleId: "WEB-021",
+			item: robotsItem,
+			statement: `robots.txt refuses the training crawlers ${blockedTraining
+				.map((crawler) => crawler.token)
+				.join(", ")}, so this site's content stays out of the models those crawlers feed.`,
+			action:
+				"Confirm this exclusion is deliberate. A rule like this is often inherited with a robots.txt or switched on by a CDN default; keeping the content out of model training is a valid choice, and so is reversing it.",
+			severity: "LOW",
+		});
+	}
+	const metaItem = bySubject.get("meta-robots");
+	const restrictive = metaItem ? restrictiveMetaRobots(metaItem.text) : [];
+	if (metaItem && restrictive.length > 0) {
+		const indexBlocked = restrictive.includes("noindex") || restrictive.includes("none");
+		accessRules.push({
+			ruleId: "WEB-020",
+			item: metaItem,
+			statement: indexBlocked
+				? `The page's robots meta tag says ${restrictive.join(", ")}, which asks every engine to keep it out of their index.`
+				: `The page's robots meta tag says ${restrictive.join(", ")}, which forbids engines from quoting its text.`,
+			action: indexBlocked
+				? "Remove noindex from the page's robots meta tag if this page is meant to be found."
+				: "Remove nosnippet and max-snippet:0 from the page's robots meta tag: an AI answer is built from quoted text.",
+			severity: "HIGH",
+		});
+	}
+	for (const rule of accessRules) {
+		if (!rule.item) continue;
+		actionByRuleId.set(rule.ruleId, rule.action);
+		findings.push({
+			id: stableId("finding", `${collection.manifest.id}:${rule.ruleId}`),
+			tenantId: collection.manifest.tenantId,
+			manifestId: collection.manifest.id,
+			category: "AI_ACCESS",
+			statement: rule.statement,
+			evidenceIds: [rule.item.id],
+			confidence: "HIGH",
+			confidenceScore: 0.95,
+			severity: rule.severity,
+			unknown: false,
+			ruleId: rule.ruleId,
+		});
+	}
 	const recommendations = findings.map((finding) => {
 		return {
 			id: stableId("recommendation", finding.id),
 			tenantId: finding.tenantId,
 			findingId: finding.id,
 			manifestId: finding.manifestId,
-			title: `Improve ${finding.ruleId}`,
+			title: recommendationTitles[finding.ruleId] ?? `Improve ${finding.ruleId}`,
 			action: actionByRuleId.get(finding.ruleId) ?? "Improve the website evidence.",
 			rationale: finding.statement,
 			evidenceIds: finding.evidenceIds,
