@@ -75,6 +75,10 @@ const WEBSITE_MESSAGES: Record<string, [string, string]> = {
  * switch or the next step instead of assuming the reader can grep for it.
  */
 const ADMIN_MESSAGES: Record<string, [string, string]> = {
+	SELENA_QUESTION_LIMIT_EXCEEDED: [
+		"One measurement takes up to 25 questions on this plan. Uncheck some questions — the rest fit into the next weekly run.",
+		"Один замер на этом тарифе принимает до 25 вопросов. Снимите лишние галочки — остальные войдут в следующий еженедельный прогон.",
+	],
 	SELENA_MONTHLY_ALLOWANCE_EXCEEDED: [
 		"This measurement would exceed the plan's monthly answer allowance. Reduce the question count, or run it next month — the numbers are in the message above.",
 		"Этот замер превысит месячный запас ответов тарифа. Уменьшите число вопросов или запустите в следующем месяце — цифры указаны в сообщении выше.",

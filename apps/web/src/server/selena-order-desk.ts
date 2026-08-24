@@ -285,6 +285,15 @@ async function createSelenaOrderDraft(data: OrderDraftInput) {
 		if (plan.scenarioLimit !== null && approved.length > plan.scenarioLimit)
 			throw new Error(`SELENA_PLAN_SCENARIO_LIMIT_EXCEEDED: ${plan.scenarioLimit}`);
 
+		// One measurement takes at most the plan's question count (× languages):
+		// twenty-five real questions beat a hundred invented ones.
+		if (plan.questionLimitPerMeasurement !== null) {
+			const scenarioCap = plan.questionLimitPerMeasurement * Math.max(1, plan.languageLimit);
+			if (data.scenarioIds.length > scenarioCap)
+				throw new Error(
+					`SELENA_QUESTION_LIMIT_EXCEEDED: this plan takes up to ${plan.questionLimitPerMeasurement} questions (${scenarioCap} language scenarios) per measurement, got ${data.scenarioIds.length}`,
+				);
+		}
 		const scope = scopeForPlan(plan, data.scenarioIds);
 		const expectedRuns = expectedRunsFromScope(scope);
 		// The pricing page quotes a monthly allowance (300/800 answers); an

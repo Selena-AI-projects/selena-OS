@@ -22,6 +22,7 @@ import { validateWebsiteUrl } from "@/lib/brand-website";
 import { parseGoogleMapsLocation } from "@workspace/lib/google-maps-location";
 import { resetPostHog } from "@/lib/posthog";
 import { SUGGESTION_LIMITS } from "@/lib/selena-suggestion";
+import { ruleHow, ruleTitle } from "@/lib/selena-rule-help";
 import { humanizeSelenaError } from "@/lib/selena-workspace-errors";
 import type { LedgerReport } from "@workspace/lib/selena-ledger-metrics";
 import { groupView, formatShare, type GroupView } from "@/lib/selena-measurement-view";
@@ -1882,9 +1883,16 @@ function ResultsPanel({ project, locale }: { project: WorkspaceProject; locale: 
 												<span className="text-xs font-semibold text-[#8f5c34]">
 													{priorityLabel(item.priority, locale)}
 												</span>
-												<div>
-													<p className="font-medium text-[#181614]">{item.title}</p>
-													<p className="mt-1 text-sm leading-6 text-[#6e6258]">{item.action}</p>
+											<div>
+													<p className="font-medium text-[#181614]">
+														{ruleTitle(locale, item.ruleId, item.title)}
+														{item.ruleId && (
+															<span className="ml-2 align-middle text-[0.62rem] font-semibold uppercase text-[#b0a294]">
+																{item.ruleId}
+															</span>
+														)}
+													</p>
+													<p className="mt-1 text-sm leading-6 text-[#6e6258]">{ruleHow(locale, item.ruleId, item.action)}</p>
 												</div>
 											</li>
 										))}

@@ -145,8 +145,13 @@ export const getSelenaWorkspaceFn = createServerFn({ method: "GET" }).handler(as
 									// run in: the three shown here are the whole plan for a
 									// customer who reads no further.
 									.sort((left, right) => priorityRank(left.priority) - priorityRank(right.priority))
-									.slice(0, 3)
-									.map((item) => ({ title: item.title, action: item.action, priority: item.priority })) ?? [],
+								.slice(0, 3)
+									.map((item) => ({
+										ruleId: actionPlan.findings.find((finding) => finding.id === item.findingId)?.ruleId ?? "",
+										title: item.title,
+										action: item.action,
+										priority: item.priority,
+									})) ?? [],
 						}
 					: null,
 			};
