@@ -358,27 +358,35 @@ function declaresAddress(value: unknown, depth = 0): boolean {
 	return Object.values(record).some((item) => declaresAddress(item, depth + 1));
 }
 
+/**
+ * The free audit's rule table, exported so the customer-facing report can
+ * render every check — the passing ones included — instead of only the
+ * failures the action plan keeps.
+ */
+export const WEBSITE_SIGNAL_RULES: ReadonlyArray<readonly [string, string, string, "HIGH" | "MEDIUM" | "LOW"]> = [
+	["title", "WEB-001", "Add a descriptive page title that identifies the brand and offer.", "MEDIUM"],
+	["meta-description", "WEB-002", "Add a concise meta description describing the confirmed offer.", "MEDIUM"],
+	["meta-robots", "WEB-003", "Publish an explicit reviewable robots policy.", "LOW"],
+	["canonical", "WEB-004", "Add a valid canonical URL to the confirmed website.", "MEDIUM"],
+	["hreflang", "WEB-005", "Add language alternates only where supported by the site.", "LOW"],
+	["headings", "WEB-006", "Organize the website with descriptive H1-H3 headings.", "MEDIUM"],
+	["visible-text", "WEB-007", "Publish crawlable visible text for the confirmed offer.", "HIGH"],
+	["internal-links", "WEB-008", "Connect service, location and contact pages with internal links.", "MEDIUM"],
+	["json-ld", "WEB-009", "Add valid JSON-LD for the confirmed organization or service.", "MEDIUM"],
+	["microdata", "WEB-010", "Review structured data only where it is actually present.", "LOW"],
+	["contacts", "WEB-011", "Publish a clear public contact path.", "MEDIUM"],
+	["services", "WEB-012", "Describe services, menu, booking or location information in crawlable content.", "HIGH"],
+	["images", "WEB-013", "Add useful alt text to important images.", "LOW"],
+	["robots", "WEB-014", "Keep robots evidence available for future verification.", "LOW"],
+];
+
 export function buildWebsiteActionPlan(
 	collection: WebsiteCollection,
 	context: WebsiteActionPlanContext = {},
 ): ActionPlan {
 	const bySubject = new Map(collection.evidence.map((item) => [item.subject, item]));
-	const rules: Array<[string, string, string, "HIGH" | "MEDIUM" | "LOW"]> = [
-		["title", "WEB-001", "Add a descriptive page title that identifies the brand and offer.", "MEDIUM"],
-		["meta-description", "WEB-002", "Add a concise meta description describing the confirmed offer.", "MEDIUM"],
-		["meta-robots", "WEB-003", "Publish an explicit reviewable robots policy.", "LOW"],
-		["canonical", "WEB-004", "Add a valid canonical URL to the confirmed website.", "MEDIUM"],
-		["hreflang", "WEB-005", "Add language alternates only where supported by the site.", "LOW"],
-		["headings", "WEB-006", "Organize the website with descriptive H1-H3 headings.", "MEDIUM"],
-		["visible-text", "WEB-007", "Publish crawlable visible text for the confirmed offer.", "HIGH"],
-		["internal-links", "WEB-008", "Connect service, location and contact pages with internal links.", "MEDIUM"],
-		["json-ld", "WEB-009", "Add valid JSON-LD for the confirmed organization or service.", "MEDIUM"],
-		["microdata", "WEB-010", "Review structured data only where it is actually present.", "LOW"],
-		["contacts", "WEB-011", "Publish a clear public contact path.", "MEDIUM"],
-		["services", "WEB-012", "Describe services, menu, booking or location information in crawlable content.", "HIGH"],
-		["images", "WEB-013", "Add useful alt text to important images.", "LOW"],
-		["robots", "WEB-014", "Keep robots evidence available for future verification.", "LOW"],
-	];
+	const rules = WEBSITE_SIGNAL_RULES;
+	
 	const actionByRuleId = new Map<string, string>(rules.map(([, ruleId, action]) => [ruleId, action]));
 	const findings: RecommendationFinding[] = [];
 	for (const [subject, ruleId, _action, severity] of rules) {

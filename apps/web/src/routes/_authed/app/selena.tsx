@@ -1675,8 +1675,15 @@ function ResultsPanel({ project, locale }: { project: WorkspaceProject; locale: 
 					</p>
 				</div>
 				{result && (
-					<span className="selena-success-label">
-						<IconSparkles className="size-4" /> {tr(locale, "Website plan ready", "План для сайта готов")}
+					<span className="flex flex-wrap items-center gap-3">
+						<span className="selena-success-label">
+							<IconSparkles className="size-4" /> {tr(locale, "Website plan ready", "План для сайта готов")}
+						</span>
+						<Link to="/app/selena-report" search={{ project: project.project.id }}>
+							<Button type="button" variant="outline" size="sm" className="border-[#cdbdac] bg-[#fffdf8]">
+								{tr(locale, "Open as a report", "Открыть отчётом")}
+							</Button>
+						</Link>
 					</span>
 				)}
 			</div>

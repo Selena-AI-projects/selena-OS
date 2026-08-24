@@ -43,6 +43,23 @@ function systemLabel(locale: ReportLocale, systemId: string): string {
 	return SYSTEM_LABELS[systemId] ?? systemId;
 }
 
+const SIGNAL_LABELS: Record<string, [string, string]> = {
+	title: ["Page title", "Заголовок страницы (title)"],
+	"meta-description": ["Meta description", "Описание страницы (meta description)"],
+	"meta-robots": ["Robots policy", "Политика для роботов (meta robots)"],
+	canonical: ["Canonical URL", "Каноническая ссылка"],
+	hreflang: ["Language alternates", "Языковые версии (hreflang)"],
+	headings: ["H1–H3 heading structure", "Структура заголовков H1–H3"],
+	"visible-text": ["Crawlable text about the offer", "Читаемый текст об услугах"],
+	"internal-links": ["Internal links between pages", "Внутренние ссылки между страницами"],
+	"json-ld": ["Structured data (JSON-LD)", "Структурированная разметка (JSON-LD)"],
+	microdata: ["Microdata", "Микроразметка"],
+	contacts: ["Public contacts", "Контакты на сайте"],
+	services: ["Services, menu and location in text", "Описание услуг/меню/локации текстом"],
+	images: ["Image alt text", "Alt-подписи к изображениям"],
+	robots: ["robots.txt", "Файл robots.txt"],
+};
+
 const PLAN_LABELS: Record<string, string> = {
 	"visitor-local": "Snapshot · $49",
 	"full-ai-landscape": "Landscape · $79",
@@ -182,7 +199,9 @@ function SelenaReportPage() {
 				<div className="pointer-events-none absolute -top-24 -right-16 h-72 w-72 rounded-full border border-[#b9825b59]" />
 				<div className="mx-auto max-w-5xl px-5 pb-12 pt-10">
 					<p className="text-xs font-bold uppercase tracking-[0.18em] text-[#b9825b]">
-						{tr(locale, "AI visibility report", "Отчёт о видимости в AI")}
+						{view && !view.planId && view.freeAudit
+							? tr(locale, "Free website check · $0", "Бесплатная проверка сайта · $0")
+							: tr(locale, "AI visibility report", "Отчёт о видимости в AI")}
 						{planLabel ? ` · ${planLabel}` : ""}
 					</p>
 					<h1 className="selena-heading mt-3 text-4xl text-[#faf5ec]">{view?.inputs?.brandName || view?.project.name || "…"}</h1>
@@ -266,19 +285,168 @@ function SelenaReportPage() {
 				)}
 
 				{view && !report && !failed && (
-					<SectionCard>
-						<SectionTitle title={tr(locale, "No measurement yet", "Замер ещё не выполнялся")} />
-						<p className="mt-3 text-sm text-[#6e6258]">
-							{tr(
-								locale,
-								"Order a measurement to fill this report with observed data.",
-								"Закажите замер — и этот отчёт наполнится наблюдёнными данными.",
-							)}
-						</p>
-						<Link to="/app/selena-order" search={{ project: projectId }} className="mt-4 inline-block print:hidden">
-							<Button type="button">{tr(locale, "Order a measurement", "Заказать замер")}</Button>
-						</Link>
-					</SectionCard>
+					<>
+						{view.freeAudit ? (
+							<>
+								<SectionCard>
+									<SectionTitle
+										title={tr(locale, "How this was checked — free", "Как проверялось — бесплатно")}
+										lead={tr(
+											locale,
+											"The free check reads your website the way AI crawlers read it — and prepares the site for a measurement. AI systems are not queried here: that is the paid measurement, and we say so plainly.",
+											"Бесплатная проверка читает ваш сайт так, как его читают AI-краулеры, — и готовит сайт к замеру. AI-системы здесь не опрашиваются: это платный замер, и мы говорим об этом прямо.",
+										)}
+									/>
+									<div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+										{[
+											["1", tr(locale, "website read in full", "сайт прочитан целиком")],
+											[String(view.freeAudit.checks.length), tr(locale, "checks performed", "проверок выполнено")],
+											["0", tr(locale, "AI answers — that is the paid measurement", "AI-ответов — это платный замер")],
+											["$0", tr(locale, "and no card required", "и без карты")],
+										].map(([value, caption]) => (
+											<div key={caption} className="rounded-xl border border-[#e6ddd1] bg-[#fffdf8] px-4 py-3">
+												<p className="selena-heading text-2xl tabular-nums">{value}</p>
+												<p className="text-xs text-[#6e6258]">{caption}</p>
+											</div>
+										))}
+									</div>
+									<p className="mt-3 text-xs text-[#6e6258]">
+										{tr(locale, "Checked", "Проверено")}: {view.freeAudit.websiteUrl} ·{" "}
+										{new Date(view.freeAudit.capturedAt).toLocaleDateString(locale === "ru" ? "ru-RU" : "en-US")}
+									</p>
+								</SectionCard>
+
+								<SectionCard>
+									<SectionTitle
+										title={tr(locale, "Is the site ready for AI", "Готовность сайта к AI")}
+										lead={tr(
+											locale,
+											"What AI systems can understand about you from the site. No scores — only concrete observations.",
+											"Что AI-системы смогут понять о вас по сайту. Без баллов — только конкретные наблюдения.",
+										)}
+									/>
+									<div className="mt-4">
+										{view.freeAudit.checks.map((check) => (
+											<div key={check.ruleId} className="flex items-baseline gap-3 border-t border-[#e6ddd1] py-2.5 text-sm first:border-t-0">
+												<span
+													className={
+														check.ok
+															? "w-5 shrink-0 font-bold text-[#2e6b46]"
+															: check.unknown
+																? "w-5 shrink-0 font-bold text-[#8f5c34]"
+																: "w-5 shrink-0 font-bold text-[#9a5f14]"
+													}
+												>
+													{check.ok ? "✓" : check.unknown ? "◐" : "✗"}
+												</span>
+												<span className="flex-1 font-medium">
+													{SIGNAL_LABELS[check.subject]
+														? tr(locale, SIGNAL_LABELS[check.subject][0], SIGNAL_LABELS[check.subject][1])
+														: check.subject}
+												</span>
+												<span className="shrink-0 text-xs text-[#6e6258]">
+													{check.ok
+														? tr(locale, "in place", "на месте")
+														: check.unknown
+															? tr(locale, "could not verify", "не удалось проверить")
+															: tr(locale, "missing", "отсутствует")}
+												</span>
+											</div>
+										))}
+									</div>
+									<p className="mt-4 max-w-3xl text-xs italic text-[#6e6258]">
+										{tr(
+											locale,
+											"The free check does not measure AI visibility and sets no score: it shows whether the site is ready to be cited.",
+											"Бесплатная проверка не измеряет видимость в AI и не выставляет баллов: она показывает, готов ли сайт к тому, чтобы его цитировали.",
+										)}
+									</p>
+								</SectionCard>
+
+								{view.freeAudit.actions.length > 0 && (
+									<SectionCard>
+										<SectionTitle
+											title={tr(locale, "Website action plan", "План улучшения сайта")}
+											lead={tr(
+												locale,
+												"The first actions, in priority order — each derived from an observation above.",
+												"Первые действия в порядке приоритета — каждое выведено из наблюдения выше.",
+											)}
+										/>
+										<div className="mt-4 grid gap-3">
+											{view.freeAudit.actions.map((action, index) => (
+												<div key={action.title} className="flex items-start gap-3.5 rounded-xl border border-[#e6ddd1] bg-[#fffdf8] p-4 text-sm">
+													<span className="selena-heading flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#efe3d7] text-[#8f5c34]">
+														{index + 1}
+													</span>
+													<div>
+														<p className="font-semibold">{action.title}</p>
+														<p className="mt-1 text-[#3d362e]">{action.action}</p>
+													</div>
+												</div>
+											))}
+										</div>
+									</SectionCard>
+								)}
+
+								<SectionCard>
+									<SectionTitle
+										title={tr(locale, "What a measurement unlocks", "Что откроется после замера")}
+										lead={tr(
+											locale,
+											"These sections exist in the paid report and fill only with real AI answers — the free check does not guess them.",
+											"Эти разделы существуют в платном отчёте и наполняются только реальными ответами AI-систем — бесплатная проверка их не угадывает.",
+										)}
+									/>
+									<div className="mt-4 grid gap-2.5">
+										{[
+											[
+												tr(locale, "How AI systems see you", "Как вас видят AI-системы"),
+												tr(locale, "whether ChatGPT, Gemini and Perplexity name you — known only after a measurement.", "упомянуты ли вы в ответах ChatGPT, Gemini, Perplexity: станет известно после замера."),
+											],
+											[
+												tr(locale, "Who occupies the answers", "Кто занимает ответы"),
+												tr(locale, "share of voice: you against your competitors, by name.", "доля голоса: вы против ваших конкурентов по именам."),
+											],
+											[
+												tr(locale, "Where you are absent and competitors are not", "Где вас нет, а конкуренты есть"),
+												tr(locale, "which questions show them, and which sources the answer cites.", "по каким вопросам показывают их и на какие источники ссылается ответ."),
+											],
+											[
+												tr(locale, "Where AI takes its data from", "Откуда AI берёт данные"),
+												tr(locale, "sources and the citation gap (“cited without you”).", "источники и citation gap («цитируется без вас»)."),
+											],
+											[
+												tr(locale, "Measurement-backed recommendations", "Рекомендации из замера"),
+												tr(locale, "what to do, tied to specific numbers.", "что делать, с привязкой к конкретным цифрам."),
+											],
+										].map(([heading, body]) => (
+											<div key={heading} className="rounded-xl border border-dashed border-[#cdbdac] bg-[#fbf7ef] px-4 py-3 text-sm text-[#6e6258]">
+												<b className="text-[#3d362e]">{heading}</b> — {body}
+											</div>
+										))}
+									</div>
+									<Link to="/app/selena-order" search={{ project: projectId, plan: "snapshot" }} className="mt-5 inline-block print:hidden">
+										<Button type="button">{tr(locale, "Order Snapshot · $49", "Заказать Snapshot · $49")}</Button>
+									</Link>
+								</SectionCard>
+							</>
+						) : (
+							<SectionCard>
+								<SectionTitle title={tr(locale, "No checks yet", "Проверок ещё не было")} />
+								<p className="mt-3 text-sm text-[#6e6258]">
+									{tr(
+										locale,
+										"Run the free website review in the cabinet first — its results appear here, and a paid measurement deepens them.",
+										"Сначала запустите бесплатную проверку сайта в кабинете — её результаты появятся здесь, а платный замер их углубит.",
+									)}
+								</p>
+								<Link to="/app/selena" className="mt-4 inline-block print:hidden">
+									<Button type="button">{tr(locale, "Open the cabinet", "Открыть кабинет")}</Button>
+								</Link>
+							</SectionCard>
+						)}
+					</>
 				)}
 
 				{report && (

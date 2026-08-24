@@ -1,6 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { db } from "@workspace/lib/db/db";
-import { svConfigurationLocks, svCycles, svOrders, svScenarios } from "@workspace/lib/db/schema";
+import { svConfigurationLocks, svCycles, svOrders, svRecommendationRuns, svScenarios, svWebsiteSnapshots } from "@workspace/lib/db/schema";
 import {
 	type GraderChannel,
 	type GraderReport,
@@ -9,7 +9,8 @@ import {
 } from "@workspace/lib/selena-grader-report";
 import { createSelenaRepositories } from "@workspace/lib/selena-visibility-repositories";
 import { analyzeAnswer } from "@workspace/lib/selena-answer-analysis";
-import { measurementScopeSchema, parseAnalysisSubjects } from "@workspace/selena-visibility-contracts";
+import { WEBSITE_SIGNAL_RULES } from "@workspace/lib/website-collector";
+import { actionPlanSchema, measurementScopeSchema, parseAnalysisSubjects } from "@workspace/selena-visibility-contracts";
 import { and, desc, eq, inArray } from "drizzle-orm";
 import { z } from "zod";
 import { resolveSessionAuthContext } from "../lib/selena-auth-context";
@@ -29,6 +30,13 @@ export type GraderReportView = {
 	measuredAt: string | null;
 	cycle: { status: string; expectedRuns: number; completedRuns: number } | null;
 	report: GraderReport | null;
+	/** The free website audit: every rule with its outcome, plus the plan. */
+	freeAudit: {
+		websiteUrl: string;
+		capturedAt: string;
+		checks: { subject: string; ruleId: string; severity: "HIGH" | "MEDIUM" | "LOW"; ok: boolean; unknown: boolean }[];
+		actions: { title: string; action: string; priority: string }[];
+	} | null;
 };
 
 function readString(value: unknown): string | null {
@@ -59,6 +67,46 @@ export const getSelenaGraderReportFn = createServerFn({ method: "GET" })
 				}
 			: null;
 
+		const [websiteSnapshot, recommendationRun] = await Promise.all([
+			db
+				.select({ website: svWebsiteSnapshots.website, capturedAt: svWebsiteSnapshots.capturedAt })
+				.from(svWebsiteSnapshots)
+				.where(
+					and(eq(svWebsiteSnapshots.projectId, data.projectId), eq(svWebsiteSnapshots.organizationId, context.tenantId)),
+				)
+				.orderBy(desc(svWebsiteSnapshots.capturedAt))
+				.limit(1)
+				.then((rows) => rows[0] ?? null),
+			db
+				.select({ actionPlan: svRecommendationRuns.actionPlan })
+				.from(svRecommendationRuns)
+				.where(
+					and(
+						eq(svRecommendationRuns.projectId, data.projectId),
+						eq(svRecommendationRuns.organizationId, context.tenantId),
+					),
+				)
+				.orderBy(desc(svRecommendationRuns.createdAt))
+				.limit(1)
+				.then((rows) => rows[0] ?? null),
+		]);
+		const parsedPlan = actionPlanSchema.safeParse(recommendationRun?.actionPlan);
+		const freeAudit =
+			websiteSnapshot && parsedPlan.success
+				? {
+						websiteUrl: websiteSnapshot.website,
+						capturedAt: websiteSnapshot.capturedAt.toISOString(),
+						checks: WEBSITE_SIGNAL_RULES.map(([subject, ruleId, , severity]) => {
+							const finding = parsedPlan.data.findings.find((item) => item.ruleId === ruleId);
+							return { subject, ruleId, severity, ok: !finding, unknown: finding?.unknown ?? false };
+						}),
+						actions: parsedPlan.data.recommendations
+							.filter((item) => !item.blocked)
+							.slice(0, 3)
+							.map((item) => ({ title: item.title, action: item.action, priority: item.priority })),
+					}
+				: null;
+
 		const view: GraderReportView = {
 			project: {
 				id: project.id,
@@ -71,6 +119,7 @@ export const getSelenaGraderReportFn = createServerFn({ method: "GET" })
 			measuredAt: null,
 			cycle: null,
 			report: null,
+			freeAudit,
 		};
 
 		const [order] = await db
