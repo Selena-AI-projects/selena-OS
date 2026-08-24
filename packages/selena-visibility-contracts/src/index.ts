@@ -124,3 +124,4 @@ export * from "./catalog.js";
 export * from "./local-discovery.js";
 export * from "./measurement-scope.js";
 export * from "./measurement-execution.js";
+export * from "./promo.js";
