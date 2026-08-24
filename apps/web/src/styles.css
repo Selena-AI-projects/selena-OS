@@ -444,3 +444,23 @@
 		color-adjust: exact !important;
 	}
 }
+
+/* The indeterminate strip under «Читаем сайт…» — visible motion while the
+   suggestion worker reads the site, so the wait never looks like a freeze. */
+.selena-progress-strip {
+	animation: selena-progress-slide 1.2s ease-in-out infinite;
+}
+@keyframes selena-progress-slide {
+	0% {
+		transform: translateX(-100%);
+	}
+	100% {
+		transform: translateX(300%);
+	}
+}
+@media (prefers-reduced-motion: reduce) {
+	.selena-progress-strip {
+		width: 100%;
+		animation: none;
+	}
+}
