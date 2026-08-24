@@ -19,6 +19,7 @@ function permitFor(overrides: Partial<SelenaExecutablePermit> = {}): SelenaExecu
 		organizationId: "org-1",
 		cycleId: "cycle-1",
 		scenarioId: "scenario-1",
+		systemId: "claude",
 		channel: "API",
 		dispatchKey: "order-1:scenario-1:anthropic/claude-haiku-4.5:0:1",
 		expiresAt: new Date("2026-08-19T11:00:00.000Z"),
@@ -116,6 +117,8 @@ describe("OpenRouter measurement adapter", () => {
 			answer: { text: "Answer text mentioning two studios.", retainUntil: answerRetainUntil(now()) },
 			tokenUsage: { input: 12, output: 34 },
 			costUsd: 0.0042,
+			costBasis: "actual",
+			provider: "openrouter",
 		});
 		expect(() => runOutcomeSchema.parse(outcome)).not.toThrow();
 	});
@@ -162,11 +165,16 @@ describe("OpenRouter measurement adapter", () => {
 			const fetchImpl = respondWith(() => jsonResponse({ error: { message: `boom ${API_KEY}` } }, status));
 			const outcome = await adapterWith(fetchImpl).execute(permitFor());
 
+			// §10.2: the request was dispatched, so a worst-case estimated charge
+			// is recorded rather than letting a broken cycle ledger as $0.
 			expect(outcome).toEqual({
 				dispatchKey: permitFor().dispatchKey,
 				status: "FAILED",
 				validity: "INVALID",
 				invalidReason: `PROVIDER_HTTP_${status}`,
+				costUsd: estimateRunCostUsd("openrouter", false),
+				costBasis: "estimated",
+				provider: "openrouter",
 			});
 			// The provider's error body is never read into the run row.
 			expect(JSON.stringify(outcome)).not.toContain(API_KEY);
@@ -222,6 +230,9 @@ describe("OpenRouter measurement adapter", () => {
 			status: "FAILED",
 			validity: "INVALID",
 			invalidReason: "TRANSPORT_ERROR",
+			costUsd: estimateRunCostUsd("openrouter", false),
+			costBasis: "estimated",
+			provider: "openrouter",
 		});
 	});
 
@@ -281,6 +292,11 @@ describe("OpenRouter measurement adapter", () => {
 			respondWith(jsonResponse(successPayload())),
 			respondWith(() => jsonResponse({ error: `key was ${API_KEY}` }, 401)),
 			respondWith(() => new Response(`not json ${API_KEY}`, { status: 200 })),
+			// An answer that echoes the credential back is stored scrubbed: the
+			// retained text (CABINET_MODEL §4a) must never retain the key.
+			respondWith(() =>
+				jsonResponse({ choices: [{ message: { content: `the request used ${API_KEY} as its key` } }] }),
+			),
 			vi.fn(async (): Promise<Response> => {
 				throw new Error(`ECONNRESET with Bearer ${API_KEY}`);
 			}),
@@ -307,5 +323,73 @@ describe("OpenRouter measurement adapter", () => {
 		expect(() => assertAdapterAllowed("openrouter", ["noop"])).toThrow("SELENA_ADAPTER_NOT_REGISTERED");
 		// The owner-go edit: registered and named, the adapter may now execute.
 		expect(() => assertAdapterAllowed("openrouter", ["noop", "openrouter"])).not.toThrow();
+	});
+
+	it("attaches a measurement under the sold system name, with no sources on API View", async () => {
+		const payload = successPayload({
+			choices: [{ message: { content: "KORA Food Hall is worth a visit; Rival Cafe is louder." } }],
+		});
+		const outcome = await adapterWith(respondWith(jsonResponse(payload)), {
+			system: "claude",
+			resolveExtractionContext: () => ({
+				brandTerms: ["KORA Food Hall"],
+				ownedDomains: ["korafoodhall.com"],
+				competitors: [{ name: "Rival Cafe", terms: ["Rival Cafe"] }],
+				language: "en",
+			}),
+		}).execute(permitFor());
+		expect(() => runOutcomeSchema.parse(outcome)).not.toThrow();
+		expect(outcome.measurement).toEqual({
+			system: "claude",
+			model: "anthropic/claude-haiku-4.5",
+			language: "en",
+			extractorVersion: "selena-extract/1",
+			captureMode: "training_data",
+			brand: "KORA Food Hall",
+			mention: true,
+			position: null,
+			ownedCitation: false,
+			citations: [],
+			competitors: [{ name: "Rival Cafe", position: null }],
+			factualErrors: [],
+		});
+	});
+
+	it("keeps a paid answer VALID when the extraction context cannot be resolved", async () => {
+		const outcome = await adapterWith(respondWith(jsonResponse(successPayload())), {
+			resolveExtractionContext: () => {
+				throw new Error("LOCK_UNREACHABLE");
+			},
+		}).execute(permitFor());
+		expect(outcome.status).toBe("SUCCEEDED");
+		expect(outcome.validity).toBe("VALID");
+		expect(outcome.measurement).toBeUndefined();
+	});
+
+	it("records the provider's reported charge even when the answer is empty", async () => {
+		const payload = successPayload({ choices: [{ message: { content: "  " } }] });
+		const outcome = await adapterWith(respondWith(jsonResponse(payload))).execute(permitFor());
+		expect(outcome.status).toBe("INVALID");
+		expect(outcome.invalidReason).toBe("EMPTY_RESPONSE");
+		// Tokens were consumed and billed; a $0 ledger row here is how a broken
+		// cycle burns budget invisibly.
+		expect(outcome.costUsd).toBe(0.0042);
+		expect(outcome.costBasis).toBe("actual");
+		expect(outcome.provider).toBe("openrouter");
+	});
+
+	it("drops a contract-invalid extraction instead of failing the paid run", async () => {
+		const outcome = await adapterWith(respondWith(jsonResponse(successPayload())), {
+			// language is required non-empty by the measurement contract.
+			resolveExtractionContext: () => ({
+				brandTerms: ["KORA"],
+				ownedDomains: [],
+				competitors: [],
+				language: "",
+			}),
+		}).execute(permitFor());
+		expect(outcome.status).toBe("SUCCEEDED");
+		expect(outcome.validity).toBe("VALID");
+		expect(outcome.measurement).toBeUndefined();
 	});
 });

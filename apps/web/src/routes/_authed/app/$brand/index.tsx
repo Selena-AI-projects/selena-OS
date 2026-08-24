@@ -309,7 +309,7 @@ function DashboardPage() {
 	// Get metrics from optimized summary
 	const totalRuns = dashboardSummary?.totalRuns || 0;
 	const totalPrompts = dashboardSummary?.totalPrompts || 0;
-	const nonBrandedVisibility = dashboardSummary?.nonBrandedVisibility || 0;
+	const nonBrandedVisibility = dashboardSummary?.nonBrandedVisibility ?? null;
 	const lastUpdatedAt = dashboardSummary?.lastUpdatedAt || null;
 
 	// Show placeholder if no evaluations yet
@@ -392,7 +392,7 @@ function DashboardPage() {
 							<CardHeader className="border-b border-dotted pb-2!">
 								<CardTitleWithTooltip
 									title="Visibility Trends (30d)"
-									tooltip={`The percentage of AI answers to your prompts that mention your brand — the big number is the latest point on this line. For prompts that don't name your brand, it's ${nonBrandedVisibility}%. Visibility shifts as AI models, the prompts you track, or the sites AI scans change; the line is smoothed for staggered prompt schedules.`}
+									tooltip={`The percentage of AI answers to your prompts that mention your brand — the big number is the latest point on this line. ${nonBrandedVisibility === null ? "No non-branded prompts have been measured yet." : `For prompts that don't name your brand, it's ${nonBrandedVisibility}%.`} Visibility shifts as AI models, the prompts you track, or the sites AI scans change; the line is smoothed for staggered prompt schedules.`}
 								/>
 							</CardHeader>
 							<CardContent className="flex-1 min-h-[100px]">

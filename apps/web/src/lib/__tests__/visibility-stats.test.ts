@@ -3,6 +3,7 @@ import {
 	computeVolatility,
 	stabilityScore,
 	computeShareOfVoice,
+	percentOrNull,
 	shareOfVoiceTimeSeriesLVCF,
 	shareOfVoiceLeaderboardLVCF,
 	type DailyDomainCount,
@@ -96,13 +97,35 @@ describe("computeShareOfVoice", () => {
 		expect(brandShare).toBe(0.5);
 		expect(entries.map((e) => e.name)).toEqual(["Nike", "Adidas", "Puma"]);
 		expect(entries.find((e) => e.isBrand)?.share).toBe(0.5);
-		expect(entries.reduce((s, e) => s + e.share, 0)).toBeCloseTo(1, 5);
+		expect(entries.reduce((s, e) => s + (e.share ?? 0), 0)).toBeCloseTo(1, 5);
 	});
 
-	it("handles the no-data case without dividing by zero", () => {
+	it("reports the empty set as null, not a confident zero", () => {
 		const { brandShare, entries } = computeShareOfVoice({ name: "Nike", mentions: 0 }, []);
 		expect(brandShare).toBeNull();
-		expect(entries[0]?.share).toBe(0);
+		expect(entries[0]?.share).toBeNull();
+	});
+
+	it("keeps a real 0 when others were mentioned and the brand was not", () => {
+		const { brandShare, entries } = computeShareOfVoice({ name: "Nike", mentions: 0 }, [
+			{ name: "Adidas", mentions: 5 },
+		]);
+		expect(brandShare).toBe(0);
+		expect(entries.find((e) => e.isBrand)?.share).toBe(0);
+	});
+});
+
+describe("percentOrNull", () => {
+	it("returns null for an empty denominator", () => {
+		expect(percentOrNull(0, 0)).toBeNull();
+	});
+
+	it("returns a real 0 for data with no mentions", () => {
+		expect(percentOrNull(0, 5)).toBe(0);
+	});
+
+	it("rounds a plain percentage", () => {
+		expect(percentOrNull(3, 4)).toBe(75);
 	});
 });
 

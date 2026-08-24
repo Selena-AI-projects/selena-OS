@@ -6,27 +6,40 @@ import { createServerFn } from "@tanstack/react-start";
 import { db } from "@workspace/lib/db/db";
 import { type NewReport, reports } from "@workspace/lib/db/schema";
 import { cleanOnboardingUrl } from "@workspace/lib/onboarding";
-import { desc, eq } from "drizzle-orm";
+import { and, desc, eq, isNull } from "drizzle-orm";
 import { z } from "zod";
-import { hasReportAccess, isAdmin, requireAuthSession } from "@/lib/auth/helpers";
+import { hasReportAccess, isAdmin, listUserOrganizations, requireAuthSession } from "@/lib/auth/helpers";
 import { sendReportJob } from "@/lib/job-scheduler";
 
-async function requireReportAccess() {
+/**
+ * DS-P0-15: reports are scoped to the caller's organization. The session's
+ * active organization wins; without one, the user's first membership does —
+ * the same resolution the Selena auth context uses.
+ */
+async function requireReportAccess(): Promise<{ organizationId: string }> {
 	const session = await requireAuthSession();
 	if (!hasReportAccess(session)) throw new Error("Access denied. Report generator access required.");
-	// These rows carry no owning organization, so the list/detail/raw queries
-	// below return every tenant's report. Until reports gain an organization
-	// column and per-org scoping, treat the generator as a global-operator
-	// capability: a report-enabled non-admin must not read across tenants.
-	if (!isAdmin(session)) throw new Error("Access denied. Report generator access required.");
-	return session;
+	const activeOrg = (session.session as { activeOrganizationId?: string | null }).activeOrganizationId;
+	const memberships = await listUserOrganizations(session.user.id);
+	const membership = activeOrg ? memberships.find((org) => org.id === activeOrg) : memberships[0];
+	if (!membership) throw new Error("Forbidden: no organization membership");
+	return { organizationId: membership.id };
+}
+
+/**
+ * Legacy rows (organization_id NULL) predate scoping and have no recoverable
+ * owner; they stay behind an explicit admin-only path, never the customer one.
+ */
+async function requireAdminForLegacyReports() {
+	const session = await requireAuthSession();
+	if (!isAdmin(session)) throw new Error("Access denied. Admin access required.");
 }
 
 /**
  * Get all reports
  */
 export const getReportsFn = createServerFn({ method: "GET" }).handler(async () => {
-	await requireReportAccess();
+	const { organizationId } = await requireReportAccess();
 
 	return db
 		.select({
@@ -39,6 +52,23 @@ export const getReportsFn = createServerFn({ method: "GET" }).handler(async () =
 			updatedAt: reports.updatedAt,
 		})
 		.from(reports)
+		.where(eq(reports.organizationId, organizationId))
+		.orderBy(desc(reports.createdAt));
+});
+
+/** Admin-only read of unattributed legacy rows — deliberately not the customer path. */
+export const getLegacyReportsFn = createServerFn({ method: "GET" }).handler(async () => {
+	await requireAdminForLegacyReports();
+	return db
+		.select({
+			id: reports.id,
+			brandName: reports.brandName,
+			brandWebsite: reports.brandWebsite,
+			status: reports.status,
+			createdAt: reports.createdAt,
+		})
+		.from(reports)
+		.where(isNull(reports.organizationId))
 		.orderBy(desc(reports.createdAt));
 });
 
@@ -48,9 +78,13 @@ export const getReportsFn = createServerFn({ method: "GET" }).handler(async () =
 export const getReportByIdFn = createServerFn({ method: "GET" })
 	.validator(z.object({ reportId: z.string() }))
 	.handler(async ({ data }) => {
-		await requireReportAccess();
+		const { organizationId } = await requireReportAccess();
 
-		const result = await db.select().from(reports).where(eq(reports.id, data.reportId)).limit(1);
+		const result = await db
+			.select()
+			.from(reports)
+			.where(and(eq(reports.id, data.reportId), eq(reports.organizationId, organizationId)))
+			.limit(1);
 		if (result.length === 0) throw new Error("Report not found");
 		const report = result[0];
 		return { ...report, rawOutput: report.rawOutput as {} | null };
@@ -73,7 +107,7 @@ export const createReportFn = createServerFn({ method: "POST" })
 		}),
 	)
 	.handler(async ({ data }) => {
-		await requireReportAccess();
+		const { organizationId } = await requireReportAccess();
 
 		// Parse manual prompts
 		const parsedManualPrompts: string[] = [];
@@ -92,6 +126,7 @@ export const createReportFn = createServerFn({ method: "POST" })
 			// Full path is kept — it's what the analysis reads — but credentials
 			// are stripped before the URL is stored or handed to any fetcher.
 			brandWebsite: cleanOnboardingUrl(data.brandWebsite),
+			organizationId,
 			status: "pending",
 		};
 

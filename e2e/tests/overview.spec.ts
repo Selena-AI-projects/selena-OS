@@ -9,14 +9,12 @@ import { test, expect } from "@playwright/test";
 const BRAND_ID = "default";
 
 test.describe("Overview Page", () => {
-  test("home page lands on the brand switcher and the default brand is reachable", async ({ page }) => {
+  test("home page lands on the Selena cabinet and the default brand stays reachable", async ({ page }) => {
     await page.goto("/");
-    // Local mode supports multiple brands, so / -> /app shows the switcher
-    // rather than auto-redirecting through to a brand.
-    await page.waitForURL(/\/app(?:\/)?$/, { timeout: 30_000 });
-    const brandLink = page.locator(`a[href="/app/${BRAND_ID}"]`).first();
-    await expect(brandLink).toBeVisible({ timeout: 15_000 });
-    await brandLink.click();
+    // /app forwards signed-in users to the Selena cabinet, which is the
+    // product's home screen; the Elmo brand pages remain direct URLs.
+    await page.waitForURL(/\/app\/selena$/, { timeout: 30_000 });
+    await page.goto(`/app/${BRAND_ID}`);
     await page.waitForURL(new RegExp(`/app/${BRAND_ID}$`));
     expect(page.url()).toContain(`/app/${BRAND_ID}`);
   });

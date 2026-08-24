@@ -34,6 +34,8 @@ import { Route as AuthedAppAcademyRouteImport } from './routes/_authed/app/acade
 import { Route as AuthedAppNewRouteImport } from './routes/_authed/app/new'
 import { Route as AuthedAppSelenaRouteImport } from './routes/_authed/app/selena'
 import { Route as AuthedAppSelenaAdminRouteImport } from './routes/_authed/app/selena-admin'
+import { Route as AuthedAppSelenaOrderRouteImport } from './routes/_authed/app/selena-order'
+import { Route as AuthedAppSelenaSourcesRouteImport } from './routes/_authed/app/selena-sources'
 import { Route as AuthedReportsIndexRouteImport } from './routes/_authed/reports/index'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
 import { Route as ApiManifestIndexRouteImport } from './routes/api/manifest/index'
@@ -58,6 +60,7 @@ import { Route as ApiV1PromptsPromptIdRouteImport } from './routes/api/v1/prompt
 import { Route as ApiV1ReportsIndexRouteImport } from './routes/api/v1/reports/index'
 import { Route as ApiV1ReportsReportIdRouteImport } from './routes/api/v1/reports/$reportId'
 import { Route as ApiV1SelenaActionPlanRouteImport } from './routes/api/v1/selena/action-plan'
+import { Route as ApiV1SelenaCitationGapsRouteImport } from './routes/api/v1/selena/citation-gaps'
 import { Route as ApiV1SelenaDashboardRouteImport } from './routes/api/v1/selena/dashboard'
 import { Route as ApiV1SelenaProfilesRouteImport } from './routes/api/v1/selena/profiles'
 import { Route as ApiV1SelenaPublicScanRouteImport } from './routes/api/v1/selena/public-scan'
@@ -217,6 +220,16 @@ const AuthedAppSelenaAdminRoute = AuthedAppSelenaAdminRouteImport.update({
   path: '/selena-admin',
   getParentRoute: () => AuthedAppRoute,
 } as any)
+const AuthedAppSelenaOrderRoute = AuthedAppSelenaOrderRouteImport.update({
+  id: '/selena-order',
+  path: '/selena-order',
+  getParentRoute: () => AuthedAppRoute,
+} as any)
+const AuthedAppSelenaSourcesRoute = AuthedAppSelenaSourcesRouteImport.update({
+  id: '/selena-sources',
+  path: '/selena-sources',
+  getParentRoute: () => AuthedAppRoute,
+} as any)
 const AuthedReportsIndexRoute = AuthedReportsIndexRouteImport.update({
   id: '/',
   path: '/',
@@ -341,6 +354,11 @@ const ApiV1ReportsReportIdRoute = ApiV1ReportsReportIdRouteImport.update({
 const ApiV1SelenaActionPlanRoute = ApiV1SelenaActionPlanRouteImport.update({
   id: '/api/v1/selena/action-plan',
   path: '/api/v1/selena/action-plan',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiV1SelenaCitationGapsRoute = ApiV1SelenaCitationGapsRouteImport.update({
+  id: '/api/v1/selena/citation-gaps',
+  path: '/api/v1/selena/citation-gaps',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiV1SelenaDashboardRoute = ApiV1SelenaDashboardRouteImport.update({
@@ -556,6 +574,8 @@ export interface FileRoutesByFullPath {
   '/app/new': typeof AuthedAppNewRoute
   '/app/selena': typeof AuthedAppSelenaRoute
   '/app/selena-admin': typeof AuthedAppSelenaAdminRoute
+  '/app/selena-order': typeof AuthedAppSelenaOrderRoute
+  '/app/selena-sources': typeof AuthedAppSelenaSourcesRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/admin/': typeof AuthedAdminIndexRoute
   '/app/': typeof AuthedAppIndexRoute
@@ -575,6 +595,7 @@ export interface FileRoutesByFullPath {
   '/api/v1/prompts/$promptId': typeof ApiV1PromptsPromptIdRouteWithChildren
   '/api/v1/reports/$reportId': typeof ApiV1ReportsReportIdRoute
   '/api/v1/selena/action-plan': typeof ApiV1SelenaActionPlanRoute
+  '/api/v1/selena/citation-gaps': typeof ApiV1SelenaCitationGapsRoute
   '/api/v1/selena/dashboard': typeof ApiV1SelenaDashboardRoute
   '/api/v1/selena/profiles': typeof ApiV1SelenaProfilesRoute
   '/api/v1/selena/public-scan': typeof ApiV1SelenaPublicScanRoute
@@ -635,6 +656,8 @@ export interface FileRoutesByTo {
   '/app/new': typeof AuthedAppNewRoute
   '/app/selena': typeof AuthedAppSelenaRoute
   '/app/selena-admin': typeof AuthedAppSelenaAdminRoute
+  '/app/selena-order': typeof AuthedAppSelenaOrderRoute
+  '/app/selena-sources': typeof AuthedAppSelenaSourcesRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/admin': typeof AuthedAdminIndexRoute
   '/app': typeof AuthedAppIndexRoute
@@ -654,6 +677,7 @@ export interface FileRoutesByTo {
   '/api/v1/prompts/$promptId': typeof ApiV1PromptsPromptIdRouteWithChildren
   '/api/v1/reports/$reportId': typeof ApiV1ReportsReportIdRoute
   '/api/v1/selena/action-plan': typeof ApiV1SelenaActionPlanRoute
+  '/api/v1/selena/citation-gaps': typeof ApiV1SelenaCitationGapsRoute
   '/api/v1/selena/dashboard': typeof ApiV1SelenaDashboardRoute
   '/api/v1/selena/profiles': typeof ApiV1SelenaProfilesRoute
   '/api/v1/selena/public-scan': typeof ApiV1SelenaPublicScanRoute
@@ -720,6 +744,8 @@ export interface FileRoutesById {
   '/_authed/app/new': typeof AuthedAppNewRoute
   '/_authed/app/selena': typeof AuthedAppSelenaRoute
   '/_authed/app/selena-admin': typeof AuthedAppSelenaAdminRoute
+  '/_authed/app/selena-order': typeof AuthedAppSelenaOrderRoute
+  '/_authed/app/selena-sources': typeof AuthedAppSelenaSourcesRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/_authed/admin/': typeof AuthedAdminIndexRoute
   '/_authed/app/': typeof AuthedAppIndexRoute
@@ -739,6 +765,7 @@ export interface FileRoutesById {
   '/api/v1/prompts/$promptId': typeof ApiV1PromptsPromptIdRouteWithChildren
   '/api/v1/reports/$reportId': typeof ApiV1ReportsReportIdRoute
   '/api/v1/selena/action-plan': typeof ApiV1SelenaActionPlanRoute
+  '/api/v1/selena/citation-gaps': typeof ApiV1SelenaCitationGapsRoute
   '/api/v1/selena/dashboard': typeof ApiV1SelenaDashboardRoute
   '/api/v1/selena/profiles': typeof ApiV1SelenaProfilesRoute
   '/api/v1/selena/public-scan': typeof ApiV1SelenaPublicScanRoute
@@ -805,6 +832,8 @@ export interface FileRouteTypes {
     | '/app/new'
     | '/app/selena'
     | '/app/selena-admin'
+    | '/app/selena-order'
+    | '/app/selena-sources'
     | '/api/auth/$'
     | '/admin/'
     | '/app/'
@@ -824,6 +853,7 @@ export interface FileRouteTypes {
     | '/api/v1/prompts/$promptId'
     | '/api/v1/reports/$reportId'
     | '/api/v1/selena/action-plan'
+    | '/api/v1/selena/citation-gaps'
     | '/api/v1/selena/dashboard'
     | '/api/v1/selena/profiles'
     | '/api/v1/selena/public-scan'
@@ -884,6 +914,8 @@ export interface FileRouteTypes {
     | '/app/new'
     | '/app/selena'
     | '/app/selena-admin'
+    | '/app/selena-order'
+    | '/app/selena-sources'
     | '/api/auth/$'
     | '/admin'
     | '/app'
@@ -903,6 +935,7 @@ export interface FileRouteTypes {
     | '/api/v1/prompts/$promptId'
     | '/api/v1/reports/$reportId'
     | '/api/v1/selena/action-plan'
+    | '/api/v1/selena/citation-gaps'
     | '/api/v1/selena/dashboard'
     | '/api/v1/selena/profiles'
     | '/api/v1/selena/public-scan'
@@ -968,6 +1001,8 @@ export interface FileRouteTypes {
     | '/_authed/app/new'
     | '/_authed/app/selena'
     | '/_authed/app/selena-admin'
+    | '/_authed/app/selena-order'
+    | '/_authed/app/selena-sources'
     | '/api/auth/$'
     | '/_authed/admin/'
     | '/_authed/app/'
@@ -987,6 +1022,7 @@ export interface FileRouteTypes {
     | '/api/v1/prompts/$promptId'
     | '/api/v1/reports/$reportId'
     | '/api/v1/selena/action-plan'
+    | '/api/v1/selena/citation-gaps'
     | '/api/v1/selena/dashboard'
     | '/api/v1/selena/profiles'
     | '/api/v1/selena/public-scan'
@@ -1049,6 +1085,7 @@ export interface RootRouteChildren {
   ApiV1PromptsPromptIdRoute: typeof ApiV1PromptsPromptIdRouteWithChildren
   ApiV1ReportsReportIdRoute: typeof ApiV1ReportsReportIdRoute
   ApiV1SelenaActionPlanRoute: typeof ApiV1SelenaActionPlanRoute
+  ApiV1SelenaCitationGapsRoute: typeof ApiV1SelenaCitationGapsRoute
   ApiV1SelenaDashboardRoute: typeof ApiV1SelenaDashboardRoute
   ApiV1SelenaProfilesRoute: typeof ApiV1SelenaProfilesRoute
   ApiV1SelenaPublicScanRoute: typeof ApiV1SelenaPublicScanRoute
@@ -1255,6 +1292,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthedAppSelenaAdminRouteImport
       parentRoute: typeof AuthedAppRoute
     }
+    '/_authed/app/selena-order': {
+      id: '/_authed/app/selena-order'
+      path: '/selena-order'
+      fullPath: '/app/selena-order'
+      preLoaderRoute: typeof AuthedAppSelenaOrderRouteImport
+      parentRoute: typeof AuthedAppRoute
+    }
+    '/_authed/app/selena-sources': {
+      id: '/_authed/app/selena-sources'
+      path: '/selena-sources'
+      fullPath: '/app/selena-sources'
+      preLoaderRoute: typeof AuthedAppSelenaSourcesRouteImport
+      parentRoute: typeof AuthedAppRoute
+    }
     '/_authed/reports/': {
       id: '/_authed/reports/'
       path: '/'
@@ -1421,6 +1472,13 @@ declare module '@tanstack/react-router' {
       path: '/api/v1/selena/action-plan'
       fullPath: '/api/v1/selena/action-plan'
       preLoaderRoute: typeof ApiV1SelenaActionPlanRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/v1/selena/citation-gaps': {
+      id: '/api/v1/selena/citation-gaps'
+      path: '/api/v1/selena/citation-gaps'
+      fullPath: '/api/v1/selena/citation-gaps'
+      preLoaderRoute: typeof ApiV1SelenaCitationGapsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/v1/selena/dashboard': {
@@ -1726,6 +1784,8 @@ interface AuthedAppRouteChildren {
   AuthedAppNewRoute: typeof AuthedAppNewRoute
   AuthedAppSelenaRoute: typeof AuthedAppSelenaRoute
   AuthedAppSelenaAdminRoute: typeof AuthedAppSelenaAdminRoute
+  AuthedAppSelenaOrderRoute: typeof AuthedAppSelenaOrderRoute
+  AuthedAppSelenaSourcesRoute: typeof AuthedAppSelenaSourcesRoute
   AuthedAppIndexRoute: typeof AuthedAppIndexRoute
 }
 
@@ -1735,6 +1795,8 @@ const AuthedAppRouteChildren: AuthedAppRouteChildren = {
   AuthedAppNewRoute: AuthedAppNewRoute,
   AuthedAppSelenaRoute: AuthedAppSelenaRoute,
   AuthedAppSelenaAdminRoute: AuthedAppSelenaAdminRoute,
+  AuthedAppSelenaOrderRoute: AuthedAppSelenaOrderRoute,
+  AuthedAppSelenaSourcesRoute: AuthedAppSelenaSourcesRoute,
   AuthedAppIndexRoute: AuthedAppIndexRoute,
 }
 
@@ -1822,6 +1884,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiV1PromptsPromptIdRoute: ApiV1PromptsPromptIdRouteWithChildren,
   ApiV1ReportsReportIdRoute: ApiV1ReportsReportIdRoute,
   ApiV1SelenaActionPlanRoute: ApiV1SelenaActionPlanRoute,
+  ApiV1SelenaCitationGapsRoute: ApiV1SelenaCitationGapsRoute,
   ApiV1SelenaDashboardRoute: ApiV1SelenaDashboardRoute,
   ApiV1SelenaProfilesRoute: ApiV1SelenaProfilesRoute,
   ApiV1SelenaPublicScanRoute: ApiV1SelenaPublicScanRoute,

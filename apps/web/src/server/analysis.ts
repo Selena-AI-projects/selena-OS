@@ -45,7 +45,8 @@ export function resolveRange(lookback: LookbackPeriod, timezoneParam: string) {
 export interface ShareOfVoiceEntry {
 	name: string;
 	mentions: number;
-	share: number;
+	/** Null when nothing was mentioned at all — unmeasured, not 0%. */
+	share: number | null;
 	isBrand: boolean;
 	/** Distinct prompts the entity appeared in. */
 	prompts: number;

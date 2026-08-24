@@ -77,13 +77,16 @@ Only after all five does `SELENA_MEASUREMENT_ADAPTER=brightdata` with
 - An unrecognized payload is `MALFORMED_RESPONSE`. It is never stringified into
   an "answer", and it is never reported as an empty answer: a shape nobody has
   read is not a measurement of a surface that said nothing.
-- **Citations are parsed but not stored.** `parseBrightDataAnswer` returns the
-  sources the payload actually showed — only real http(s) links present in the
-  payload, deduplicated, never inferred from the answer text. `runOutcomeSchema`
-  is a strict object with no citation field, and an adapter must not widen a
-  stored contract, so a citation layer has to persist them itself (call the
-  exported parser, or inject your own). Until that layer exists, Visitor View
-  runs record the answer reference and the cost, not the source list.
+- **Citations are parsed and carried on the outcome.** `parseBrightDataAnswer`
+  returns the sources the payload actually showed — only real http(s) links
+  present in the payload, deduplicated, never inferred from the answer text —
+  and the adapter puts them in the outcome's top-level `sources` field
+  (`runOutcomeSchema`). They travel independently of extraction: a run whose
+  extraction context failed to resolve still keeps what the surface displayed.
+  Extraction feeds the same sources into `measurement.citations`, which is what
+  the canonical citation gap (`selena-citation-gap/1`) reads — surface-displayed
+  sources, provider-named `answer.citedUrls` and text-derived domains are three
+  different origins and are never pooled into one figure.
 
 ## What must be confirmed on a real response before the first paid run
 

@@ -5,8 +5,7 @@
  * exists, to avoid account enumeration.
  */
 
-import { createFileRoute, Link, useRouteContext } from "@tanstack/react-router";
-import type { ClientConfig } from "@workspace/config/types";
+import { createFileRoute, Link, redirect } from "@tanstack/react-router";
 import { authClient } from "@workspace/lib/auth/client";
 import { Button } from "@workspace/ui/components/button";
 import { Input } from "@workspace/ui/components/input";
@@ -15,19 +14,18 @@ import { useState } from "react";
 import FullPageCard from "@/components/full-page-card";
 
 export const Route = createFileRoute("/auth/forgot-password")({
+	// A render-time window.location redirect has no window during SSR: the
+	// server render throws and the client recovers with a flash of the page.
+	beforeLoad: ({ context }) => {
+		if (context.clientConfig?.mode !== "cloud") throw redirect({ to: "/auth/login" });
+	},
 	component: ForgotPasswordPage,
 });
 
 function ForgotPasswordPage() {
-	const context = useRouteContext({ strict: false }) as { clientConfig?: ClientConfig };
 	const [email, setEmail] = useState("");
 	const [loading, setLoading] = useState(false);
 	const [submitted, setSubmitted] = useState(false);
-
-	if (context.clientConfig?.mode !== "cloud") {
-		window.location.href = "/auth/login";
-		return null;
-	}
 
 	async function handleSubmit(e: React.FormEvent) {
 		e.preventDefault();

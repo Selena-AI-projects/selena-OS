@@ -11,6 +11,7 @@ import {
 	svQuotes,
 	svScenarios,
 } from "@workspace/lib/db/schema";
+import { lockedProfileBlock } from "@workspace/lib/selena-extraction-context";
 import { createSelenaRepositories, type SelenaRepositoryContext } from "@workspace/lib/selena-visibility-repositories";
 import {
 	analysisSubjectsSchema,
@@ -45,7 +46,7 @@ import { resolveSessionAuthContext } from "../lib/selena-auth-context";
 // person did not read and accept, which is the whole point of the
 // configuration lock.
 
-const repositories = createSelenaRepositories(db);
+const repositories = /* @__PURE__ */ createSelenaRepositories(db);
 
 async function requireAdminContext(): Promise<SelenaRepositoryContext> {
 	await requireAdmin();
@@ -314,6 +315,10 @@ async function createSelenaOrderDraft(data: OrderDraftInput) {
 			snapshot: {
 				measurementScope: scope,
 				analysisSubjects: subjects,
+				// The extraction resolver prefers this block over the live
+				// profile: without it a profile edit after purchase would change
+				// what the cycle's runs are measured against.
+				profile: lockedProfileBlock(profile),
 				planId: plan.planId,
 				catalogVersion: SELENA_CATALOG_VERSION,
 				scenarios: approved.map((scenario) => ({

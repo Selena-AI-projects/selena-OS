@@ -4,8 +4,10 @@ import {
 	apiModelIds,
 	isApiViewWebSearchEnabled,
 	type RunOutcome,
+	runMeasurementSchema,
 	runOutcomeSchema,
 } from "@workspace/selena-visibility-contracts";
+import { type ExtractionContext, extractMeasurement } from "../selena-answer-extraction";
 import type { SelenaExecutablePermit, SelenaMeasurementAdapter, SelenaMeasurementPermit } from "../selena-measurement";
 import { estimateRunCostUsd } from "../usage/cost";
 
@@ -38,6 +40,14 @@ export type OpenRouterAdapterDeps = {
 	 * that owns the permit.
 	 */
 	resolveScenarioText: (permit: SelenaExecutablePermit) => Promise<string> | string;
+	/**
+	 * Brand, competitor and domain terms for extraction, resolved per permit
+	 * like the scenario text. Optional: without it the run is stored with its
+	 * raw response only, and extraction can be re-run from that later.
+	 */
+	resolveExtractionContext?: (permit: SelenaExecutablePermit) => Promise<ExtractionContext> | ExtractionContext;
+	/** The sold system name this model answers for; defaults to the model id. */
+	system?: string;
 	now?: () => Date;
 	referer?: string;
 	title?: string;
@@ -58,12 +68,7 @@ type OpenRouterCompletionResponse = {
 	usage?: OpenRouterUsage | null;
 };
 
-/**
- * Whether a stored cost came from the provider or from the local estimate.
- * RunOutcome is a strict schema with a bare `costUsd`, so this basis cannot be
- * persisted alongside it today; callers that need the distinction must read it
- * here rather than assume a stored number is billed fact.
- */
+/** Whether a cost came from the provider or from the local estimate. */
 export type OpenRouterCostBasis = "provider_reported" | "estimated";
 
 class ResponseTooLargeError extends Error {}
@@ -107,12 +112,32 @@ function isAbortError(error: unknown): boolean {
 	return error instanceof Error && (error.name === "AbortError" || error.name === "TimeoutError");
 }
 
-function invalidOutcome(permit: SelenaExecutablePermit, reason: string): RunOutcome {
-	return { dispatchKey: permit.dispatchKey, status: "INVALID", validity: "INVALID", invalidReason: reason };
+type CostFields = Pick<RunOutcome, "costUsd" | "costBasis" | "provider">;
+
+/**
+ * §10.2: once a request has been dispatched the charge may exist whether or
+ * not a usable answer came back, so every post-dispatch outcome carries a
+ * cost — the provider's reported figure when the payload names one, the
+ * estimate otherwise. An unrecorded charge is how a cap alert reads $0 while
+ * a broken cycle burns real budget.
+ */
+function costFields(usage?: OpenRouterUsage | null): CostFields {
+	const { costUsd, basis } = resolveOpenRouterCost(usage);
+	return costUsd === null
+		? {}
+		: {
+				costUsd,
+				costBasis: basis === "provider_reported" ? ("actual" as const) : ("estimated" as const),
+				provider: "openrouter",
+			};
 }
 
-function failedOutcome(permit: SelenaExecutablePermit, reason: string): RunOutcome {
-	return { dispatchKey: permit.dispatchKey, status: "FAILED", validity: "INVALID", invalidReason: reason };
+function invalidOutcome(permit: SelenaExecutablePermit, reason: string, cost: CostFields = {}): RunOutcome {
+	return { dispatchKey: permit.dispatchKey, status: "INVALID", validity: "INVALID", invalidReason: reason, ...cost };
+}
+
+function failedOutcome(permit: SelenaExecutablePermit, reason: string, cost: CostFields = {}): RunOutcome {
+	return { dispatchKey: permit.dispatchKey, status: "FAILED", validity: "INVALID", invalidReason: reason, ...cost };
 }
 
 async function readBodyWithinLimit(response: Response, limitBytes: number): Promise<string> {
@@ -219,35 +244,68 @@ export function createOpenRouterAdapter(deps: OpenRouterAdapterDeps): SelenaMeas
 				// The provider error is classified, never quoted: a thrown request
 				// error can carry the request headers, and this text is stored.
 				return isAbortError(error) || controller.signal.aborted
-					? invalidOutcome(permit, "TIMEOUT")
-					: failedOutcome(permit, "TRANSPORT_ERROR");
+					? invalidOutcome(permit, "TIMEOUT", costFields())
+					: failedOutcome(permit, "TRANSPORT_ERROR", costFields());
 			}
 			if (!response.ok) {
 				// The error body can echo request material back, so it is dropped
 				// rather than read into the run row.
 				await response.body?.cancel().catch(() => {});
-				return failedOutcome(permit, `PROVIDER_HTTP_${response.status}`);
+				return failedOutcome(permit, `PROVIDER_HTTP_${response.status}`, costFields());
 			}
 			let raw: string;
 			try {
 				raw = await readBodyWithinLimit(response, maxResponseBytes);
 			} catch (error) {
-				if (error instanceof ResponseTooLargeError) return invalidOutcome(permit, "RESPONSE_TOO_LARGE");
+				if (error instanceof ResponseTooLargeError) return invalidOutcome(permit, "RESPONSE_TOO_LARGE", costFields());
 				return isAbortError(error) || controller.signal.aborted
-					? invalidOutcome(permit, "TIMEOUT")
-					: failedOutcome(permit, "TRANSPORT_ERROR");
+					? invalidOutcome(permit, "TIMEOUT", costFields())
+					: failedOutcome(permit, "TRANSPORT_ERROR", costFields());
 			}
 			let data: OpenRouterCompletionResponse;
 			try {
 				data = JSON.parse(raw) as OpenRouterCompletionResponse;
 			} catch {
-				return invalidOutcome(permit, "MALFORMED_RESPONSE");
+				return invalidOutcome(permit, "MALFORMED_RESPONSE", costFields());
 			}
-			const content = data.choices?.[0]?.message?.content;
-			if (typeof content !== "string" || content.trim() === "") return invalidOutcome(permit, "EMPTY_RESPONSE");
+			const rawContent = data.choices?.[0]?.message?.content;
+			// The payload carries the real usage even when the answer is unusable:
+			// bill what was reported, not the estimate.
+			if (typeof rawContent !== "string" || rawContent.trim() === "")
+				return invalidOutcome(permit, "EMPTY_RESPONSE", costFields(data.usage));
+			// The stored answer text must never store the credential: a response
+			// that echoes request material back would otherwise write the key
+			// into a retained row.
+			const content = rawContent.split(deps.apiKey).join("[redacted-credential]");
+			// Extraction is an enrichment of a call that already succeeded and was
+			// paid for: a context failure must not turn paid evidence into a
+			// FAILED row. The raw response is stored either way, so a missing
+			// measurement is recoverable offline rather than lost.
+			let measurement: ReturnType<typeof extractMeasurement> | null = null;
+			if (deps.resolveExtractionContext) {
+				try {
+					const extracted = extractMeasurement({
+						answerText: content,
+						// API View runs with web search off, so the answer carries no
+						// source list; an empty one here is the truth, not a gap.
+						sources: [],
+						system: deps.system ?? deps.model,
+						model: deps.model,
+						// No search plugin is ever sent (isApiViewWebSearchEnabled), so
+						// this answer is the model's own knowledge by construction.
+						captureMode: "training_data",
+						context: await deps.resolveExtractionContext(permit),
+					});
+					// Validated here, not in the executor: a context that produces a
+					// contract-invalid measurement (an empty language, a blank term)
+					// must cost the measurement, never the paid run.
+					measurement = runMeasurementSchema.safeParse(extracted).success ? extracted : null;
+				} catch {
+					measurement = null;
+				}
+			}
 			const usage = data.usage;
 			const tokenUsage = tokenUsageFrom(usage);
-			const { costUsd } = resolveOpenRouterCost(usage);
 			return {
 				dispatchKey: permit.dispatchKey,
 				status: "SUCCEEDED",
@@ -259,7 +317,8 @@ export function createOpenRouterAdapter(deps: OpenRouterAdapterDeps): SelenaMeas
 				// is kept — never a provider error body, which can echo the key.
 				answer: { text: content, retainUntil: answerRetainUntil(now()) },
 				...(tokenUsage ? { tokenUsage } : {}),
-				...(costUsd === null ? {} : { costUsd }),
+				...costFields(usage),
+				...(measurement === null ? {} : { measurement }),
 			};
 		} finally {
 			clearTimeout(timer);

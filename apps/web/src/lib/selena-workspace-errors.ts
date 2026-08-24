@@ -26,6 +26,17 @@ const FIELD_LABELS: Record<string, [string, string]> = {
 	languages: ["Languages", "Языки"],
 };
 
+const SUGGEST_MESSAGES: Record<string, [string, string]> = {
+	SUGGEST_LLM_NOT_BUDGETED: [
+		"Automatic suggestions are switched off here. Add the questions by hand — one per line.",
+		"Автоподбор здесь выключен. Добавьте вопросы вручную — по одному в строке.",
+	],
+	SUGGEST_BUDGET_EXHAUSTED: [
+		"This month's suggestion budget is used up. Add the questions by hand, or try again next month.",
+		"Месячный лимит автоподбора исчерпан. Добавьте вопросы вручную или попробуйте в следующем месяце.",
+	],
+};
+
 const WEBSITE_MESSAGES: Record<string, [string, string]> = {
 	WEBSITE_DNS_FAILED: [
 		"We could not find a site at this address. Check the spelling of the primary website.",
@@ -56,6 +67,90 @@ const WEBSITE_MESSAGES: Record<string, [string, string]> = {
 		"Настройки проверки некорректны. Свяжитесь с Selena Systems.",
 	],
 };
+
+/**
+ * The operator desk throws the same machine codes the backend gates use
+ * (`SELENA_PAYMENTS_DISABLED`, `SELENA_PREFLIGHT_BLOCKED: …`). The operator
+ * is the business owner, not an engineer, so each known code names the env
+ * switch or the next step instead of assuming the reader can grep for it.
+ */
+const ADMIN_MESSAGES: Record<string, [string, string]> = {
+	SELENA_PAYMENTS_DISABLED: [
+		"Payments are switched off in this deployment. Set SELENA_PAYMENTS_ENABLED=true and SELENA_PAYMENT_MODE=test on the web service, then retry.",
+		"Платежи в этом развёртывании выключены. Поставьте SELENA_PAYMENTS_ENABLED=true и SELENA_PAYMENT_MODE=test на сервисе web и повторите.",
+	],
+	SELENA_PAYMENT_MODE_MISMATCH: [
+		"The payment mode does not match SELENA_PAYMENT_MODE on the web service. Align the two before retrying.",
+		"Режим платежа не совпадает с SELENA_PAYMENT_MODE на сервисе web. Приведите их к одному значению и повторите.",
+	],
+	SELENA_MEASUREMENT_DISABLED: [
+		"Measurement execution is switched off. Set SELENA_MEASUREMENT_ENABLED=true on web and worker to let queued runs execute.",
+		"Исполнение замеров выключено. Поставьте SELENA_MEASUREMENT_ENABLED=true на web и worker, чтобы очередь выполнялась.",
+	],
+	SELENA_SCENARIOS_NOT_APPROVED: [
+		"Some selected questions are not approved. Order only approved questions, or approve them first.",
+		"Часть выбранных вопросов не утверждена. Заказывайте только утверждённые вопросы или сначала утвердите их.",
+	],
+	SELENA_ORDER_NOT_QUEUED: [
+		"The order is not in the QUEUED state. Approve the run first — approval is what moves it to QUEUED.",
+		"Заказ не в статусе QUEUED. Сначала одобрите прогон — именно одобрение переводит заказ в QUEUED.",
+	],
+	SELENA_PROFILE_MISSING: [
+		"This project has no saved brand profile yet. Save and confirm the profile in the cabinet first.",
+		"У проекта ещё нет сохранённого профиля бренда. Сначала сохраните и подтвердите профиль в кабинете.",
+	],
+	SELENA_PROFILE_NOT_CONFIRMED: [
+		"The brand profile is not confirmed yet. Confirm it in the cabinet first.",
+		"Профиль бренда ещё не подтверждён. Сначала подтвердите его в кабинете.",
+	],
+	SELENA_PROFILE_HAS_NO_QUESTIONS: [
+		"The confirmed profile has no customer questions. Add questions and confirm the profile again.",
+		"В подтверждённом профиле нет вопросов клиентов. Добавьте вопросы и подтвердите профиль ещё раз.",
+	],
+};
+
+/**
+ * Known preflight blockers, named for the operator. Unknown codes fall back
+ * to the code itself — the check list on screen already explains each one.
+ */
+const PREFLIGHT_HINTS: Record<string, [string, string]> = {
+	WITHIN_PROVIDER_BUDGET: [
+		"the provider budget is missing or spent — set SELENA_PROVIDER_BUDGET_USD on the web service",
+		"бюджет провайдеров не задан или исчерпан — задайте SELENA_PROVIDER_BUDGET_USD на сервисе web",
+	],
+	PAYMENT_RECORDED: ["no payment is recorded for the order", "по заказу не зафиксирован платёж"],
+};
+
+export function humanizeSelenaAdminError(cause: unknown, locale: WorkspaceLocale, fallback: string): string {
+	const raw = cause instanceof Error ? cause.message : typeof cause === "string" ? cause : "";
+	if (!raw.trim()) return fallback;
+
+	const exact = ADMIN_MESSAGES[raw];
+	if (exact) return tr(locale, exact);
+
+	const preflight = raw.match(/^SELENA_PREFLIGHT_BLOCKED:\s*(.+)$/);
+	if (preflight) {
+		const blockers = preflight[1].split(/[,\s]+/).filter(Boolean);
+		const hints = blockers
+			.map((code) => {
+				const hint = PREFLIGHT_HINTS[code];
+				return hint ? tr(locale, hint) : code;
+			})
+			.join("; ");
+		return locale === "ru"
+			? `Префлайт не пропустил действие: ${hints}. Выберите заказ в очереди ниже — там виден каждый пункт проверки.`
+			: `Preflight blocked the action: ${hints}. Select the order in the queue below to see every check.`;
+	}
+
+	const planLimit = raw.match(/^SELENA_PLAN_SCENARIO_LIMIT_EXCEEDED:\s*(\d+)/);
+	if (planLimit) {
+		return locale === "ru"
+			? `В этом плане не больше ${planLimit[1]} вопросов. Снимите лишние или выберите план побольше.`
+			: `This plan allows at most ${planLimit[1]} questions. Unselect the extras or pick a larger plan.`;
+	}
+
+	return raw;
+}
 
 function tr(locale: WorkspaceLocale, pair: [string, string]): string {
 	return locale === "ru" ? pair[1] : pair[0];
@@ -125,6 +220,9 @@ export function humanizeSelenaError(cause: unknown, locale: WorkspaceLocale, fal
 			})
 			.join(" ");
 	}
+
+	const suggest = SUGGEST_MESSAGES[raw];
+	if (suggest) return tr(locale, suggest);
 
 	const website = WEBSITE_MESSAGES[raw];
 	if (website) return tr(locale, website);

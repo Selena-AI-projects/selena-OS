@@ -14,7 +14,7 @@ import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 import { resolveSessionAuthContext } from "../lib/selena-auth-context";
 
-const repositories = createSelenaRepositories(db);
+const repositories = /* @__PURE__ */ createSelenaRepositories(db);
 
 export const createSelenaQuoteFn = createServerFn({ method: "POST" })
 	.validator(

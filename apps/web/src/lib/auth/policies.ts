@@ -108,8 +108,12 @@ export function evaluateDeploymentPolicy(
 	// 3. Public API v1 key authentication (except docs and spec)
 	const isPublicApiV1 = pathname.startsWith("/api/v1/");
 	const isPublicApiV1Doc = pathname === "/api/v1/docs" || pathname === "/api/v1/docs/";
+	// Selena tenant routes authenticate against sv_api_keys inside their own
+	// handlers (resolveApiKeyAuthContext); demanding the deployment admin key
+	// here would reject every valid tenant key before the handler runs.
+	const isSelenaTenantApi = pathname.startsWith("/api/v1/selena/");
 
-	if (isPublicApiV1 && !isPublicApiV1Doc && !isOpenApi) {
+	if (isPublicApiV1 && !isPublicApiV1Doc && !isOpenApi && !isSelenaTenantApi) {
 		const keyResult = evaluateApiKeyAuth(authorizationHeader, options?.adminApiKeys ?? []);
 		if (keyResult !== "allow") {
 			return {

@@ -92,3 +92,18 @@ All AI scraping flows through a single `Provider` interface in `packages/lib/src
 3. `getProvider(providerId).run(model, prompt, { webSearch, version })` dispatches to a concrete `registry/` implementation and returns a normalized `ScrapeResult` (`textContent`, `rawOutput`, `webQueries`, `citations`, `modelVersion`).
 
 User-facing setup is documented in [Providers](/docs/user-guide/providers).
+
+## Empty Sets Are Not Zeros
+
+A metric computed over an empty set is `null`, never `0`. A `0` is a real
+measurement — a non-empty denominator in which nothing was mentioned. The UI
+renders `null` as "no data" (an em dash or an explicit empty state), not as
+"0%".
+
+- Empty set (no runs, no mentions universe) → `null`
+- Non-empty set with zero mentions → `0`
+
+`percentOrNull` in `apps/web/src/lib/visibility-stats.ts` implements the rule
+for percentage metrics; `computeShareOfVoice` applies it to shares. The Selena
+layer follows the same principle ("never a confident zero") in its own
+analysis and ledger metrics.

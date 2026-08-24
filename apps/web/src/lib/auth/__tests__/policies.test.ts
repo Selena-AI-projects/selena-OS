@@ -99,6 +99,20 @@ describe("evaluateDeploymentPolicy", () => {
 			expect(result.action).toBe("allow");
 		});
 
+		it("passes Selena tenant routes through to their own sv_api_keys auth", () => {
+			// No admin key on the request: the handler's resolveApiKeyAuthContext
+			// is the authority for /api/v1/selena/*, not the deployment gate.
+			const result = evaluateDeploymentPolicy(features, req("GET", "/api/v1/selena/citation-gaps"), {
+				adminApiKeys: API_KEYS,
+			});
+			expect(result.action).toBe("allow");
+		});
+
+		it("still demands the admin key on non-Selena API v1 routes", () => {
+			const result = evaluateDeploymentPolicy(features, req("GET", "/api/v1/prompts"), { adminApiKeys: API_KEYS });
+			expect(result).toMatchObject({ action: "block", status: 401 });
+		});
+
 		it("serves OpenAPI spec", () => {
 			const result = evaluateDeploymentPolicy(features, req("GET", "/api/v1/openapi.json"));
 			expect(result.action).toBe("serve-openapi");

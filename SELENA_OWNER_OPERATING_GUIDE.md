@@ -49,11 +49,50 @@ records every run as `INVALID`, so an accidental run cannot produce something
 that reads like a real measurement.
 
 `SELENA_EMERGENCY_STOP=true` blocks execution at the point a provider would be
-contacted, including for runs that are already claimed.
+contacted, including for runs that are already claimed. It is the one stop for
+every paid path, not only measurement: the onboarding research call refuses
+under it too, because a stop that halts runs while a button keeps calling a
+vendor is not a stop.
+
+`SELENA_SUGGEST_LLM` decides whether the onboarding "suggest competitors and
+questions" button may spend. Unset is off, and so is any value other than
+`free_budget` — the button is free to the customer and is a real LLM round trip
+on a live key, so switching it on is a deliberate act with a name attached.
+While it is off the server function refuses with `SUGGEST_LLM_NOT_BUDGETED`
+before anything is queued, and a job that was already queued refuses in the
+worker.
+
+That class is a gate, not a meter: nothing counts the calls or the dollars, so
+the limit that actually holds is the spend cap on the provider account.
+
+`SELENA_PROMO_CODES` is a comma-separated list of codes that let a plan request
+through free of charge while there is no online checkout — `AUGUST2026,FRIENDS`
+accepts either, matched case-insensitively. Unset means no code works and every
+request says the payment will be arranged by hand. A code marks the request
+free; it starts nothing, because a request is a lead and the paid order is
+still built on the desk.
 
 Measurement jobs are never scheduled. A run starts from an explicit action on a
 specific permit, and a claimed permit is spent: it cannot be retried into a
 second provider call.
+
+### Rehearsing a cycle without spending anything
+
+`pnpm -C packages/lib rehearse:selena-stub-cycle` runs a whole cycle against a
+local Postgres with no provider behind it: it seeds a project, plans permits the
+way an approved order does, executes every one of them, and then checks that the
+runs, the mention rows and the cost-ledger rows landed together before printing
+the §12 metrics computed over them. It deletes everything it created.
+
+Nothing it writes can be mistaken for a measurement — the model is `stub`, every
+charge is zero, and the answers are synthesized from the permit itself. Run it
+after any change to extraction, storage or the metrics, and read the numbers as
+a proof that the chain is wired, never as evidence about a brand.
+
+The stub adapter is deliberately registered nowhere, so
+`SELENA_MEASUREMENT_ADAPTER=stub` in a deployment fails with
+`SELENA_ADAPTER_NOT_REGISTERED`: a rehearsal is something you run on purpose
+against a scratch database, not a state a live system can drift into.
 
 ### Wiring the OpenRouter adapter for API View
 
@@ -67,15 +106,21 @@ order, and none of them is an environment variable on its own.
    the run is sold as — use one of the catalog's API View model ids
    (`apiModelIds` in the contracts package), because a run measures the model
    the customer bought.
-3. **Give the adapter a way to read the scenario text.** A permit carries a
-   scenario id, not the question, and the adapter holds no database access on
-   purpose. The repository layer today lists scenarios by family, so add a
-   tenant-scoped `textFor(ctx, scenarioId)` read next to `scenarios.list` in
-   `packages/lib/src/selena-visibility-repositories.ts` and pass it in.
+3. **Give the adapter its two per-permit reads.** A permit carries ids, not the
+   question and not the brand, and the adapter holds no database access on
+   purpose. `createSelenaMeasurementResolvers(db)` in
+   `packages/lib/src/selena-extraction-context.ts` returns both:
+   `resolveScenarioText` and `resolveExtractionContext`. Without the second one
+   the run is still stored and still billed, but with no mention, position or
+   citation extracted from it — the answer reference is kept, so extraction can
+   be re-run later, but no ledger metric moves until it is passed in.
 4. **Register the adapter** in `apps/worker/src/jobs/selena-measure.ts`:
 
    ```ts
    import { createOpenRouterAdapter } from "@workspace/lib/adapters/openrouter";
+   import { createSelenaMeasurementResolvers } from "@workspace/lib/selena-extraction-context";
+
+   const resolvers = createSelenaMeasurementResolvers(db);
 
    const ADAPTERS: MeasurementAdapterRegistry = {
      noop: createNoopMeasurementAdapter(),
@@ -83,10 +128,16 @@ order, and none of them is an environment variable on its own.
        apiKey: process.env.OPENROUTER_API_KEY ?? "",
        model: "anthropic/claude-haiku-4.5",
        fetchImpl: fetch,
-       resolveScenarioText: (permit) => scenarioTextFor(ctx, permit.scenarioId),
+       system: "chatgpt_api",
+       resolveScenarioText: resolvers.resolveScenarioText,
+       resolveExtractionContext: resolvers.resolveExtractionContext,
      }),
    };
    ```
+
+   `system` must be the sold system id the permits were planned with. Evidence
+   attributed to any other system is dropped from the ledger rather than stored
+   under a name the customer did not buy.
 
 5. **Widen the allowlist**, which is the actual owner gate:
    `assertAdapterAllowed` in
@@ -116,9 +167,8 @@ What the adapter does and does not do, so the first invoice holds no surprises:
   field, holds the answer body only — never a provider error body, which can
   echo the API key — and carries a retention window the owner sets.
 - `costUsd` is the cost OpenRouter reported for that call when it reports one,
-  and the coarse local per-run estimate otherwise. The stored number does not
-  say which it was, so reconcile against the provider invoice rather than
-  reading it as billed fact.
+  and the coarse local per-run estimate otherwise; `costBasis` says which of the
+  two it was. Neither is a billed fact — reconcile against the provider invoice.
 - A provider HTTP error is recorded as `PROVIDER_HTTP_<code>` and a transport
   failure as `TRANSPORT_ERROR`, with nothing quoted from the provider: error
   bodies and request errors can echo the API key back, and run rows are read by

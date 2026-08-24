@@ -20,6 +20,7 @@ function permitFor(overrides: Partial<SelenaExecutablePermit> = {}): SelenaExecu
 		organizationId: "org-1",
 		cycleId: "cycle-1",
 		scenarioId: "scenario-1",
+		systemId: null,
 		channel: "API",
 		dispatchKey: "order-1:scenario-1:system-1:0:1",
 		expiresAt: new Date("2026-08-19T11:00:00.000Z"),
@@ -132,6 +133,56 @@ describe("Selena permit execution", () => {
 		await expect(
 			executePermit({ permit: permitFor(), adapter, cycleState: cycleStateFor(), config: enabled, now }),
 		).rejects.toThrow("SELENA_DISPATCH_KEY_MISMATCH");
+	});
+
+	it("drops a measurement attributed to a system the permit did not authorize, keeping the run", async () => {
+		const measurement = {
+			system: "gemini",
+			language: "en",
+			extractorVersion: "selena-extract/1",
+			captureMode: "unknown" as const,
+			brand: "KORA",
+			mention: true,
+			position: null,
+			ownedCitation: false,
+			citations: [],
+			competitors: [],
+			factualErrors: [],
+		};
+		const { adapter } = spyAdapter({
+			dispatchKey: "order-1:scenario-1:system-1:0:1",
+			status: "SUCCEEDED",
+			validity: "VALID",
+			measurement,
+		});
+		const mismatched = await executePermit({
+			permit: permitFor({ systemId: "chatgpt" }),
+			adapter,
+			cycleState: cycleStateFor(),
+			config: enabled,
+			now,
+		});
+		expect(mismatched.status).toBe("SUCCEEDED");
+		expect(mismatched.measurement).toBeUndefined();
+
+		const matched = await executePermit({
+			permit: permitFor({ systemId: "gemini" }),
+			adapter,
+			cycleState: cycleStateFor(),
+			config: enabled,
+			now,
+		});
+		expect(matched.measurement).toEqual(measurement);
+
+		// A pre-P0-07 permit carries no systemId and cannot assert attribution.
+		const legacy = await executePermit({
+			permit: permitFor({ systemId: null }),
+			adapter,
+			cycleState: cycleStateFor(),
+			config: enabled,
+			now,
+		});
+		expect(legacy.measurement).toEqual(measurement);
 	});
 
 	it("rejects an outcome that does not satisfy the run outcome contract", async () => {

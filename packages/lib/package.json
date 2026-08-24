@@ -8,7 +8,8 @@
 		"test": "vitest run",
 		"compare:onboarding": "tsx scripts/compare-onboarding.ts",
 		"generate:auth-schema": "bash scripts/generate-auth-schema.sh",
-		"verify:membership-dedupe": "tsx scripts/verify-membership-dedupe.ts"
+		"verify:membership-dedupe": "tsx scripts/verify-membership-dedupe.ts",
+		"rehearse:selena-stub-cycle": "tsx scripts/selena-stub-cycle.ts"
 	},
 	"exports": {
 		"./db/db": "./src/db/db.ts",
@@ -21,6 +22,7 @@
 		"./constants": "./src/constants.ts",
 		"./expedite": "./src/expedite.ts",
 		"./run-backoff": "./src/run-backoff.ts",
+		"./prompt-run-aggregates": "./src/prompt-run-aggregates.ts",
 		"./text-extraction": "./src/text-extraction.ts",
 		"./onboarding": "./src/onboarding/index.ts",
 		"./tag-utils": "./src/tag-utils.ts",
@@ -32,29 +34,38 @@
 		"./providers/types": "./src/providers/types.ts",
 		"./entitlements": "./src/entitlements/index.ts",
 		"./run-policy": "./src/run-policy/index.ts",
-		"./usage": "./src/usage/cost.ts"
-		,"./selena-visibility-repositories": "./src/selena-visibility-repositories.ts",
+		"./usage": "./src/usage/cost.ts",
+		"./selena-visibility-repositories": "./src/selena-visibility-repositories.ts",
 		"./selena-export": "./src/selena-export.ts",
 		"./selena-answer-analysis": "./src/selena-answer-analysis.ts",
 		"./selena-measurement": "./src/selena-measurement.ts",
-		"./selena-findings": "./src/selena-findings.ts"
-		,"./selena-dataset-gateway": "./src/selena-dataset-gateway.ts"
-		,"./recommendation-engine": "./src/recommendation-engine.ts"
-		,"./website-collector": "./src/website-collector.ts"
-		,"./website-security": "./src/website-security.ts"
-		,"./selena-monitoring": "./src/selena-monitoring.ts"
-		,"./selena-flow": "./src/selena-flow.ts"
-		,"./public-source-adapters": "./src/public-source-adapters.ts"
-		,"./public-provider-gates": "./src/public-provider-gates.ts"
-		,"./recommendation-persistence": "./src/recommendation-persistence.ts"
-		,"./recommendation-engine": "./src/recommendation-engine.ts"
-		,"./selena-entities": "./src/selena-entities.ts"
-		,"./selena-manual-pilot": "./src/selena-manual-pilot.ts"
-		,"./selena-dispatch": "./src/selena-dispatch.ts"
-		,"./selena-preflight": "./src/selena-preflight.ts"
-		,"./selena-run-executor": "./src/selena-run-executor.ts"
-		,"./adapters/openrouter": "./src/adapters/openrouter-measurement-adapter.ts"
-		,"./adapters/brightdata": "./src/adapters/brightdata-measurement-adapter.ts"
+		"./selena-findings": "./src/selena-findings.ts",
+		"./selena-dataset-gateway": "./src/selena-dataset-gateway.ts",
+		"./recommendation-engine": "./src/recommendation-engine.ts",
+		"./website-collector": "./src/website-collector.ts",
+		"./website-security": "./src/website-security.ts",
+		"./google-maps-location": "./src/google-maps-location.ts",
+		"./selena-monitoring": "./src/selena-monitoring.ts",
+		"./selena-flow": "./src/selena-flow.ts",
+		"./public-source-adapters": "./src/public-source-adapters.ts",
+		"./public-provider-gates": "./src/public-provider-gates.ts",
+		"./recommendation-persistence": "./src/recommendation-persistence.ts",
+		"./recommendation-engine": "./src/recommendation-engine.ts",
+		"./selena-entities": "./src/selena-entities.ts",
+		"./selena-manual-pilot": "./src/selena-manual-pilot.ts",
+		"./selena-dispatch": "./src/selena-dispatch.ts",
+		"./selena-preflight": "./src/selena-preflight.ts",
+		"./selena-run-executor": "./src/selena-run-executor.ts",
+		"./selena-answer-extraction": "./src/selena-answer-extraction.ts",
+		"./selena-citation-gap": "./src/selena-citation-gap.ts",
+		"./selena-cycle-diff": "./src/selena-cycle-diff.ts",
+		"./selena-answer-retention": "./src/selena-answer-retention.ts",
+		"./selena-raw-evidence-storage": "./src/selena-raw-evidence-storage.ts",
+		"./selena-suggest-metering": "./src/selena-suggest-metering.ts",
+		"./selena-extraction-context": "./src/selena-extraction-context.ts",
+		"./selena-ledger-metrics": "./src/selena-ledger-metrics.ts",
+		"./adapters/openrouter": "./src/adapters/openrouter-measurement-adapter.ts",
+		"./adapters/brightdata": "./src/adapters/brightdata-measurement-adapter.ts"
 	},
 	"dependencies": {
 		"@ai-sdk/anthropic": "^4.0.27",

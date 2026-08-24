@@ -37,7 +37,7 @@ export const Route = createFileRoute("/_authed/app/$brand/share-of-voice")({
 	component: ShareOfVoicePage,
 });
 
-const formatPct = (share: number) => `${Math.round(share * 100)}%`;
+const formatPct = (share: number | null) => (share === null ? "\u2014" : `${Math.round(share * 100)}%`);
 
 /** Latest non-null point of the share-of-voice trend — the value the line ends on. */
 function currentShareOf(series: Array<{ share: number | null }>): number | null {

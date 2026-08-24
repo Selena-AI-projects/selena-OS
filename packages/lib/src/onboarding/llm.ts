@@ -21,6 +21,7 @@
  */
 import type { z } from "zod";
 import { getProvider, parseScrapeTargets, type Provider, type StructuredResearchResult } from "../providers";
+import { assertGlobalProviderStop } from "../run-policy";
 
 /**
  * Direct-API providers in the order onboarding prefers them. GPT-5 Mini was
@@ -87,6 +88,9 @@ export function resolveResearchProvider(env: Record<string, string | undefined> 
  * provider's `runStructuredResearch` impl — we just pick the provider.
  */
 export async function runStructuredResearchPrompt<T>(prompt: string, schema: z.ZodType<T>): Promise<T> {
+	// Asserted here rather than only at the callers: this is the last place
+	// before a vendor is contacted, so a path added later cannot miss the stop.
+	assertGlobalProviderStop();
 	const provider = resolveResearchProvider();
 	if (!provider.runStructuredResearch) {
 		throw new Error(`Provider "${provider.id}" does not implement structured research`);
@@ -108,6 +112,7 @@ export async function runStructuredCompletionPrompt<T>(
 	prompt: string,
 	schema: z.ZodType<T>,
 ): Promise<StructuredResearchResult<T>> {
+	assertGlobalProviderStop();
 	const provider = resolveResearchProvider();
 	if (!provider.runStructuredResearch) {
 		throw new Error(`Provider "${provider.id}" does not implement structured research`);

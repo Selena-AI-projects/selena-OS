@@ -1,4 +1,4 @@
-import { bdclient } from "@brightdata/sdk";
+import type { bdclient } from "@brightdata/sdk";
 import { WEB_QUERIES_UNAVAILABLE } from "../../constants";
 import { getCredential } from "../../secrets";
 import { type Citation, extractCitationsFromBrightdata, extractTextFromBrightdata } from "../../text-extraction";
@@ -25,8 +25,12 @@ const BD_BASE_URL: Record<string, string> = {
 	perplexity: "https://www.perplexity.ai/",
 };
 
-function createClient(): bdclient {
-	return new bdclient({ apiKey: getCredential("BRIGHTDATA_API_TOKEN") });
+// Loaded on demand: the provider registry is imported by client code for its
+// metadata, and a static edge to this SDK shipped undici — and its Node
+// globals — into the browser bundle.
+async function createClient(): Promise<bdclient> {
+	const { bdclient: BrightDataClient } = await import("@brightdata/sdk");
+	return new BrightDataClient({ apiKey: getCredential("BRIGHTDATA_API_TOKEN") });
 }
 
 const BRIGHTDATA_REQUEST_URL = "https://api.brightdata.com/request";
@@ -198,7 +202,7 @@ export const brightdata: Provider = {
 			);
 		}
 
-		const client = createClient();
+		const client = await createClient();
 		let snapshotId: string | undefined;
 		let consumed = false;
 		try {
