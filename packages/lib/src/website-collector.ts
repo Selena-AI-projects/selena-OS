@@ -388,12 +388,12 @@ const recommendationTitles: Record<string, string> = {
 	"WEB-021": "Confirm that excluding the site from model training is deliberate",
 };
 
-export function buildWebsiteActionPlan(
-	collection: WebsiteCollection,
-	context: WebsiteActionPlanContext = {},
-): ActionPlan {
-	const bySubject = new Map(collection.evidence.map((item) => [item.subject, item]));
-	const rules: Array<[string, string, string, "HIGH" | "MEDIUM" | "LOW"]> = [
+/**
+ * The free audit's rule table, exported so the customer-facing report can
+ * render every check — the passing ones included — instead of only the
+ * failures the action plan keeps.
+ */
+export const WEBSITE_SIGNAL_RULES: ReadonlyArray<readonly [string, string, string, "HIGH" | "MEDIUM" | "LOW"]> = [
 		["title", "WEB-001", "Add a descriptive page title that identifies the brand and offer.", "MEDIUM"],
 		["meta-description", "WEB-002", "Add a concise meta description describing the confirmed offer.", "MEDIUM"],
 		["meta-robots", "WEB-003", "Publish an explicit reviewable robots policy.", "LOW"],
@@ -417,6 +417,13 @@ export function buildWebsiteActionPlan(
 		["images", "WEB-013", "Add useful alt text to important images.", "LOW"],
 		["robots", "WEB-014", "Keep robots evidence available for future verification.", "LOW"],
 	];
+
+export function buildWebsiteActionPlan(
+	collection: WebsiteCollection,
+	context: WebsiteActionPlanContext = {},
+): ActionPlan {
+	const bySubject = new Map(collection.evidence.map((item) => [item.subject, item]));
+	const rules = WEBSITE_SIGNAL_RULES;
 	const actionByRuleId = new Map<string, string>(rules.map(([, ruleId, action]) => [ruleId, action]));
 	const findings: RecommendationFinding[] = [];
 	for (const [subject, ruleId, _action, severity] of rules) {

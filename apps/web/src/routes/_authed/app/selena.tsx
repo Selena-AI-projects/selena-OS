@@ -12,6 +12,7 @@ import {
 import { createFileRoute, Link, useRouter } from "@tanstack/react-router";
 import { authClient } from "@workspace/lib/auth/client";
 import { Button } from "@workspace/ui/components/button";
+import { Checkbox } from "@workspace/ui/components/checkbox";
 import { Input } from "@workspace/ui/components/input";
 import { Label } from "@workspace/ui/components/label";
 import { useEffect, useMemo, useState } from "react";
@@ -529,6 +530,7 @@ function SelenaWorkspace() {
 								>
 									<span className="truncate font-medium">{item.project.name}</span>
 									<span className="text-xs text-[#6e6258]">{projectStageLabel(item, locale)}</span>
+									<span className="text-xs text-[#8a7d70]">{lastAuditLabel(item, locale)}</span>
 								</button>
 							);
 						})}
@@ -599,6 +601,7 @@ function ProjectOverview({ project, locale }: { project: WorkspaceProject; local
 			</div>
 			<div className="mt-8 flex flex-wrap items-center gap-3 text-sm text-[#e9dfd4]">
 				<span className="selena-status-chip">{projectStageLabel(project, locale)}</span>
+				<span>{lastAuditLabel(project, locale)}</span>
 				{project.measurement && (
 					<span>
 						{locale === "ru"
@@ -1000,6 +1003,11 @@ function QuestionsPanel({ project, locale }: { project: WorkspaceProject; locale
 	const [scenarios, setScenarios] = useState<ScenarioListItem[] | null>(null);
 	const [failed, setFailed] = useState(false);
 	const [drafts, setDrafts] = useState<Record<string, string>>({});
+	// Checked by default: the customer unchecks what they disagree with, then
+	// approves the selection in one action — the HubSpot-copy flow's one
+	// deliberate extra step.
+	const [checked, setChecked] = useState<Set<string>>(new Set());
+	const [bulkBusy, setBulkBusy] = useState(false);
 	const [busyId, setBusyId] = useState("");
 	const [rowError, setRowError] = useState("");
 
@@ -1011,18 +1019,27 @@ function QuestionsPanel({ project, locale }: { project: WorkspaceProject; locale
 	// biome-ignore lint/correctness/useExhaustiveDependencies: reload only when the project changes
 	useEffect(load, [project.project.id]);
 
-	const decide = async (scenario: ScenarioListItem, decision: "APPROVED" | "REJECTED") => {
-		setBusyId(scenario.id);
+	useEffect(() => {
+		setChecked(new Set((scenarios ?? []).filter((item) => item.status === "PROPOSED").map((item) => item.id)));
+	}, [scenarios]);
+
+
+	const decideChecked = async (decision: "APPROVED" | "REJECTED") => {
+		const targets = proposed.filter((scenario) => checked.has(scenario.id));
+		if (targets.length === 0) return;
+		setBulkBusy(true);
 		setRowError("");
 		try {
-			const draft = drafts[scenario.id];
-			await reviewSelenaScenarioFn({
-				data: {
-					scenarioId: scenario.id,
-					decision,
-					...(draft !== undefined && draft !== scenario.text ? { text: draft } : {}),
-				},
-			});
+			for (const scenario of targets) {
+				const draft = drafts[scenario.id];
+				await reviewSelenaScenarioFn({
+					data: {
+						scenarioId: scenario.id,
+						decision,
+						...(draft !== undefined && draft !== scenario.text ? { text: draft } : {}),
+					},
+				});
+			}
 			load();
 		} catch (cause) {
 			setRowError(
@@ -1033,7 +1050,7 @@ function QuestionsPanel({ project, locale }: { project: WorkspaceProject; locale
 				),
 			);
 		} finally {
-			setBusyId("");
+			setBulkBusy(false);
 		}
 	};
 
@@ -1114,43 +1131,71 @@ function QuestionsPanel({ project, locale }: { project: WorkspaceProject; locale
 			) : (
 				<div className="mt-5 flex flex-col gap-3">
 					{proposed.map((scenario) => (
-						<div key={scenario.id} className="rounded-lg border border-[#e5dbcd] bg-[#fffdf8] p-4">
-							<p className="text-xs uppercase tracking-wide text-[#6e6258]">
-								{scenario.language.toUpperCase()} ·{" "}
-								{scenario.intentType === "branded"
-									? tr(locale, "names the brand", "с названием бренда")
-									: tr(locale, "category question", "вопрос про категорию")}
-							</p>
-							{/* Customer-style questions run to ~20 words; a one-line input
-							    would hide the tail of the very text being approved. */}
-							<textarea
-								rows={2}
-								className="selena-textarea mt-2"
-								value={drafts[scenario.id] ?? scenario.text}
-								onChange={(event) => setDrafts((current) => ({ ...current, [scenario.id]: event.target.value }))}
+						<div key={scenario.id} className="flex items-start gap-3 rounded-lg border border-[#e5dbcd] bg-[#fffdf8] p-4">
+							<Checkbox
+								id={`question-${scenario.id}`}
+								checked={checked.has(scenario.id)}
+								onCheckedChange={() =>
+									setChecked((current) => {
+										const next = new Set(current);
+										if (next.has(scenario.id)) next.delete(scenario.id);
+										else next.add(scenario.id);
+										return next;
+									})
+								}
+								className="mt-1"
 							/>
-							<div className="mt-3 flex gap-2">
-								<Button
-									type="button"
-									size="sm"
-									disabled={busyId === scenario.id}
-									onClick={() => decide(scenario, "APPROVED")}
+							<div className="min-w-0 flex-1">
+								<label
+									htmlFor={`question-${scenario.id}`}
+									className="text-xs uppercase tracking-wide text-[#6e6258]"
 								>
-									{tr(locale, "Approve", "Утвердить")}
+									{scenario.language.toUpperCase()} ·{" "}
+									{scenario.intentType === "branded"
+										? tr(locale, "names the brand", "с названием бренда")
+										: tr(locale, "category question", "вопрос про категорию")}
+								</label>
+								{/* Customer-style questions run to ~20 words; a one-line input
+								    would hide the tail of the very text being approved. */}
+								<textarea
+									rows={2}
+									className="selena-textarea mt-2"
+									value={drafts[scenario.id] ?? scenario.text}
+									onChange={(event) =>
+										setDrafts((current) => ({ ...current, [scenario.id]: event.target.value }))
+									}
+								/>
+							</div>
+						</div>
+					))}
+					{proposed.length > 0 && (
+						<div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-[#e5dbcd] bg-[#fffdf8] px-4 py-3">
+							<p className="text-sm text-[#3d362e]">
+								{tr(
+									locale,
+									`${checked.size} of ${proposed.length} question(s) checked`,
+									`Отмечено вопросов: ${checked.size} из ${proposed.length}`,
+								)}
+							</p>
+							<div className="flex gap-2">
+								<Button type="button" size="sm" disabled={checked.size === 0 || bulkBusy} onClick={() => void decideChecked("APPROVED")}>
+									{bulkBusy
+										? tr(locale, "Saving…", "Сохраняем…")
+										: tr(locale, "Approve checked", "Утвердить отмеченные")}
 								</Button>
 								<Button
 									type="button"
 									size="sm"
 									variant="outline"
-									disabled={busyId === scenario.id}
-									onClick={() => decide(scenario, "REJECTED")}
+									disabled={checked.size === 0 || bulkBusy}
+									onClick={() => void decideChecked("REJECTED")}
 								>
-									{tr(locale, "Reject", "Отклонить")}
+									{tr(locale, "Reject checked", "Отклонить отмеченные")}
 								</Button>
 							</div>
 						</div>
-					))}
-					{decided.length > 0 && (
+					)}
+				{decided.length > 0 && (
 						<div className="rounded-lg border border-[#e5dbcd] bg-[#fffdf8] p-4">
 							<h3 className="text-sm font-semibold text-[#3d362e]">{tr(locale, "Decided", "Решённые")}</h3>
 							<ul className="mt-2 flex flex-col gap-1 text-sm text-[#3d362e]">
@@ -1652,8 +1697,15 @@ function ResultsPanel({ project, locale }: { project: WorkspaceProject; locale: 
 					</p>
 				</div>
 				{result && (
-					<span className="selena-success-label">
-						<IconSparkles className="size-4" /> {tr(locale, "Website plan ready", "План для сайта готов")}
+					<span className="flex flex-wrap items-center gap-3">
+						<span className="selena-success-label">
+							<IconSparkles className="size-4" /> {tr(locale, "Website plan ready", "План для сайта готов")}
+						</span>
+						<Link to="/app/selena-report" search={{ project: project.project.id }}>
+							<Button type="button" variant="outline" size="sm" className="border-[#cdbdac] bg-[#fffdf8]">
+								{tr(locale, "Open as a report", "Открыть отчётом")}
+							</Button>
+						</Link>
 					</span>
 				)}
 			</div>
@@ -1889,6 +1941,19 @@ function parseScenario(line: string, fallbackLanguage: string) {
 		language: (match?.[1] || fallbackLanguage).toLowerCase(),
 		intentType: "discovery",
 	};
+}
+
+/**
+ * The most recent check this project has actually had — the AI measurement
+ * when one exists, otherwise the website review. Nothing checked yet reads as
+ * exactly that, not as a blank.
+ */
+function lastAuditLabel(project: WorkspaceProject, locale: WorkspaceLocale): string {
+	if (project.measurement)
+		return `${tr(locale, "AI measurement", "AI-замер")}: ${formatDate(project.measurement.updatedAt, locale)}`;
+	if (project.website)
+		return `${tr(locale, "Website audit", "Аудит сайта")}: ${formatDate(project.website.capturedAt, locale)}`;
+	return tr(locale, "Not audited yet", "Проверок ещё не было");
 }
 
 function projectStageLabel(project: WorkspaceProject, locale: WorkspaceLocale): string {

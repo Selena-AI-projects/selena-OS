@@ -36,6 +36,17 @@ describe("isBrandedQuestion", () => {
 		expect(isBrandedQuestion("KORA — отзывы и меню", brand)).toBe(true);
 		expect(isBrandedQuestion("best cafe in Ubud", brand)).toBe(false);
 	});
+
+	it("requires a standalone word, so a brand hiding inside another word is not branded", () => {
+		const rusBrand = { name: "Кора" };
+		expect(isBrandedQuestion("Какие декоративные растения купить", rusBrand)).toBe(false);
+		expect(isBrandedQuestion("Кора — отзывы", rusBrand)).toBe(true);
+	});
+
+	it("recognizes two-character brand names", () => {
+		expect(isBrandedQuestion("VK отзывы и цены", { name: "VK" })).toBe(true);
+		expect(isBrandedQuestion("вконтакте что нового", { name: "VK" })).toBe(false);
+	});
 });
 
 describe("buildGraderReport", () => {
@@ -128,6 +139,107 @@ describe("buildGraderReport", () => {
 			runs: [run({ systemId: "chatgpt", scenarioId: "q1", text: "best cafe in Ubud", answer: "KORA Food Hall — korafoodhall.com." })],
 		});
 		expect(wellCited.recommendations.some((entry) => entry.kind === "OWN_SITE_UNDERCITED")).toBe(false);
+	});
+
+	it("never merges two channels into one system row", () => {
+		const report = buildGraderReport({
+			subjects,
+			runs: [
+				{ runId: "r1", systemId: "unattributed", channel: "VISITOR", scenarioId: "q1", scenarioText: "best cafe in Ubud", scenarioLanguage: "en", analysis: analyzeAnswer({ text: "Zest Ubud.", brand, competitors }) },
+				{ runId: "r2", systemId: "unattributed", channel: "API", scenarioId: "q1", scenarioText: "best cafe in Ubud", scenarioLanguage: "en", analysis: analyzeAnswer({ text: "KORA Food Hall.", brand, competitors }) },
+			],
+		});
+		expect(report.systems).toHaveLength(2);
+		expect(report.systems.map((system) => system.channel)).toEqual(["VISITOR", "API"]);
+		expect(report.methodology).toMatchObject({ visitorSystems: 1, apiSystems: 1 });
+	});
+
+	it("compares the own site against the most-cited external source, not the gap-ranked one", () => {
+		const report = buildGraderReport({
+			subjects,
+			runs: [
+				run({ systemId: "chatgpt", scenarioId: "q1", text: "is KORA worth it", answer: "KORA Food Hall, per yelp.com." }),
+				run({ systemId: "chatgpt", scenarioId: "q2", text: "KORA menu", answer: "KORA Food Hall — yelp.com and korafoodhall.com." }),
+				run({ systemId: "chatgpt", scenarioId: "q3", text: "best cafe in Ubud", answer: "Sayuri, per smallblog.com." }),
+			],
+		});
+		const own = report.recommendations.find((entry) => entry.kind === "OWN_SITE_UNDERCITED");
+		expect(own).toMatchObject({ topExternalDomain: "yelp.com", topExternalCited: 2, timesCited: 1 });
+	});
+
+	it("stays silent about the own site when it matches the top external citation count", () => {
+		const report = buildGraderReport({
+			subjects,
+			runs: [
+				run({ systemId: "chatgpt", scenarioId: "q1", text: "is KORA worth it", answer: "KORA Food Hall — korafoodhall.com, also yelp.com." }),
+			],
+		});
+		expect(report.recommendations.some((entry) => entry.kind === "OWN_SITE_UNDERCITED")).toBe(false);
+	});
+
+	it("treats brand subdomains as owned, never as sources to get into", () => {
+		const report = buildGraderReport({
+			subjects,
+			runs: [
+				run({ systemId: "chatgpt", scenarioId: "q1", text: "best cafe in Ubud", answer: "Sayuri, per blog.korafoodhall.com." }),
+			],
+		});
+		expect(report.recommendations.some((entry) => entry.kind === "SOURCE_PRESENCE")).toBe(false);
+		expect(report.recommendations.some((entry) => entry.kind === "OWN_SITE_UNDERCITED")).toBe(false);
+	});
+
+	it("does not recommend sources that were only cited alongside the brand", () => {
+		const report = buildGraderReport({
+			subjects,
+			runs: [
+				run({ systemId: "chatgpt", scenarioId: "q1", text: "is KORA worth it", answer: "KORA Food Hall, per tripadvisor.com." }),
+			],
+		});
+		expect(report.recommendations.some((entry) => entry.kind === "SOURCE_PRESENCE")).toBe(false);
+	});
+
+	it("caps source recommendations at three, keeping the most gap-heavy domains", () => {
+		const report = buildGraderReport({
+			subjects,
+			runs: [
+				run({ systemId: "chatgpt", scenarioId: "q1", text: "best cafe in Ubud", answer: "Sayuri — a.com, a.com is great; also b.com and c.com and d.com." }),
+				run({ systemId: "chatgpt", scenarioId: "q2", text: "vegan Ubud", answer: "Zest Ubud — a.com, b.com, c.com." }),
+			],
+		});
+		const sources = report.recommendations.filter((entry) => entry.kind === "SOURCE_PRESENCE");
+		expect(sources).toHaveLength(3);
+		expect(sources.map((entry) => entry.domain)).toEqual(["a.com", "b.com", "c.com"]);
+	});
+
+	it("orders competitors by how often they were named", () => {
+		const report = buildGraderReport({
+			subjects,
+			runs: [
+				run({ systemId: "chatgpt", scenarioId: "q1", text: "best cafe in Ubud", answer: "Zest Ubud and Milk & Madu." }),
+				run({ systemId: "chatgpt", scenarioId: "q2", text: "vegan Ubud", answer: "Zest Ubud again." }),
+			],
+		});
+		const names = report.roster.filter((entry) => !entry.isBrand).map((entry) => entry.name);
+		expect(names.slice(0, 2)).toEqual(["Zest Ubud", "Milk & Madu"]);
+	});
+
+	it("reports repeats as UNKNOWN when the scope did not say", () => {
+		expect(buildGraderReport({ subjects, runs: [] }).methodology.repeats).toBeNull();
+		expect(buildGraderReport({ subjects, runs: [], repeats: 5 }).methodology.repeats).toBe(5);
+	});
+
+	it("keeps a run with a lost question out of the question list and both groups", () => {
+		const report = buildGraderReport({
+			subjects,
+			runs: [
+				{ runId: "r1", systemId: "chatgpt", channel: "VISITOR", scenarioId: "gone", scenarioText: "", scenarioLanguage: "", analysis: analyzeAnswer({ text: "Milk & Madu.", brand, competitors }) },
+			],
+		});
+		expect(report.questions).toHaveLength(0);
+		const system = report.systems[0];
+		expect(system.branded.answers + system.category.answers).toBe(0);
+		expect(system.answersAnalyzed).toBe(1);
+		expect(report.recommendations.some((entry) => entry.kind === "CATEGORY_CONTENT")).toBe(false);
 	});
 
 	it("reports UNKNOWN summaries for a system whose runs all failed", () => {

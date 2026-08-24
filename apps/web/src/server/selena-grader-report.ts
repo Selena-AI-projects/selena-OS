@@ -1,6 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { db } from "@workspace/lib/db/db";
-import { svConfigurationLocks, svCycles, svOrders, svScenarios } from "@workspace/lib/db/schema";
+import { svConfigurationLocks, svCycles, svOrders, svRecommendationRuns, svScenarios, svWebsiteSnapshots } from "@workspace/lib/db/schema";
 import {
 	type GraderChannel,
 	type GraderReport,
@@ -8,11 +8,13 @@ import {
 	buildGraderReport,
 } from "@workspace/lib/selena-grader-report";
 import { createSelenaRepositories } from "@workspace/lib/selena-visibility-repositories";
-import { measurementScopeSchema, parseAnalysisSubjects } from "@workspace/selena-visibility-contracts";
+import { analyzeAnswer } from "@workspace/lib/selena-answer-analysis";
+import { WEBSITE_SIGNAL_RULES } from "@workspace/lib/website-collector";
+import { actionPlanSchema, measurementScopeSchema, parseAnalysisSubjects } from "@workspace/selena-visibility-contracts";
 import { and, desc, eq, inArray } from "drizzle-orm";
 import { z } from "zod";
 import { resolveSessionAuthContext } from "../lib/selena-auth-context";
-import { computeOrderAnalysis, readStoredAnalysis } from "./selena-order-analysis";
+import { readRetainedAnswer, readStoredAnalysis } from "./selena-order-analysis";
 
 const repositories = /* @__PURE__ */ createSelenaRepositories(db);
 
@@ -28,6 +30,13 @@ export type GraderReportView = {
 	measuredAt: string | null;
 	cycle: { status: string; expectedRuns: number; completedRuns: number } | null;
 	report: GraderReport | null;
+	/** The free website audit: every rule with its outcome, plus the plan. */
+	freeAudit: {
+		websiteUrl: string;
+		capturedAt: string;
+		checks: { subject: string; ruleId: string; severity: "HIGH" | "MEDIUM" | "LOW"; ok: boolean; unknown: boolean }[];
+		actions: { title: string; action: string; priority: string }[];
+	} | null;
 };
 
 function readString(value: unknown): string | null {
@@ -58,6 +67,46 @@ export const getSelenaGraderReportFn = createServerFn({ method: "GET" })
 				}
 			: null;
 
+		const [websiteSnapshot, recommendationRun] = await Promise.all([
+			db
+				.select({ website: svWebsiteSnapshots.website, capturedAt: svWebsiteSnapshots.capturedAt })
+				.from(svWebsiteSnapshots)
+				.where(
+					and(eq(svWebsiteSnapshots.projectId, data.projectId), eq(svWebsiteSnapshots.organizationId, context.tenantId)),
+				)
+				.orderBy(desc(svWebsiteSnapshots.capturedAt))
+				.limit(1)
+				.then((rows) => rows[0] ?? null),
+			db
+				.select({ actionPlan: svRecommendationRuns.actionPlan })
+				.from(svRecommendationRuns)
+				.where(
+					and(
+						eq(svRecommendationRuns.projectId, data.projectId),
+						eq(svRecommendationRuns.organizationId, context.tenantId),
+					),
+				)
+				.orderBy(desc(svRecommendationRuns.createdAt))
+				.limit(1)
+				.then((rows) => rows[0] ?? null),
+		]);
+		const parsedPlan = actionPlanSchema.safeParse(recommendationRun?.actionPlan);
+		const freeAudit =
+			websiteSnapshot && parsedPlan.success
+				? {
+						websiteUrl: websiteSnapshot.website,
+						capturedAt: websiteSnapshot.capturedAt.toISOString(),
+						checks: WEBSITE_SIGNAL_RULES.map(([subject, ruleId, , severity]) => {
+							const finding = parsedPlan.data.findings.find((item) => item.ruleId === ruleId);
+							return { subject, ruleId, severity, ok: !finding, unknown: finding?.unknown ?? false };
+						}),
+						actions: parsedPlan.data.recommendations
+							.filter((item) => !item.blocked)
+							.slice(0, 3)
+							.map((item) => ({ title: item.title, action: item.action, priority: item.priority })),
+					}
+				: null;
+
 		const view: GraderReportView = {
 			project: {
 				id: project.id,
@@ -70,6 +119,7 @@ export const getSelenaGraderReportFn = createServerFn({ method: "GET" })
 			measuredAt: null,
 			cycle: null,
 			report: null,
+			freeAudit,
 		};
 
 		const [order] = await db
@@ -107,9 +157,6 @@ export const getSelenaGraderReportFn = createServerFn({ method: "GET" })
 		}
 		if (!subjects) return view;
 
-		// Analyze any freshly retained answers first, so the report below always
-		// reads saved findings rather than depending on who clicked what before.
-		await computeOrderAnalysis(context, order.id);
 		const runs = await repositories.runs.listForOrder(context, order.id);
 
 		const scenarioIds = [...new Set(runs.map((run) => run.scenarioId))];
@@ -144,14 +191,30 @@ export const getSelenaGraderReportFn = createServerFn({ method: "GET" })
 				scenarioId: run.scenarioId,
 				scenarioText: scenario?.text ?? "",
 				scenarioLanguage: scenario?.language ?? "",
-				analysis: readStoredAnalysis(run.canonicalPayload),
+				// A GET must not write: analysis is read from the payload when the
+				// admin action already saved it, and recomputed in memory from the
+				// retained text otherwise. Persisting stays with the admin POST, so
+				// a read-only viewer can always open the report.
+				analysis:
+					readStoredAnalysis(run.canonicalPayload) ??
+					(() => {
+						const retained = readRetainedAnswer(run.canonicalPayload);
+						return retained
+							? analyzeAnswer({
+									text: retained.text,
+									brand: subjects.brand,
+									competitors: subjects.competitors,
+									citedUrls: retained.citedUrls,
+								})
+							: null;
+					})(),
 			};
 		});
 
 		view.report = buildGraderReport({
 			runs: graderRuns,
 			subjects,
-			repeats: scope.success ? scope.data.repeats : 1,
+			repeats: scope.success ? scope.data.repeats : null,
 		});
 		return view;
 	});
