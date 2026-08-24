@@ -147,4 +147,101 @@ describe("Website Collector", () => {
 		).toBe(true);
 		expect(firstPlan.tasks.every((task) => task.verificationPlan.length > 0)).toBe(true);
 	});
+
+	const withRobots = (robotsTxt: string, html = "<html><body><h1>Only text</h1></body></html>") => ({
+		capturedAt: "2026-08-15T00:00:00Z",
+		fetcher: async (url: string) => ({
+			status: 200,
+			headers: new Headers({ "content-type": "text/html" }),
+			body: url.endsWith("robots.txt") ? robotsTxt : html,
+		}),
+	});
+
+	it("reports a site that refuses the answer engines' crawlers as the first thing to fix", async () => {
+		const collection = await collectWebsite(
+			"tenant-a",
+			"https://example.test",
+			withRobots("User-agent: OAI-SearchBot\nDisallow: /\n\nUser-agent: PerplexityBot\nDisallow: /"),
+		);
+		const plan = buildWebsiteActionPlan(collection);
+		const finding = plan.findings.find((item) => item.ruleId === "WEB-018");
+		expect(finding?.category).toBe("AI_ACCESS");
+		expect(finding?.severity).toBe("HIGH");
+		expect(finding?.statement).toContain("ChatGPT Search");
+		expect(plan.recommendations.find((item) => item.findingId === finding?.id)?.priority).toBe("NOW");
+	});
+
+	it("asks to confirm a refused training crawler rather than calling it a defect", async () => {
+		const collection = await collectWebsite(
+			"tenant-a",
+			"https://example.test",
+			withRobots("User-agent: GPTBot\nDisallow: /\n\nUser-agent: Google-Extended\nDisallow: /"),
+		);
+		const plan = buildWebsiteActionPlan(collection);
+		const finding = plan.findings.find((item) => item.ruleId === "WEB-021");
+		expect(finding?.severity).toBe("LOW");
+		expect(plan.findings.some((item) => item.ruleId === "WEB-018" || item.ruleId === "WEB-019")).toBe(false);
+		expect(plan.recommendations.find((item) => item.findingId === finding?.id)?.action).toContain("deliberate");
+	});
+
+	it("separates refusing an assistant that a customer sent from refusing an index", async () => {
+		const collection = await collectWebsite(
+			"tenant-a",
+			"https://example.test",
+			withRobots("User-agent: ChatGPT-User\nDisallow: /"),
+		);
+		const plan = buildWebsiteActionPlan(collection);
+		const ruleIds = plan.findings.map((finding) => finding.ruleId);
+		expect(ruleIds).toContain("WEB-019");
+		expect(ruleIds).not.toContain("WEB-018");
+	});
+
+	it("reports a page that asks engines not to index or quote it", async () => {
+		const noindex = await collectWebsite(
+			"tenant-a",
+			"https://example.test",
+			withRobots(
+				"User-agent: *\nDisallow:",
+				'<html><head><meta name="robots" content="noindex, follow"></head><body><h1>Hi</h1></body></html>',
+			),
+		);
+		const indexPlan = buildWebsiteActionPlan(noindex);
+		expect(indexPlan.findings.find((item) => item.ruleId === "WEB-020")?.statement).toContain("out of their index");
+
+		const nosnippet = await collectWebsite(
+			"tenant-a",
+			"https://example.test",
+			withRobots(
+				"User-agent: *\nDisallow:",
+				'<html><head><meta name="robots" content="nosnippet"></head><body><h1>Hi</h1></body></html>',
+			),
+		);
+		expect(buildWebsiteActionPlan(nosnippet).findings.find((item) => item.ruleId === "WEB-020")?.statement).toContain(
+			"quoting",
+		);
+	});
+
+	it("says nothing about access when the site serves no robots.txt", async () => {
+		const collection = await collectWebsite("tenant-a", "https://example.test", {
+			capturedAt: "2026-08-15T00:00:00Z",
+			fetcher: async (url: string) => ({
+				status: url.endsWith("robots.txt") ? 404 : 200,
+				headers: new Headers({ "content-type": "text/html" }),
+				body: url.endsWith("robots.txt") ? "" : "<html><body><h1>Only text</h1></body></html>",
+			}),
+		});
+		const plan = buildWebsiteActionPlan(collection);
+		expect(plan.findings.every((finding) => finding.category !== "AI_ACCESS")).toBe(true);
+	});
+
+	it("names each recommendation by what to do rather than by its rule id", async () => {
+		const collection = await collectWebsite(
+			"tenant-a",
+			"https://example.test",
+			withRobots("User-agent: Googlebot\nDisallow: /"),
+		);
+		const plan = buildWebsiteActionPlan(collection);
+		expect(plan.recommendations.every((item) => !item.title.startsWith("Improve WEB-"))).toBe(true);
+		expect(plan.recommendations.find((item) => item.title.includes("answer engines"))).toBeDefined();
+	});
 });

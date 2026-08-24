@@ -16,6 +16,12 @@ import { resolveSessionAuthContext } from "../lib/selena-auth-context";
 
 const repositories = /* @__PURE__ */ createSelenaRepositories(db);
 
+const PRIORITY_ORDER = ["NOW", "NEXT", "LATER"];
+function priorityRank(priority: string): number {
+	const index = PRIORITY_ORDER.indexOf(priority);
+	return index === -1 ? PRIORITY_ORDER.length : index;
+}
+
 export const listSelenaProjectsFn = createServerFn({ method: "GET" }).handler(async () => {
 	const context = await resolveSessionAuthContext();
 	return repositories.projects.list(context);
@@ -135,6 +141,10 @@ export const getSelenaWorkspaceFn = createServerFn({ method: "GET" }).handler(as
 							topActions:
 								actionPlan?.recommendations
 									.filter((item) => !item.blocked)
+									// Ordered by priority, not by the order the rules happen to
+									// run in: the three shown here are the whole plan for a
+									// customer who reads no further.
+									.sort((left, right) => priorityRank(left.priority) - priorityRank(right.priority))
 									.slice(0, 3)
 									.map((item) => ({ title: item.title, action: item.action, priority: item.priority })) ?? [],
 						}
