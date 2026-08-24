@@ -22,7 +22,7 @@ import { validateWebsiteUrl } from "@/lib/brand-website";
 import { parseGoogleMapsLocation } from "@workspace/lib/google-maps-location";
 import { resetPostHog } from "@/lib/posthog";
 import { SUGGESTION_LIMITS } from "@/lib/selena-suggestion";
-import { ruleHow, ruleTitle } from "@/lib/selena-rule-help";
+import { ruleExample, ruleFixTask, ruleHow, ruleSteps, ruleTitle } from "@/lib/selena-rule-help";
 import { humanizeSelenaError } from "@/lib/selena-workspace-errors";
 import type { LedgerReport } from "@workspace/lib/selena-ledger-metrics";
 import { groupView, formatShare, type GroupView } from "@/lib/selena-measurement-view";
@@ -1892,7 +1892,47 @@ function ResultsPanel({ project, locale }: { project: WorkspaceProject; locale: 
 															</span>
 														)}
 													</p>
-													<p className="mt-1 text-sm leading-6 text-[#6e6258]">{ruleHow(locale, item.ruleId, item.action)}</p>
+												<p className="mt-1 text-sm leading-6 text-[#6e6258]">{ruleHow(locale, item.ruleId, item.action)}</p>
+													<details className="mt-2">
+														<summary className="cursor-pointer text-xs font-semibold text-[#8f5c34] underline underline-offset-4 [&::-webkit-details-marker]:hidden">
+															{tr(locale, "How to fix →", "Как исправить →")}
+														</summary>
+														<div className="mt-2 rounded-lg border border-[#e6ddd1] bg-[#fbf7ef] p-3">
+															{ruleSteps(locale, item.ruleId).length > 0 ? (
+																<ol className="list-decimal space-y-1 pl-4 text-xs leading-5 text-[#3d362e]">
+																	{ruleSteps(locale, item.ruleId).map((step) => (
+																		<li key={step}>{step}</li>
+																	))}
+																</ol>
+															) : (
+																<p className="text-xs leading-5 text-[#3d362e]">{item.action}</p>
+															)}
+															{ruleExample(locale, item.ruleId) && (
+																<p className="mt-2 rounded border border-[#e6ddd1] bg-[#fffdf8] px-2.5 py-1.5 font-mono text-[0.68rem] leading-4 text-[#3d362e]">
+																	{tr(locale, "Done right: ", "Как правильно: ")}
+																	{ruleExample(locale, item.ruleId)}
+																</p>
+															)}
+															<button
+																type="button"
+																className="mt-2 rounded-full border border-[#cdbdac] bg-[#fffdf8] px-3.5 py-1.5 text-xs font-semibold text-[#8f5c34]"
+																onClick={(event) => {
+																	void navigator.clipboard.writeText(
+																		ruleFixTask(
+																			locale,
+																			item.ruleId,
+																			project.profile?.primaryDomain ?? "",
+																			item.title,
+																			item.action,
+																		),
+																	);
+																	event.currentTarget.textContent = tr(locale, "Copied", "Скопировано");
+																}}
+															>
+																{tr(locale, "Copy a task for an AI developer", "Скопировать задание для AI-разработчика")}
+															</button>
+														</div>
+													</details>
 												</div>
 											</li>
 										))}
