@@ -4,6 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@work
 import { Checkbox } from "@workspace/ui/components/checkbox";
 import { Label } from "@workspace/ui/components/label";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { humanizeSelenaAdminError } from "@/lib/selena-workspace-errors";
 import {
 	decideSelenaScenariosFn,
 	getSelenaOrderDeskFn,
@@ -82,7 +83,7 @@ export function SelenaOrderDesk({ locale, onOrderCreated }: { locale: DeskLocale
 			setNotice(await action());
 			await load();
 		} catch (cause) {
-			setError(cause instanceof Error ? cause.message : "Action failed");
+			setError(humanizeSelenaAdminError(cause, locale, tr(locale, "Action failed", "Действие не выполнено")));
 		} finally {
 			setPending("");
 		}
@@ -281,11 +282,7 @@ export function SelenaOrderDesk({ locale, onOrderCreated }: { locale: DeskLocale
 								{tr(locale, "planned answers", "запланированных ответов")}
 								{selectedApproved.length !== selected.size && (
 									<span className="ml-2 text-muted-foreground">
-										{tr(
-											locale,
-											"(unapproved selections are excluded)",
-											"(неутверждённые из выбранных не учитываются)",
-										)}
+										{tr(locale, "(unapproved selections are excluded)", "(неутверждённые из выбранных не учитываются)")}
 									</span>
 								)}
 							</p>
@@ -304,16 +301,26 @@ export function SelenaOrderDesk({ locale, onOrderCreated }: { locale: DeskLocale
 									);
 									if (!confirmed) return;
 									void run("order", async () => {
-										const result = await startSelenaMeasurementFn({
-											data: {
-												projectId,
-												planId,
-												scenarioIds: selectedApproved.map((scenario) => scenario.id),
-												idempotencyKey: draftKey,
-											},
-										});
+										let result: Awaited<ReturnType<typeof startSelenaMeasurementFn>>;
+										try {
+											result = await startSelenaMeasurementFn({
+												data: {
+													projectId,
+													planId,
+													scenarioIds: selectedApproved.map((scenario) => scenario.id),
+													idempotencyKey: draftKey,
+												},
+											});
+										} finally {
+											// The pipeline can fail after the order row is written
+											// (a preflight blocker at approval, say), so the queue
+											// refreshes either way — an order needing review must
+											// not hide behind the error banner. The idempotency key
+											// rotates only on success: retrying a failure resumes
+											// the same draft instead of minting a second order.
+											onOrderCreated();
+										}
 										setDraftKey(crypto.randomUUID());
-										onOrderCreated();
 										if (result.stoppedAt === "payment")
 											return tr(
 												locale,
