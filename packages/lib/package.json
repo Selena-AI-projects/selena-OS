@@ -38,6 +38,7 @@
 		"./selena-visibility-repositories": "./src/selena-visibility-repositories.ts",
 		"./selena-export": "./src/selena-export.ts",
 		"./selena-answer-analysis": "./src/selena-answer-analysis.ts",
+		"./selena-grader-report": "./src/selena-grader-report.ts",
 		"./selena-measurement": "./src/selena-measurement.ts",
 		"./selena-findings": "./src/selena-findings.ts",
 		"./selena-dataset-gateway": "./src/selena-dataset-gateway.ts",

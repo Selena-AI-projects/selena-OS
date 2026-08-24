@@ -24,7 +24,7 @@ async function requireAdminContext(): Promise<SelenaRepositoryContext> {
 	return resolveSessionAuthContext();
 }
 
-function readRetainedAnswer(payload: unknown): { text: string; citedUrls?: string[] } | null {
+export function readRetainedAnswer(payload: unknown): { text: string; citedUrls?: string[] } | null {
 	if (typeof payload !== "object" || payload === null) return null;
 	const answer = (payload as Record<string, unknown>).answer;
 	if (typeof answer !== "object" || answer === null) return null;
@@ -37,7 +37,7 @@ function readRetainedAnswer(payload: unknown): { text: string; citedUrls?: strin
 	return citedUrls ? { text, citedUrls } : { text };
 }
 
-function readStoredAnalysis(payload: unknown): AnswerAnalysis | null {
+export function readStoredAnalysis(payload: unknown): AnswerAnalysis | null {
 	if (typeof payload !== "object" || payload === null) return null;
 	const analysis = (payload as Record<string, unknown>).analysis;
 	if (typeof analysis !== "object" || analysis === null) return null;

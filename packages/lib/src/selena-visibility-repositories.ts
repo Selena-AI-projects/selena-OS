@@ -1054,6 +1054,7 @@ export function createSelenaRepositories(db: Db) {
 						id: schema.svRuns.id,
 						cycleId: schema.svRuns.cycleId,
 						scenarioId: schema.svRuns.scenarioId,
+						systemId: schema.svRuns.systemId,
 						channel: schema.svRuns.channel,
 						status: schema.svRuns.status,
 						validity: schema.svRuns.validity,
