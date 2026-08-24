@@ -3,6 +3,7 @@ import { db } from "@workspace/lib/db/db";
 import {
 	svAuditEvents,
 	svConfigurationLocks,
+	svCycles,
 	svOrders,
 	svPayments,
 	svProjectProfiles,
@@ -21,6 +22,7 @@ import {
 	type MeasurementScope,
 	measurementScopeSchema,
 	paymentConfigFromEnv,
+	monthlyAnswerAllowance,
 	planIds,
 	SELENA_CATALOG,
 	SELENA_CATALOG_VERSION,
@@ -29,7 +31,7 @@ import {
 	type SelenaPlanId,
 	visitorSurfaces,
 } from "@workspace/selena-visibility-contracts";
-import { and, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
 import { requireAdmin } from "@/lib/auth/helpers";
 import { approveOrder, enqueueOrderRunsForOrder } from "./selena-admin-orders";
@@ -285,6 +287,32 @@ async function createSelenaOrderDraft(data: OrderDraftInput) {
 
 		const scope = scopeForPlan(plan, data.scenarioIds);
 		const expectedRuns = expectedRunsFromScope(scope);
+		// The pricing page quotes a monthly allowance (300/800 answers); an
+		// order that would overrun it is refused with the numbers, not queued
+		// quietly. Usage counts the calendar month's created cycles — orders
+		// still awaiting review carry no cycle yet and are the operator's call.
+		const allowance = monthlyAnswerAllowance(plan.planId);
+		if (allowance !== null) {
+			const monthStart = new Date();
+			monthStart.setUTCDate(1);
+			monthStart.setUTCHours(0, 0, 0, 0);
+			const [usage] = await db
+				.select({ used: sql<number>`coalesce(sum(${svCycles.expectedRuns}), 0)` })
+				.from(svCycles)
+				.innerJoin(svOrders, eq(svCycles.orderId, svOrders.id))
+				.where(
+					and(
+						eq(svOrders.projectId, data.projectId),
+						eq(svOrders.organizationId, context.tenantId),
+						gte(svCycles.createdAt, monthStart),
+					),
+				);
+			const used = Number(usage?.used ?? 0);
+			if (used + expectedRuns > allowance)
+				throw new Error(
+					`SELENA_MONTHLY_ALLOWANCE_EXCEEDED: used ${used} of ${allowance} this month; this measurement needs ${expectedRuns} more`,
+				);
+		}
 
 		// Frozen with the scope: analysis looks for exactly the brand and
 		// competitors the customer agreed to, so a later profile edit cannot

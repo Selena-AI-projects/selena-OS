@@ -75,6 +75,10 @@ const WEBSITE_MESSAGES: Record<string, [string, string]> = {
  * switch or the next step instead of assuming the reader can grep for it.
  */
 const ADMIN_MESSAGES: Record<string, [string, string]> = {
+	SELENA_MONTHLY_ALLOWANCE_EXCEEDED: [
+		"This measurement would exceed the plan's monthly answer allowance. Reduce the question count, or run it next month — the numbers are in the message above.",
+		"Этот замер превысит месячный запас ответов тарифа. Уменьшите число вопросов или запустите в следующем месяце — цифры указаны в сообщении выше.",
+	],
 	SELENA_PAYMENTS_DISABLED: [
 		"Payments are switched off in this deployment. Set SELENA_PAYMENTS_ENABLED=true and SELENA_PAYMENT_MODE=test on the web service, then retry.",
 		"Платежи в этом развёртывании выключены. Поставьте SELENA_PAYMENTS_ENABLED=true и SELENA_PAYMENT_MODE=test на сервисе web и повторите.",

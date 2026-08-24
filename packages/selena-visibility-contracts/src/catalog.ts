@@ -206,6 +206,18 @@ export function plannedAnswers(scope: Pick<CatalogScope, "languageScenarios" | "
 	return scope.languageScenarios * scope.systems.length * scope.repeats;
 }
 
+/**
+ * The plan's monthly answer allowance — the number the pricing page quotes
+ * (100 scenarios × 3 systems = 300, and so on). Null when the plan sets no
+ * scenario or repeat bound (Growth), meaning the allowance is negotiated,
+ * not computed.
+ */
+export function monthlyAnswerAllowance(planId: SelenaPlanId): number | null {
+	const plan = SELENA_CATALOG[planId];
+	if (plan.scenarioLimit === null || plan.repeatCount === null) return null;
+	return plan.scenarioLimit * plan.systems.length * plan.repeatCount;
+}
+
 export function getPlan(planId: SelenaPlanId): SelenaPlan {
 	return SELENA_CATALOG[planId];
 }

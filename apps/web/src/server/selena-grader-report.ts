@@ -9,9 +9,10 @@ import {
 } from "@workspace/lib/selena-grader-report";
 import { createSelenaRepositories } from "@workspace/lib/selena-visibility-repositories";
 import { analyzeAnswer } from "@workspace/lib/selena-answer-analysis";
+import { type SelenaPlanId, monthlyAnswerAllowance, planIds } from "@workspace/selena-visibility-contracts";
 import { WEBSITE_SIGNAL_RULES } from "@workspace/lib/website-collector";
 import { actionPlanSchema, measurementScopeSchema, parseAnalysisSubjects } from "@workspace/selena-visibility-contracts";
-import { and, desc, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
 import { resolveSessionAuthContext } from "../lib/selena-auth-context";
 import { readRetainedAnswer, readStoredAnalysis } from "./selena-order-analysis";
@@ -28,6 +29,8 @@ export type GraderReportView = {
 	} | null;
 	planId: string | null;
 	measuredAt: string | null;
+	/** The calendar month's spent answers against the plan's quoted allowance. */
+	monthUsage: { used: number; allowance: number } | null;
 	cycle: { status: string; expectedRuns: number; completedRuns: number } | null;
 	report: GraderReport | null;
 	/** The free website audit: every rule with its outcome, plus the plan. */
@@ -141,6 +144,7 @@ export const getSelenaGraderReportFn = createServerFn({ method: "GET" })
 			inputs,
 			planId: null,
 			measuredAt: null,
+			monthUsage: null,
 			cycle: null,
 			report: null,
 			freeAudit,
@@ -163,6 +167,26 @@ export const getSelenaGraderReportFn = createServerFn({ method: "GET" })
 		const subjects = parseAnalysisSubjects(lock?.snapshot);
 		const scope = measurementScopeSchema.safeParse(snapshot?.measurementScope);
 		view.planId = readString(snapshot?.planId);
+		const planForAllowance = (planIds as readonly string[]).includes(view.planId ?? "")
+			? monthlyAnswerAllowance(view.planId as SelenaPlanId)
+			: null;
+		if (planForAllowance !== null) {
+			const monthStart = new Date();
+			monthStart.setUTCDate(1);
+			monthStart.setUTCHours(0, 0, 0, 0);
+			const [usage] = await db
+				.select({ used: sql<number>`coalesce(sum(${svCycles.expectedRuns}), 0)` })
+				.from(svCycles)
+				.innerJoin(svOrders, eq(svCycles.orderId, svOrders.id))
+				.where(
+					and(
+						eq(svOrders.projectId, data.projectId),
+						eq(svOrders.organizationId, context.tenantId),
+						gte(svCycles.createdAt, monthStart),
+					),
+				);
+			view.monthUsage = { used: Number(usage?.used ?? 0), allowance: planForAllowance };
+		}
 
 		const [cycle] = await db
 			.select({

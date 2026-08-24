@@ -361,6 +361,15 @@ function SelenaReportPage() {
 								)}
 							</span>
 						)}
+					{view?.monthUsage && (
+							<span className="rounded-full border border-[#b9825b66] px-3 py-1.5 tabular-nums">
+								{tr(
+									locale,
+									`${view.monthUsage.used} of ${view.monthUsage.allowance} answers used this month`,
+									`использовано ответов в этом месяце: ${view.monthUsage.used} из ${view.monthUsage.allowance}`,
+								)}
+							</span>
+						)}
 						{view?.measuredAt && (
 							<span className="rounded-full border border-[#b9825b66] px-3 py-1.5">
 								{tr(locale, "Measured", "Замер")}: {new Date(view.measuredAt).toLocaleDateString(locale === "ru" ? "ru-RU" : "en-US")}

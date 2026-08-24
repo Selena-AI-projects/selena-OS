@@ -6,6 +6,7 @@ import {
 	assertHardCaps,
 	createOrderLock,
 	getPlan,
+	monthlyAnswerAllowance,
 	isApiViewWebSearchEnabled,
 	orderLockHash,
 	plannedAnswers,
@@ -117,5 +118,17 @@ describe("Selena RC6 catalog", () => {
 				retryReserve: 1,
 			}),
 		).toThrow("RETRY_RESERVE_EXCEEDED");
+	});
+});
+
+describe("monthlyAnswerAllowance", () => {
+	it("computes the quoted allowances from the catalog itself", () => {
+		expect(monthlyAnswerAllowance("visitor-local")).toBe(300);
+		expect(monthlyAnswerAllowance("full-ai-landscape")).toBe(800);
+		expect(monthlyAnswerAllowance("expert-verified")).toBe(800);
+	});
+
+	it("reports no computable allowance for a negotiated plan", () => {
+		expect(monthlyAnswerAllowance("growth-90-days")).toBeNull();
 	});
 });
