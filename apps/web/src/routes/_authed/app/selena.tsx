@@ -1871,8 +1871,12 @@ function ResultsPanel({ project, locale }: { project: WorkspaceProject; locale: 
 							</dl>
 							{result.topActions.length > 0 && (
 								<div>
-									<h3 className="text-sm font-semibold text-[#181614]">
-										{tr(locale, "Priority actions", "Приоритетные действия")}
+								<h3 className="text-sm font-semibold text-[#181614]">
+										{tr(
+											locale,
+											`Priority actions — top ${Math.min(3, result.recommendationsCount)} of ${result.recommendationsCount}`,
+											`Приоритетные действия — первые ${Math.min(3, result.recommendationsCount)} из ${result.recommendationsCount}`,
+										)}
 									</h3>
 									<ul className="mt-3 divide-y divide-[#e6ddd1]">
 										{result.topActions.map((item) => (
@@ -1936,7 +1940,18 @@ function ResultsPanel({ project, locale }: { project: WorkspaceProject; locale: 
 												</div>
 											</li>
 										))}
-									</ul>
+								</ul>
+									{result.recommendationsCount > 3 && (
+										<Link to="/app/selena-report" search={{ project: project.project.id }} className="mt-3 inline-block">
+											<span className="text-sm font-semibold text-[#8f5c34] underline underline-offset-4">
+												{tr(
+													locale,
+													`See all ${result.recommendationsCount} actions in the report →`,
+													`Все ${result.recommendationsCount} действий — в полном отчёте →`,
+												)}
+											</span>
+										</Link>
+									)}
 								</div>
 							)}
 						</>
