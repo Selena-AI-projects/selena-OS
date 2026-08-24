@@ -45,6 +45,7 @@ import {
 	getSelenaProfileSuggestionFn,
 	startSelenaProfileSuggestionFn,
 } from "../../../server/selena-onboarding";
+import { prepareSelenaScenariosFn } from "../../../server/selena-order-desk";
 import { collectSelenaWebsiteFn } from "../../../server/selena-website-collector";
 
 export const Route = createFileRoute("/_authed/app/selena")({
@@ -1056,6 +1057,44 @@ function QuestionsPanel({ project, locale }: { project: WorkspaceProject; locale
 					</p>
 				</div>
 			</div>
+			{project.profile?.confirmedAt && (
+				<div className="mt-4">
+					<Button
+						type="button"
+						variant="outline"
+						size="sm"
+						className="border-[#cdbdac] bg-[#fffdf8]"
+						disabled={busyId === "prepare"}
+						onClick={async () => {
+							setBusyId("prepare");
+							setRowError("");
+							try {
+								await prepareSelenaScenariosFn({ data: { projectId: project.project.id } });
+								load();
+							} catch (cause) {
+								setRowError(
+									humanizeSelenaError(
+										cause,
+										locale,
+										tr(
+											locale,
+											"Could not prepare the questions. Try again.",
+											"Не удалось подготовить вопросы. Попробуйте ещё раз.",
+										),
+									),
+								);
+							} finally {
+								setBusyId("");
+							}
+						}}
+					>
+						{busyId === "prepare"
+							? tr(locale, "Preparing…", "Готовим…")
+							: tr(locale, "Suggest questions from my profile", "Подобрать вопросы из профиля")}
+					</Button>
+					{rowError && <p className="mt-2 text-sm text-[#9a5f14]">{rowError}</p>}
+				</div>
+			)}
 			{failed ? (
 				<p className="mt-5 text-sm text-[#9a5f14]">
 					{tr(locale, "Could not load the questions.", "Не удалось загрузить вопросы.")}
@@ -1072,7 +1111,6 @@ function QuestionsPanel({ project, locale }: { project: WorkspaceProject; locale
 				</p>
 			) : (
 				<div className="mt-5 flex flex-col gap-3">
-					{rowError && <p className="text-sm text-[#9a5f14]">{rowError}</p>}
 					{proposed.map((scenario) => (
 						<div key={scenario.id} className="rounded-lg border border-[#e5dbcd] bg-[#fffdf8] p-4">
 							<p className="text-xs uppercase tracking-wide text-[#6e6258]">
