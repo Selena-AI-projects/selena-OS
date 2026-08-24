@@ -15,6 +15,7 @@ import { Button } from "@workspace/ui/components/button";
 import { Input } from "@workspace/ui/components/input";
 import { Label } from "@workspace/ui/components/label";
 import { useEffect, useMemo, useState } from "react";
+import { SelenaMeasureFlow } from "@/components/selena-measure-flow";
 import { SelenaWordmark } from "@/components/selena-wordmark";
 import { useAuth } from "@/hooks/use-auth";
 import { validateWebsiteUrl } from "@/lib/brand-website";
@@ -486,6 +487,11 @@ function SelenaWorkspace() {
 								pending={pendingAction === "website"}
 								feedback={feedbackScope === "website" ? { notice, error } : undefined}
 								onCollect={collectWebsite}
+							/>
+							<SelenaMeasureFlow
+								locale={locale}
+								projectId={selectedProject.project.id}
+								profileConfirmed={Boolean(selectedProject.profile?.confirmedAt)}
 							/>
 							<ResultsPanel project={selectedProject} locale={locale} />
 						</>

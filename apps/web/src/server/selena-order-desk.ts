@@ -148,7 +148,9 @@ export const getSelenaOrderDeskFn = createServerFn({ method: "GET" }).handler(as
 export const prepareSelenaScenariosFn = createServerFn({ method: "POST" })
 	.validator(projectIdSchema)
 	.handler(async ({ data }) => {
-		const context = await requireAdminContext();
+		// The customer's own judgement over their own project: tenant scoping is
+		// the guard here, not the operator role.
+		const context = await resolveSessionAuthContext();
 		const profile = await repositories.profiles.get(context, data.projectId);
 		if (!profile) throw new Error("SELENA_PROFILE_MISSING");
 		if (!profile.confirmedAt) throw new Error("SELENA_PROFILE_NOT_CONFIRMED");
@@ -202,7 +204,7 @@ export const decideSelenaScenariosFn = createServerFn({ method: "POST" })
 		}),
 	)
 	.handler(async ({ data }) => {
-		const context = await requireAdminContext();
+		const context = await resolveSessionAuthContext();
 		const owned = await db
 			.select({ id: svScenarios.id })
 			.from(svScenarios)
