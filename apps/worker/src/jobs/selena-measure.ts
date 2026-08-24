@@ -19,12 +19,13 @@ export interface SelenaMeasureData {
 	actorId?: string;
 }
 
-// The OpenRouter API View adapter is registered per job below: constructing it
-// reads OPENROUTER_API_KEY, and a missing key must fail the job that needs it,
-// not the worker boot. Selecting it still takes
-// SELENA_MEASUREMENT_ADAPTER=openrouter plus the owner-approved allowlist in
-// the contracts package — "Turning measurement on" in
-// SELENA_OWNER_OPERATING_GUIDE.md walks the full chain.
+// The OpenRouter API View adapter is registered inside the handler, and only
+// when SELENA_MEASUREMENT_ADAPTER selects it: constructing it reads
+// OPENROUTER_API_KEY, and a missing key must fail the jobs that need it — not
+// the worker boot, and not runs the inert noop adapter executes. Selecting it
+// still takes the owner-approved allowlist in the contracts package —
+// "Turning measurement on" in SELENA_OWNER_OPERATING_GUIDE.md walks the full
+// chain.
 const ADAPTERS: MeasurementAdapterRegistry = { noop: createNoopMeasurementAdapter() };
 
 // Both per-permit reads, tenant-scoped by the permit itself. Without the
@@ -47,6 +48,22 @@ export async function selenaMeasureJob(jobs: Job<SelenaMeasureData>[]): Promise<
 	// provider calls for the same work, doubling spend and breaking cardinality.
 	assertDispatchModes(isMaintenanceEnabled(process.env.SCHEDULE_MAINTENANCE_ENABLED), true);
 	const repositories = createSelenaRepositories(db);
+	// Constructed only when selected: building it validates OPENROUTER_API_KEY,
+	// and a permit executed by the inert noop adapter must not die on a key it
+	// would never use.
+	const adapters: MeasurementAdapterRegistry =
+		config.adapter === "openrouter"
+			? {
+					...ADAPTERS,
+					openrouter: createOpenRouterAdapter({
+						apiKey: process.env.OPENROUTER_API_KEY ?? "",
+						model: resolveCatalogApiModel(process.env.SELENA_OPENROUTER_MODEL),
+						fetchImpl: fetch,
+						resolveScenarioText: resolvers.resolveScenarioText,
+						resolveExtractionContext: resolvers.resolveExtractionContext,
+					}),
+				}
+			: ADAPTERS;
 	for (const job of jobs) {
 		const ctx: SelenaRepositoryContext = {
 			actorId: job.data.actorId ?? "worker:selena-measure",
@@ -54,16 +71,6 @@ export async function selenaMeasureJob(jobs: Job<SelenaMeasureData>[]): Promise<
 			role: "owner",
 			authType: "session",
 			permissions: [],
-		};
-		const adapters: MeasurementAdapterRegistry = {
-			...ADAPTERS,
-			openrouter: createOpenRouterAdapter({
-				apiKey: process.env.OPENROUTER_API_KEY ?? "",
-				model: resolveCatalogApiModel(process.env.SELENA_OPENROUTER_MODEL),
-				fetchImpl: fetch,
-				resolveScenarioText: resolvers.resolveScenarioText,
-				resolveExtractionContext: resolvers.resolveExtractionContext,
-			}),
 		};
 		const result = await runMeasurementForPermit({
 			permitId: job.data.permitId,
