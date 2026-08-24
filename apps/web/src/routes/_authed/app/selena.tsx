@@ -87,6 +87,9 @@ function SelenaWorkspace() {
 	// at the top of the page sits off-screen when the customer is at the button.
 	const [feedbackScope, setFeedbackScope] = useState<ActionScope>("");
 	const [suggesting, setSuggesting] = useState(false);
+	// The suggestion lands as a draft to tick through, never as silently
+	// replaced fields: the customer picks what they agree with.
+	const [suggestion, setSuggestion] = useState<{ competitors: string[]; questions: string[] } | null>(null);
 	const [notice, setNotice] = useState("");
 	const [error, setError] = useState("");
 	const [locale, setLocale] = useState<WorkspaceLocale>("en");
@@ -201,16 +204,22 @@ function SelenaWorkspace() {
 				const result = await getSelenaProfileSuggestionFn({ data: { projectId } });
 				if (result.status === "failed") throw new Error(result.error);
 				if (result.status === "done") {
-					onProfileNormalized({
-						primaryDomain: website.formattedUrl,
-						competitors: result.competitors,
-						scenarios: result.questions,
+					onProfileNormalized({ primaryDomain: website.formattedUrl });
+					setSuggestion({
+						competitors: result.competitors
+							.split(",")
+							.map((item) => item.trim())
+							.filter(Boolean),
+						questions: result.questions
+							.split("\n")
+							.map((item) => item.trim())
+							.filter(Boolean),
 					});
 					setNotice(
 						tr(
 							locale,
-							"Suggested competitors and questions. Edit anything that does not fit, then confirm.",
-							"Конкуренты и вопросы предложены. Поправьте всё, что не подходит, и подтвердите профиль.",
+							"Done: tick the competitors and questions you agree with, then accept the selection.",
+							"Готово: отметьте галочками конкурентов и вопросы, с которыми согласны, и примите выбранное.",
 						),
 					);
 					return;
@@ -566,9 +575,25 @@ function SelenaWorkspace() {
 								pending={pendingAction === "profile"}
 								feedback={feedbackScope === "profile" ? { notice, error } : undefined}
 								suggesting={suggesting}
+								suggestion={suggestion}
 								onChange={setProfileForm}
 								onSubmit={saveProfile}
 								onSuggest={suggestProfile}
+								onApplySuggestion={(competitors, questions) => {
+									setProfileForm((current) => ({
+										...current,
+										competitors: competitors.join(", "),
+										scenarios: questions.join("\n"),
+									}));
+									setSuggestion(null);
+									setNotice(
+										tr(
+											locale,
+											"Accepted. Check the fields and confirm the profile.",
+											"Принято. Проверьте поля и подтвердите профиль.",
+										),
+									);
+								}}
 							/>
 							<WebsiteEvidence
 								locale={locale}
@@ -618,7 +643,7 @@ function SetupProgress({ project, locale }: { project: WorkspaceProject; locale:
 	const steps = [
 		{ label: tr(locale, "Project created", "Проект создан"), complete: true },
 		{ label: tr(locale, "Brand profile confirmed", "Профиль бренда подтверждён"), complete: Boolean(project.profile) },
-		{ label: tr(locale, "Website review complete", "Проверка сайта завершена"), complete: Boolean(project.website) },
+		{ label: tr(locale, "Technical website check complete", "Техническая проверка сайта завершена"), complete: Boolean(project.website) },
 		{
 			label: tr(locale, "AI visibility report available", "Отчёт о видимости в AI готов"),
 			complete: project.measurement?.status === "READY",
@@ -629,7 +654,7 @@ function SetupProgress({ project, locale }: { project: WorkspaceProject; locale:
 			<div className="flex items-end justify-between gap-4">
 				<div>
 					<h2 id="setup-progress-title" className="selena-heading text-2xl">
-						{tr(locale, "Setup progress", "Подготовка проекта")}
+						{tr(locale, "1 · Setup progress", "1 · Подготовка проекта")}
 					</h2>
 					<p className="mt-2 text-sm leading-6 text-[#6e6258]">
 						{tr(
@@ -754,6 +779,97 @@ function CreateProjectForm({
 	);
 }
 
+/**
+ * The suggested competitors and questions, each behind a checkbox — accepting
+ * the selection is the customer's judgement, so nothing lands in the fields
+ * without their tick.
+ */
+function SuggestionPicker({
+	locale,
+	suggestion,
+	onApply,
+}: {
+	locale: WorkspaceLocale;
+	suggestion: { competitors: string[]; questions: string[] };
+	onApply: (competitors: string[], questions: string[]) => void;
+}) {
+	const [checkedCompetitors, setCheckedCompetitors] = useState<Set<string>>(new Set(suggestion.competitors));
+	const [checkedQuestions, setCheckedQuestions] = useState<Set<string>>(new Set(suggestion.questions));
+
+	useEffect(() => {
+		setCheckedCompetitors(new Set(suggestion.competitors));
+		setCheckedQuestions(new Set(suggestion.questions));
+	}, [suggestion]);
+
+	const toggle = (set: Set<string>, update: (next: Set<string>) => void, value: string) => {
+		const next = new Set(set);
+		if (next.has(value)) next.delete(value);
+		else next.add(value);
+		update(next);
+	};
+
+	const group = (
+		title: string,
+		items: string[],
+		checked: Set<string>,
+		update: (next: Set<string>) => void,
+		prefix: string,
+	) =>
+		items.length > 0 && (
+			<div>
+				<p className="text-xs font-semibold uppercase tracking-wide text-[#6e6258]">{title}</p>
+				<ul className="mt-2 grid gap-1.5">
+					{items.map((item) => (
+						<li key={item} className="flex items-start gap-2.5">
+							<Checkbox
+								id={`${prefix}-${item}`}
+								checked={checked.has(item)}
+								onCheckedChange={() => toggle(checked, update, item)}
+								className="mt-0.5"
+							/>
+							<label htmlFor={`${prefix}-${item}`} className="cursor-pointer text-sm leading-6">
+								{item}
+							</label>
+						</li>
+					))}
+				</ul>
+			</div>
+		);
+
+	return (
+		<div className="grid gap-4 border-t border-[#e6ddd1] pt-4">
+			{group(tr(locale, "Suggested competitors", "Предложенные конкуренты"), suggestion.competitors, checkedCompetitors, setCheckedCompetitors, "sc")}
+			{group(tr(locale, "Suggested questions", "Предложенные вопросы"), suggestion.questions, checkedQuestions, setCheckedQuestions, "sq")}
+			<div className="flex flex-wrap items-center gap-3">
+				<Button
+					type="button"
+					size="sm"
+					disabled={checkedCompetitors.size + checkedQuestions.size === 0}
+					onClick={() =>
+						onApply(
+							suggestion.competitors.filter((item) => checkedCompetitors.has(item)),
+							suggestion.questions.filter((item) => checkedQuestions.has(item)),
+						)
+					}
+				>
+					{tr(
+						locale,
+						`Accept checked (${checkedCompetitors.size + checkedQuestions.size})`,
+						`Принять отмеченные (${checkedCompetitors.size + checkedQuestions.size})`,
+					)}
+				</Button>
+				<span className="text-xs text-[#6e6258]">
+					{tr(
+						locale,
+						"They will fill the Competitors and Customer questions fields below.",
+						"Они заполнят поля «Конкуренты» и «Вопросы клиентов» ниже.",
+					)}
+				</span>
+			</div>
+		</div>
+	);
+}
+
 function BrandProfileForm({
 	locale,
 	project,
@@ -761,9 +877,11 @@ function BrandProfileForm({
 	pending,
 	feedback,
 	suggesting,
+	suggestion,
 	onChange,
 	onSubmit,
 	onSuggest,
+	onApplySuggestion,
 }: {
 	locale: WorkspaceLocale;
 	project: WorkspaceProject;
@@ -771,16 +889,18 @@ function BrandProfileForm({
 	pending: boolean;
 	feedback?: Feedback;
 	suggesting: boolean;
+	suggestion: { competitors: string[]; questions: string[] } | null;
 	onChange: (value: typeof emptyProfileForm) => void;
 	onSubmit: (event: React.FormEvent) => void;
 	onSuggest: () => void;
+	onApplySuggestion: (competitors: string[], questions: string[]) => void;
 }) {
 	return (
 		<section className="selena-section" aria-labelledby="brand-profile-title">
 			<div className="flex flex-wrap items-start justify-between gap-4">
 				<div>
 					<h2 id="brand-profile-title" className="selena-heading text-2xl">
-						{tr(locale, "Brand profile", "Профиль бренда")}
+						{tr(locale, "2 · Brand profile", "2 · Профиль бренда")}
 					</h2>
 					<p className="mt-2 max-w-2xl text-sm leading-6 text-[#6e6258]">
 						{tr(
@@ -795,25 +915,6 @@ function BrandProfileForm({
 						<IconCheck className="size-4" /> {tr(locale, "Saved", "Сохранено")}
 					</span>
 				)}
-			</div>
-			<div className="mt-5 flex flex-col gap-3 rounded-xl border border-[#e6ddd1] bg-[#fbf7f1] p-4 sm:flex-row sm:items-center sm:justify-between">
-				<p className="text-sm leading-6 text-[#6e6258]">
-					{locale === "ru"
-						? `Не уверены, кого писать в конкурентах? Мы прочитаем сайт и предложим до ${SUGGESTION_LIMITS.competitors} конкурентов и ${SUGGESTION_LIMITS.questions} вопросов. Это черновик: он заменит содержимое полей «Конкуренты» и «Вопросы клиентов», дальше правите вы.`
-						: `Not sure who to list as competitors? We read the site and propose up to ${SUGGESTION_LIMITS.competitors} competitors and ${SUGGESTION_LIMITS.questions} questions. It is a draft: it replaces what is in Competitors and Customer questions, and you edit from there.`}
-				</p>
-				<Button
-					type="button"
-					variant="outline"
-					className="min-h-11 shrink-0 border-[#cdbdac] bg-[#fffdf8]"
-					disabled={suggesting || pending}
-					onClick={onSuggest}
-				>
-					<IconSparkles className={suggesting ? "size-4 animate-pulse" : "size-4"} />
-					{suggesting
-						? tr(locale, "Reading the site…", "Читаем сайт…")
-						: tr(locale, "Suggest automatically", "Подобрать автоматически")}
-				</Button>
 			</div>
 			<form onSubmit={onSubmit} className="mt-7 grid gap-5 sm:grid-cols-2">
 				<Field label={tr(locale, "Public brand name", "Публичное название бренда")} htmlFor="brand-name">
@@ -876,6 +977,45 @@ function BrandProfileForm({
 						placeholder={tr(locale, "Instagram or other public profile", "Instagram или другой публичный профиль")}
 					/>
 				</Field>
+				<div className="flex flex-col gap-3 rounded-xl border border-[#e6ddd1] bg-[#fbf7f1] p-4 sm:col-span-2">
+					<div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+						<p className="text-sm leading-6 text-[#6e6258]">
+							{locale === "ru"
+								? `Не уверены, кого писать в конкурентах и какие вопросы задать? Мы прочитаем сайт выше и предложим до ${SUGGESTION_LIMITS.competitors} конкурентов и ${SUGGESTION_LIMITS.questions} вопросов — вы отметите галочками, что оставить.`
+								: `Not sure who to list or what to ask? We read the website above and propose up to ${SUGGESTION_LIMITS.competitors} competitors and ${SUGGESTION_LIMITS.questions} questions — you tick what stays.`}
+						</p>
+						<Button
+							type="button"
+							variant="outline"
+							className="min-h-11 shrink-0 border-[#cdbdac] bg-[#fffdf8]"
+							disabled={suggesting || pending}
+							onClick={onSuggest}
+						>
+							<IconRefresh className={suggesting ? "size-4 animate-spin" : "hidden"} />
+							<IconSparkles className={suggesting ? "hidden" : "size-4"} />
+							{suggesting
+								? tr(locale, "Reading the site…", "Читаем сайт…")
+								: tr(locale, "Suggest automatically", "Подобрать автоматически")}
+						</Button>
+					</div>
+					{suggesting && (
+						<div aria-live="polite">
+							<p className="text-xs text-[#8f5c34]">
+								{tr(
+									locale,
+									"Working: reading the pages and drafting the lists — usually about a minute. Do not leave the page.",
+									"Идёт работа: читаем страницы и готовим списки — обычно около минуты. Не уходите со страницы.",
+								)}
+							</p>
+							<div className="mt-2 h-1.5 overflow-hidden rounded-full bg-[#ece4d7]">
+								<div className="selena-progress-strip h-full w-1/3 rounded-full bg-[#b9825b]" />
+							</div>
+						</div>
+					)}
+					{suggestion && !suggesting && (
+						<SuggestionPicker locale={locale} suggestion={suggestion} onApply={onApplySuggestion} />
+					)}
+				</div>
 				<Field
 					label={tr(locale, "Competitors", "Конкуренты")}
 					hint={tr(locale, "Comma separated", "Через запятую")}
@@ -946,7 +1086,7 @@ function WebsiteEvidence({
 					</div>
 					<div>
 						<h2 id="website-evidence-title" className="selena-heading text-2xl">
-							{tr(locale, "Website review", "Проверка сайта")}
+							{tr(locale, "3 · Technical website check", "3 · Техническая проверка сайта")}
 						</h2>
 						{project.website ? (
 							<p className="mt-2 text-sm leading-6 text-[#6e6258]">
@@ -957,8 +1097,8 @@ function WebsiteEvidence({
 							<p className="mt-2 text-sm leading-6 text-[#6e6258]">
 								{tr(
 									locale,
-									"Review the confirmed public website and prepare the first improvement plan.",
-									"Проверьте подтверждённый публичный сайт и получите первый план улучшений.",
+									"How technically ready the site is for AI agents to read: crawling, structure, markup. This is not a visibility measurement.",
+									"Насколько сайт технически готов к чтению AI-агентами: краулинг, структура, разметка. Это не замер видимости.",
 								)}
 							</p>
 						)}
@@ -1065,7 +1205,7 @@ function QuestionsPanel({ project, locale }: { project: WorkspaceProject; locale
 				</div>
 				<div>
 					<h2 id="questions-title" className="selena-heading text-2xl">
-						{tr(locale, "Approve the questions", "Утвердите вопросы")}
+						{tr(locale, "4 · Approve the questions", "4 · Утвердите вопросы")}
 					</h2>
 					<p className="mt-2 max-w-2xl text-sm leading-6 text-[#6e6258]">
 						{tr(
@@ -1254,7 +1394,7 @@ function MeasurementPanel({ project, locale }: { project: WorkspaceProject; loca
 					</div>
 					<div>
 						<h2 id="measurement-title" className="selena-heading text-2xl">
-							{tr(locale, "Measurement", "Замер")}
+							{tr(locale, "5 · Measurement", "5 · Замер")}
 						</h2>
 					<p className="mt-2 max-w-2xl text-sm leading-6 text-[#6e6258]">
 						{tr(
@@ -1686,7 +1826,7 @@ function ResultsPanel({ project, locale }: { project: WorkspaceProject; locale: 
 			<div className="flex flex-wrap items-start justify-between gap-4">
 				<div>
 					<h2 id="results-title" className="selena-heading text-2xl">
-						{tr(locale, "Results and next actions", "Результаты и следующие действия")}
+						{tr(locale, "6 · Results and next actions", "6 · Результаты и следующие действия")}
 					</h2>
 					<p className="mt-2 max-w-2xl text-sm leading-6 text-[#6e6258]">
 						{tr(
