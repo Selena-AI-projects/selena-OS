@@ -10,7 +10,7 @@ import { useEffect, useState } from "react";
 import { z } from "zod";
 import { getSelenaWorkspaceFn } from "../../../server/selena-client";
 import { type CycleCompareResult, getSelenaCycleCompareFn } from "../../../server/selena-cycle-compare";
-import { PRIORITY_LABELS, ruleHow, ruleTitle } from "@/lib/selena-rule-help";
+import { PRIORITY_LABELS, ruleExample, ruleFixTask, ruleHow, ruleSteps, ruleTitle } from "@/lib/selena-rule-help";
 import { type GraderReportView, getSelenaGraderReportFn } from "../../../server/selena-grader-report";
 import { getSelenaRunDetailFn } from "../../../server/selena-run-explorer";
 
@@ -75,13 +75,6 @@ const SIGNAL_LABELS: Record<string, [string, string]> = {
 	images: ["Image alt text", "Alt-подписи к изображениям"],
 	robots: ["robots.txt", "Файл robots.txt"],
 };
-
-/** A ready-to-paste task for a developer or an AI coding agent. */
-function fixPrompt(locale: ReportLocale, websiteUrl: string, title: string, how: string): string {
-	return locale === "ru"
-		? `Сайт: ${websiteUrl}\nЗадача: ${title}.\nЧто сделать: ${how}\nВнеси изменение, покажи диф и объясни, что изменилось.`
-		: `Site: ${websiteUrl}\nTask: ${title}.\nWhat to do: ${how}\nMake the change, show the diff and explain it.`;
-}
 
 const PLAN_LABELS: Record<string, string> = {
 	"visitor-local": "Snapshot · $49",
@@ -478,18 +471,32 @@ function SelenaReportPage() {
 																)}
 															</div>
 															<p className="mt-1 text-[#3d362e]">{how}</p>
-															<details className="mt-2 print:hidden">
+														<details className="mt-2 print:hidden">
 																<summary className="cursor-pointer text-xs font-semibold text-[#8f5c34] underline underline-offset-4 [&::-webkit-details-marker]:hidden">
 																	{tr(locale, "How to fix →", "Как исправить →")}
 																</summary>
 																<div className="mt-2 rounded-lg border border-[#e6ddd1] bg-[#fbf7ef] p-3">
-																	<p className="text-xs leading-5 text-[#3d362e]">{how}</p>
+																	{ruleSteps(locale, action.ruleId).length > 0 ? (
+																		<ol className="list-decimal space-y-1 pl-4 text-xs leading-5 text-[#3d362e]">
+																			{ruleSteps(locale, action.ruleId).map((step) => (
+																				<li key={step}>{step}</li>
+																			))}
+																		</ol>
+																	) : (
+																		<p className="text-xs leading-5 text-[#3d362e]">{how}</p>
+																	)}
+																	{ruleExample(locale, action.ruleId) && (
+																		<p className="mt-2 rounded border border-[#e6ddd1] bg-[#fffdf8] px-2.5 py-1.5 font-mono text-[0.68rem] leading-4 text-[#3d362e]">
+																			{tr(locale, "Done right: ", "Как правильно: ")}
+																			{ruleExample(locale, action.ruleId)}
+																		</p>
+																	)}
 																	<button
 																		type="button"
 																		className="mt-2 rounded-full border border-[#cdbdac] bg-[#fffdf8] px-3.5 py-1.5 text-xs font-semibold text-[#8f5c34]"
 																		onClick={(event) => {
 																			void navigator.clipboard.writeText(
-																				fixPrompt(locale, view.freeAudit?.websiteUrl ?? "", title, how),
+																				ruleFixTask(locale, action.ruleId, view.freeAudit?.websiteUrl ?? "", title, how),
 																			);
 																			const target = event.currentTarget;
 																			target.textContent = tr(locale, "Copied", "Скопировано");
