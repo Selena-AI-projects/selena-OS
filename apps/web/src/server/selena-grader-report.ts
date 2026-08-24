@@ -181,7 +181,18 @@ export const getSelenaGraderReportFn = createServerFn({ method: "GET" })
 		}
 		if (!subjects) return view;
 
-		const runs = await repositories.runs.listForOrder(context, order.id);
+		const allRuns = await repositories.runs.listForOrder(context, order.id);
+		// The report speaks for the newest cycle: mixing runs from an order's
+		// earlier cycles would double-count questions and misstate the counts.
+		const latestCycleId = (
+			await db
+				.select({ id: svCycles.id })
+				.from(svCycles)
+				.where(and(eq(svCycles.orderId, order.id), eq(svCycles.organizationId, context.tenantId)))
+				.orderBy(desc(svCycles.createdAt))
+				.limit(1)
+		)[0]?.id;
+		const runs = latestCycleId ? allRuns.filter((run) => run.cycleId === latestCycleId) : allRuns;
 
 		const scenarioIds = [...new Set(runs.map((run) => run.scenarioId))];
 		const scenarioRows =
@@ -212,6 +223,7 @@ export const getSelenaGraderReportFn = createServerFn({ method: "GET" })
 				runId: run.id,
 				systemId: run.systemId ?? (fallbackSystems.length === 1 ? fallbackSystems[0] : "unattributed"),
 				channel,
+				captureMode: run.captureMode ?? null,
 				scenarioId: run.scenarioId,
 				scenarioText: scenario?.text ?? "",
 				scenarioLanguage: scenario?.language ?? "",

@@ -22,6 +22,8 @@ export type GraderRunInput = {
 	scenarioId: string;
 	scenarioText: string;
 	scenarioLanguage: string;
+	/** How the answer was actually captured (live_search, training_data, …). */
+	captureMode?: string | null;
 	/** Null when neither the answer text nor a stored analysis survives. */
 	analysis: AnswerAnalysis | null;
 };
@@ -46,6 +48,8 @@ export type GraderSystemBreakdown = {
 	category: GraderGroupBreakdown;
 	shareOfVoice: number | null;
 	averageOrder: number | null;
+	/** The observed capture modes of this system's runs — the sold channel never overrides them. */
+	captureModes: string[];
 };
 
 export type GraderRosterEntry = {
@@ -181,6 +185,7 @@ export function buildGraderReport(input: {
 				category: group(false),
 				shareOfVoice: summary.brandShareOfVoice,
 				averageOrder: summary.brandAverageOrder,
+				captureModes: [...new Set(systemRuns.map((run) => run.captureMode).filter((mode): mode is string => Boolean(mode)))],
 			};
 		})
 		.sort((left, right) =>
