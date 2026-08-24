@@ -15,7 +15,7 @@
  */
 
 import { db } from "@workspace/lib/db/db";
-import { cleanOnboardingUrl, type OnboardingSuggestion } from "@workspace/lib/onboarding";
+import { cleanOnboardingUrl, type OnboardingSuggestion, type QuestionStyle } from "@workspace/lib/onboarding";
 import { sql } from "drizzle-orm";
 import { getBoss } from "@/lib/boss-client";
 import { extractDomain } from "@/lib/domain-categories";
@@ -53,6 +53,8 @@ export interface AnalyzeBrandInput {
 	locationHint?: string;
 	maxCompetitors?: number;
 	maxPrompts?: number;
+	/** How suggested questions are phrased; the analyzer's default when unset. */
+	questionStyle?: QuestionStyle;
 }
 
 /** The namespaced value actually stored in and queried from the job payload. */
