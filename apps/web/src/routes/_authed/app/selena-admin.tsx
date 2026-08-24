@@ -7,6 +7,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Textarea } from "@workspace/ui/components/textarea";
 import { useCallback, useEffect, useState } from "react";
 import { SelenaOrderDesk } from "@/components/selena-order-desk";
+import { SelenaRequestInbox } from "@/components/selena-request-inbox";
 import { humanizeSelenaAdminError } from "@/lib/selena-workspace-errors";
 import { analyzeSelenaOrderFn } from "@/server/selena-order-analysis";
 import {
@@ -231,6 +232,8 @@ function SelenaAdminOrders() {
 					)}
 				</p>
 			)}
+
+			<SelenaRequestInbox locale={locale} />
 
 			<SelenaOrderDesk locale={locale} onOrderCreated={() => void router.invalidate()} />
 

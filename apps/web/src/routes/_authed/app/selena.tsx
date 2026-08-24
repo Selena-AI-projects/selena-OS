@@ -1666,7 +1666,7 @@ function ResultsPanel({ project, locale }: { project: WorkspaceProject; locale: 
 								"What customers see in live AI answer surfaces.",
 								"Что клиенты видят в пользовательских AI-сервисах.",
 							)}
-							href={visibilityPlanUrl(locale, "snapshot")}
+							href={orderPlanUrl(project.project.id, "snapshot")}
 							planLabel={tr(locale, "Snapshot plan · $49/mo", "План Snapshot · $49/мес")}
 						/>
 						<ChannelSummary
@@ -1677,7 +1677,7 @@ function ResultsPanel({ project, locale }: { project: WorkspaceProject; locale: 
 								"A separate model-knowledge baseline without web search by default.",
 								"Отдельная проверка знаний моделей; веб-поиск по умолчанию выключен.",
 							)}
-							href={visibilityPlanUrl(locale, "landscape")}
+							href={orderPlanUrl(project.project.id, "landscape")}
 							planLabel={tr(locale, "In the Landscape plan · $79/mo", "Входит в Landscape · $79/мес")}
 						/>
 					</div>
@@ -1697,11 +1697,12 @@ function ResultsPanel({ project, locale }: { project: WorkspaceProject; locale: 
 /**
  * The plan ladder, not the AI-audit brief: someone who just finished a free
  * website review is buying a visibility measurement, and the audit form asks
- * about a different product entirely. Anchors land on the exact plan card.
+ * about a different product entirely. The card lands on the in-app order
+ * form with the plan and project pre-selected — there is no online checkout,
+ * so the form takes a request (and a promo code) instead of a payment.
  */
-function visibilityPlanUrl(locale: WorkspaceLocale, anchor: "snapshot" | "landscape"): string {
-	const path = locale === "ru" ? "/ru/visibility" : "/visibility";
-	return `https://www.selenasystems.com${path}#${anchor}`;
+function orderPlanUrl(projectId: string, plan: "snapshot" | "landscape"): string {
+	return `/app/selena-order?plan=${plan}&project=${projectId}`;
 }
 
 function ChannelSummary({
@@ -1720,8 +1721,6 @@ function ChannelSummary({
 	return (
 		<a
 			href={href}
-			target="_blank"
-			rel="noopener noreferrer"
 			className="block rounded-xl border border-[#e6ddd1] bg-[#fbf7f1] p-4 transition-colors hover:border-[#8f5c34]"
 		>
 			<p className="font-medium text-[#181614]">{title}</p>

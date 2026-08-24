@@ -546,6 +546,13 @@ export const svQcRecords = pgTable("sv_qc_records", {
 	id: uuid("id").defaultRandom().primaryKey().notNull(), organizationId: text("organization_id").notNull().references(() => organization.id), orderId: uuid("order_id").notNull().references(() => svOrders.id), cycleId: uuid("cycle_id").references(() => svCycles.id), reviewer: text("reviewer").notNull(), reviewedAt: timestamp("reviewed_at", { withTimezone: true }).notNull(), scope: text("scope").notNull(), decision: text("decision").notNull(), notes: text("notes"), createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 }, (table) => ({ orgOrderIdx: index("sv_qc_records_org_order_idx").on(table.organizationId, table.orderId) })).enableRLS();
 
+// A lead, not an order: the customer asks for a plan and leaves a contact,
+// the operator turns it into a paid order on the admin desk. promo_applied
+// records that a valid promo code made the request free of charge.
+export const svOrderRequests = pgTable("sv_order_requests", {
+	id: uuid("id").defaultRandom().primaryKey().notNull(), organizationId: text("organization_id").notNull().references(() => organization.id), projectId: uuid("project_id").notNull().references(() => svProjects.id), planId: text("plan_id").notNull(), contactName: text("contact_name").notNull(), contactChannel: text("contact_channel").notNull(), comment: text("comment"), promoCode: text("promo_code"), promoApplied: boolean("promo_applied").default(false).notNull(), status: text("status").default("NEW").notNull(), createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(), updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => ({ orgCreatedIdx: index("sv_order_requests_org_created_idx").on(table.organizationId, table.createdAt) })).enableRLS();
+
 export type SvProject = typeof svProjects.$inferSelect;
 export type NewSvProject = typeof svProjects.$inferInsert;
 export type SvScenario = typeof svScenarios.$inferSelect;
