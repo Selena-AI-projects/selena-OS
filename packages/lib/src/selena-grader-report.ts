@@ -8,6 +8,8 @@ import {
 	type AnalysisSubject,
 	type AnswerAnalysis,
 	type ScenarioSetSummary,
+	hasStandaloneMention,
+	normalizeDomain,
 	summarizeScenarioSet,
 } from "./selena-answer-analysis";
 
@@ -81,7 +83,8 @@ export type GraderReport = {
 		questions: number;
 		visitorSystems: number;
 		apiSystems: number;
-		repeats: number;
+		/** Null when the measurement scope is unreadable: UNKNOWN, not a guess. */
+		repeats: number | null;
 		answersExpected: number;
 		answersAnalyzed: number;
 		answersMissing: number;
@@ -100,11 +103,13 @@ export type GraderReport = {
  * from how the scenario was produced.
  */
 export function isBrandedQuestion(text: string, brand: AnalysisSubject): boolean {
-	const haystack = text.toLowerCase();
+	// The same standalone-word rule mentions use: a substring check would count
+	// "кора" inside "декоративные" as the brand, corrupting the split the
+	// report promises never to merge.
 	const needles = [brand.name, ...(brand.aliases ?? [])];
 	return needles.some((needle) => {
-		const trimmed = needle.trim().toLowerCase();
-		return trimmed.length >= 3 && haystack.includes(trimmed);
+		const trimmed = needle.trim();
+		return trimmed.length >= 2 && hasStandaloneMention(text, trimmed);
 	});
 }
 
@@ -122,14 +127,18 @@ const MAX_EXAMPLE_QUESTIONS = 2;
 export function buildGraderReport(input: {
 	runs: readonly GraderRunInput[];
 	subjects: GraderSubjects;
-	repeats?: number;
+	repeats?: number | null;
 }): GraderReport {
 	const { runs, subjects } = input;
 	const brandDomain = subjects.brand.domain;
 
+	// A run whose scenario row is gone has no question to classify: it stays in
+	// the per-system totals but joins neither group and never renders as a
+	// blank "approved question".
+	const withQuestion = (run: GraderRunInput): boolean => run.scenarioText.trim() !== "";
 	const questionsById = new Map<string, GraderQuestion>();
 	for (const run of runs)
-		if (!questionsById.has(run.scenarioId))
+		if (withQuestion(run) && !questionsById.has(run.scenarioId))
 			questionsById.set(run.scenarioId, {
 				scenarioId: run.scenarioId,
 				text: run.scenarioText,
@@ -141,26 +150,29 @@ export function buildGraderReport(input: {
 
 	// Per-system breakdown; VISITOR systems come first, matching how the
 	// report is read (what customers see, then what models know).
+	// Keyed by channel AND system: two channels must never merge into one row —
+	// that would blend what customers see with what models know.
 	const systemsById = new Map<string, GraderRunInput[]>();
 	for (const run of runs) {
-		const bucket = systemsById.get(run.systemId) ?? [];
+		const key = `${run.channel}:${run.systemId}`;
+		const bucket = systemsById.get(key) ?? [];
 		bucket.push(run);
-		systemsById.set(run.systemId, bucket);
+		systemsById.set(key, bucket);
 	}
-	const systems: GraderSystemBreakdown[] = [...systemsById.entries()]
-		.map(([systemId, systemRuns]) => {
+	const systems: GraderSystemBreakdown[] = [...systemsById.values()]
+		.map((systemRuns) => {
 			const analyzed = systemRuns.filter((run) => run.analysis !== null);
 			const analyses = analyzed.map((run) => run.analysis as AnswerAnalysis);
 			const summary = summarizeScenarioSet(analyses, { brandDomain });
 			const group = (branded: boolean): GraderGroupBreakdown => {
-				const inGroup = analyzed.filter((run) => brandedIds.has(run.scenarioId) === branded);
+				const inGroup = analyzed.filter((run) => withQuestion(run) && brandedIds.has(run.scenarioId) === branded);
 				return {
 					answers: inGroup.length,
 					mentioned: inGroup.filter((run) => (run.analysis as AnswerAnalysis).brandMentioned).length,
 				};
 			};
 			return {
-				systemId,
+				systemId: systemRuns[0].systemId,
 				channel: systemRuns[0].channel,
 				answersExpected: systemRuns.length,
 				answersAnalyzed: analyzed.length,
@@ -247,7 +259,14 @@ export function buildGraderReport(input: {
 	// Recommendations are observations restated as actions; each carries the
 	// counts it was derived from so the UI can show its "why".
 	const recommendations: GraderRecommendation[] = [];
-	const externalGaps = overall.citationGap.filter((entry) => !entry.ownedByBrand && entry.timesCitedWithoutBrand > 0);
+	// A subdomain of the brand's own site is not a third party to "get into";
+	// recommending presence on blog.<own-domain> would be nonsense.
+	const brandHost = brandDomain ? normalizeDomain(brandDomain) : null;
+	const ownedDomain = (domain: string): boolean =>
+		brandHost !== null && (domain === brandHost || domain.endsWith(`.${brandHost}`));
+	const externalGaps = overall.citationGap.filter(
+		(entry) => !entry.ownedByBrand && !ownedDomain(entry.domain) && entry.timesCitedWithoutBrand > 0,
+	);
 	for (const entry of externalGaps.slice(0, MAX_SOURCE_RECOMMENDATIONS))
 		recommendations.push({
 			kind: "SOURCE_PRESENCE",
@@ -255,7 +274,9 @@ export function buildGraderReport(input: {
 			timesCited: entry.timesCited,
 			timesCitedWithoutBrand: entry.timesCitedWithoutBrand,
 		});
-	const categoryAnswers = runs.filter((run) => run.analysis !== null && !brandedIds.has(run.scenarioId));
+	const categoryAnswers = runs.filter(
+		(run) => run.analysis !== null && withQuestion(run) && !brandedIds.has(run.scenarioId),
+	);
 	const categoryMissed = categoryAnswers.filter((run) => !(run.analysis as AnswerAnalysis).brandMentioned);
 	if (categoryMissed.length > 0)
 		recommendations.push({
@@ -265,7 +286,14 @@ export function buildGraderReport(input: {
 			exampleQuestions: [...new Set(categoryMissed.map((run) => run.scenarioText))].slice(0, MAX_EXAMPLE_QUESTIONS),
 		});
 	const ownEntry = overall.citationGap.find((entry) => entry.ownedByBrand);
-	const topExternal = overall.citationGap.find((entry) => !entry.ownedByBrand);
+	// The comparison is against the MOST-CITED external source — the gap list
+	// is sorted by citations-without-brand, which is a different ranking.
+	const topExternal = overall.citationGap
+		.filter((entry) => !entry.ownedByBrand && !ownedDomain(entry.domain))
+		.reduce<(typeof overall.citationGap)[number] | null>(
+			(best, entry) => (best === null || entry.timesCited > best.timesCited ? entry : best),
+			null,
+		);
 	if (brandDomain && topExternal && (ownEntry?.timesCited ?? 0) < topExternal.timesCited)
 		recommendations.push({
 			kind: "OWN_SITE_UNDERCITED",
@@ -280,7 +308,7 @@ export function buildGraderReport(input: {
 			questions: questions.length,
 			visitorSystems: systems.filter((system) => system.channel === "VISITOR").length,
 			apiSystems: systems.filter((system) => system.channel === "API").length,
-			repeats: input.repeats ?? 1,
+			repeats: input.repeats ?? null,
 			answersExpected: runs.length,
 			answersAnalyzed: allAnalyses.length,
 			answersMissing: runs.length - allAnalyses.length,

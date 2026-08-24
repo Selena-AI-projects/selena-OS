@@ -88,6 +88,11 @@ function isWordCharacter(character: string | undefined): boolean {
 	return /[\p{L}\p{N}_]/u.test(character);
 }
 
+/** Whether the needle occurs as a standalone word — the same boundary rule mentions use. */
+export function hasStandaloneMention(haystack: string, needle: string): boolean {
+	return firstStandaloneIndex(haystack, needle) >= 0;
+}
+
 function firstStandaloneIndex(haystack: string, needle: string): number {
 	if (needle.trim() === "") return -1;
 	const pattern = new RegExp(escapeForRegex(needle.trim()), "giu");

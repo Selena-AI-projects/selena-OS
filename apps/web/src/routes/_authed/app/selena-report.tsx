@@ -305,7 +305,10 @@ function SelenaReportPage() {
 												)
 											: tr(locale, "AI systems · Visitor View", "AI-систем · Visitor View"),
 									],
-									[`×${report.methodology.repeats}`, tr(locale, "repeat(s) per question per system", "повторов на вопрос в системе")],
+									[
+										report.methodology.repeats === null ? tr(locale, "UNKNOWN", "НЕИЗВЕСТНО") : `×${report.methodology.repeats}`,
+										tr(locale, "repeat(s) per question per system", "повторов на вопрос в системе"),
+									],
 									[
 										String(report.methodology.answersExpected),
 										tr(locale, "answers in this cycle", "ответов в этом замере"),

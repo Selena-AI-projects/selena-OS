@@ -8,11 +8,12 @@ import {
 	buildGraderReport,
 } from "@workspace/lib/selena-grader-report";
 import { createSelenaRepositories } from "@workspace/lib/selena-visibility-repositories";
+import { analyzeAnswer } from "@workspace/lib/selena-answer-analysis";
 import { measurementScopeSchema, parseAnalysisSubjects } from "@workspace/selena-visibility-contracts";
 import { and, desc, eq, inArray } from "drizzle-orm";
 import { z } from "zod";
 import { resolveSessionAuthContext } from "../lib/selena-auth-context";
-import { computeOrderAnalysis, readStoredAnalysis } from "./selena-order-analysis";
+import { readRetainedAnswer, readStoredAnalysis } from "./selena-order-analysis";
 
 const repositories = /* @__PURE__ */ createSelenaRepositories(db);
 
@@ -107,9 +108,6 @@ export const getSelenaGraderReportFn = createServerFn({ method: "GET" })
 		}
 		if (!subjects) return view;
 
-		// Analyze any freshly retained answers first, so the report below always
-		// reads saved findings rather than depending on who clicked what before.
-		await computeOrderAnalysis(context, order.id);
 		const runs = await repositories.runs.listForOrder(context, order.id);
 
 		const scenarioIds = [...new Set(runs.map((run) => run.scenarioId))];
@@ -144,14 +142,30 @@ export const getSelenaGraderReportFn = createServerFn({ method: "GET" })
 				scenarioId: run.scenarioId,
 				scenarioText: scenario?.text ?? "",
 				scenarioLanguage: scenario?.language ?? "",
-				analysis: readStoredAnalysis(run.canonicalPayload),
+				// A GET must not write: analysis is read from the payload when the
+				// admin action already saved it, and recomputed in memory from the
+				// retained text otherwise. Persisting stays with the admin POST, so
+				// a read-only viewer can always open the report.
+				analysis:
+					readStoredAnalysis(run.canonicalPayload) ??
+					(() => {
+						const retained = readRetainedAnswer(run.canonicalPayload);
+						return retained
+							? analyzeAnswer({
+									text: retained.text,
+									brand: subjects.brand,
+									competitors: subjects.competitors,
+									citedUrls: retained.citedUrls,
+								})
+							: null;
+					})(),
 			};
 		});
 
 		view.report = buildGraderReport({
 			runs: graderRuns,
 			subjects,
-			repeats: scope.success ? scope.data.repeats : 1,
+			repeats: scope.success ? scope.data.repeats : null,
 		});
 		return view;
 	});
