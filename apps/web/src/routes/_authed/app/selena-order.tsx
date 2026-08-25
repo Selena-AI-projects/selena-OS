@@ -66,7 +66,7 @@ function SelenaOrderPage() {
 	const [promoCode, setPromoCode] = useState("");
 	const [pending, setPending] = useState(false);
 	const [error, setError] = useState("");
-	const [result, setResult] = useState<{ promoApplied: boolean } | null>(null);
+	const [result, setResult] = useState<{ promoApplied: boolean; autoStarted: boolean } | null>(null);
 
 	useEffect(() => {
 		const saved = window.localStorage.getItem("selena-workspace-locale");
@@ -90,7 +90,7 @@ function SelenaOrderPage() {
 					promoCode: promoCode.trim() ? promoCode.trim() : undefined,
 				},
 			});
-			setResult({ promoApplied: created.promoApplied });
+			setResult({ promoApplied: created.promoApplied, autoStarted: created.autoStarted });
 		} catch (cause) {
 			setError(
 				humanizeSelenaError(
@@ -113,7 +113,15 @@ function SelenaOrderPage() {
 			<main className="mx-auto flex max-w-2xl flex-col gap-6 px-4 py-12">
 				<section className="selena-section">
 					<h1 className="selena-heading text-3xl">{tr(locale, "Request received", "Заявка принята")}</h1>
-					{result.promoApplied ? (
+					{result.autoStarted ? (
+						<p className="mt-4 text-sm leading-6 text-[#3d362e]">
+							{tr(
+								locale,
+								"Your promo code was accepted and the measurement has already started — nothing to pay, nothing to confirm. The results will appear in your cabinet, in the Measurement section, as the answers come back.",
+								"Промокод принят, замер уже запущен — платить и подтверждать ничего не нужно. Результаты появятся в кабинете в разделе «Замер», как только вернутся ответы.",
+							)}
+						</p>
+					) : result.promoApplied ? (
 						<p className="mt-4 text-sm leading-6 text-[#3d362e]">
 							{tr(
 								locale,

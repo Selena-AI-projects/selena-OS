@@ -21,8 +21,8 @@ import {
 	expectedRunsFromScope,
 	type MeasurementScope,
 	measurementScopeSchema,
-	paymentConfigFromEnv,
 	monthlyAnswerAllowance,
+	paymentConfigFromEnv,
 	planIds,
 	SELENA_CATALOG,
 	SELENA_CATALOG_VERSION,
@@ -34,8 +34,8 @@ import {
 import { and, desc, eq, gte, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
 import { requireAdmin } from "@/lib/auth/helpers";
-import { approveOrder, enqueueOrderRunsForOrder } from "./selena-admin-orders";
 import { resolveSessionAuthContext } from "../lib/selena-auth-context";
+import { approveOrder, enqueueOrderRunsForOrder } from "./selena-admin-orders";
 
 // The order desk: where a confirmed brand profile becomes an order the
 // operator queue can act on. It contacts no provider and starts no run — it
@@ -150,49 +150,50 @@ export const getSelenaOrderDeskFn = createServerFn({ method: "GET" }).handler(as
  */
 export const prepareSelenaScenariosFn = createServerFn({ method: "POST" })
 	.validator(projectIdSchema)
-	.handler(async ({ data }) => {
-		// The customer's own judgement over their own project: tenant scoping is
-		// the guard here, not the operator role.
-		const context = await resolveSessionAuthContext();
-		const profile = await repositories.profiles.get(context, data.projectId);
-		if (!profile) throw new Error("SELENA_PROFILE_MISSING");
-		if (!profile.confirmedAt) throw new Error("SELENA_PROFILE_NOT_CONFIRMED");
-		const questions = readProfileQuestions(profile.scenarioSnapshot);
-		if (questions.length === 0) throw new Error("SELENA_PROFILE_HAS_NO_QUESTIONS");
+	// The customer's own judgement over their own project: tenant scoping is
+	// the guard here, not the operator role.
+	.handler(async ({ data }) => prepareSelenaScenarios(await resolveSessionAuthContext(), data.projectId));
 
-		const [existingFamily] = await db
-			.select({ id: svPromptFamilies.id })
-			.from(svPromptFamilies)
-			.where(
-				and(
-					eq(svPromptFamilies.projectId, data.projectId),
-					eq(svPromptFamilies.organizationId, context.tenantId),
-					eq(svPromptFamilies.source, PROFILE_FAMILY_SOURCE),
-				),
-			)
-			.limit(1);
-		const family =
-			existingFamily ??
-			(await repositories.families.create(context, {
-				projectId: data.projectId,
-				intentType: "discovery",
-				source: PROFILE_FAMILY_SOURCE,
-				status: "PROPOSED",
-			}));
+export async function prepareSelenaScenarios(context: SelenaRepositoryContext, projectId: string) {
+	const profile = await repositories.profiles.get(context, projectId);
+	if (!profile) throw new Error("SELENA_PROFILE_MISSING");
+	if (!profile.confirmedAt) throw new Error("SELENA_PROFILE_NOT_CONFIRMED");
+	const questions = readProfileQuestions(profile.scenarioSnapshot);
+	if (questions.length === 0) throw new Error("SELENA_PROFILE_HAS_NO_QUESTIONS");
 
-		const existing = await repositories.scenarios.list(context, family.id);
-		const known = new Set(existing.map((scenario) => scenario.text));
-		const fresh = questions.filter((question) => !known.has(question.text));
-		for (const question of fresh) {
-			await repositories.scenarios.create(context, {
-				familyId: family.id,
-				text: question.text,
-				language: question.language,
-				status: "PROPOSED",
-			});
-		}
-		return { familyId: family.id, added: fresh.length, total: existing.length + fresh.length };
-	});
+	const [existingFamily] = await db
+		.select({ id: svPromptFamilies.id })
+		.from(svPromptFamilies)
+		.where(
+			and(
+				eq(svPromptFamilies.projectId, projectId),
+				eq(svPromptFamilies.organizationId, context.tenantId),
+				eq(svPromptFamilies.source, PROFILE_FAMILY_SOURCE),
+			),
+		)
+		.limit(1);
+	const family =
+		existingFamily ??
+		(await repositories.families.create(context, {
+			projectId,
+			intentType: "discovery",
+			source: PROFILE_FAMILY_SOURCE,
+			status: "PROPOSED",
+		}));
+
+	const existing = await repositories.scenarios.list(context, family.id);
+	const known = new Set(existing.map((scenario) => scenario.text));
+	const fresh = questions.filter((question) => !known.has(question.text));
+	for (const question of fresh) {
+		await repositories.scenarios.create(context, {
+			familyId: family.id,
+			text: question.text,
+			language: question.language,
+			status: "PROPOSED",
+		});
+	}
+	return { familyId: family.id, added: fresh.length, total: existing.length + fresh.length };
+}
 
 /**
  * The human gate. A scenario reaches a paid run only by being approved here,
@@ -261,9 +262,8 @@ type OrderDraftInput = {
 	idempotencyKey: string;
 };
 
-async function createSelenaOrderDraft(data: OrderDraftInput) {
+async function createSelenaOrderDraft(context: SelenaRepositoryContext, data: OrderDraftInput) {
 	{
-		const context = await requireAdminContext();
 		// The payment gate decides before anything is written: a desk that
 		// cannot record the payment must not leave a half-built order behind.
 		assertPaymentAllowed(paymentConfigFromEnv(process.env), "test");
@@ -453,7 +453,7 @@ export const createSelenaOrderDraftFn = createServerFn({ method: "POST" })
 			idempotencyKey: z.string().min(1).max(200),
 		}),
 	)
-	.handler(async ({ data }) => createSelenaOrderDraft(data));
+	.handler(async ({ data }) => createSelenaOrderDraft(await requireAdminContext(), data));
 
 /**
  * Order, approve and queue in one action.
@@ -461,9 +461,25 @@ export const createSelenaOrderDraftFn = createServerFn({ method: "POST" })
  * The judgement an operator makes is which questions are worth measuring;
  * ordering, approving and queueing are three clicks on a decision already
  * taken. They stay three separate gates in the code — this only stops asking
- * three times for one answer, and still spends nothing without the click that
- * calls it.
+ * three times for one answer, and spends nothing until something calls it.
+ *
+ * Its callers are what decide: the operator's own action, or a free request
+ * that passed the auto-dispatch caps.
  */
+export async function startSelenaMeasurement(context: SelenaRepositoryContext, data: OrderDraftInput) {
+	const draft = await createSelenaOrderDraft(context, data);
+	if (!draft.paymentRecorded) return { ...draft, approved: null, queued: null, stoppedAt: "payment" as const };
+
+	const approved = await approveOrder(context, draft.orderId, `${data.idempotencyKey}:approve`);
+	const queued = await enqueueOrderRunsForOrder(context, draft.orderId, `${data.idempotencyKey}:enqueue`);
+	return {
+		...draft,
+		approved: { permits: approved.created, expected: approved.expected },
+		queued: { enqueued: queued.enqueued, skipped: queued.skipped, reason: queued.reason },
+		stoppedAt: queued.reason ? ("execution" as const) : null,
+	};
+}
+
 export const startSelenaMeasurementFn = createServerFn({ method: "POST" })
 	.validator(
 		projectIdSchema.extend({
@@ -472,18 +488,4 @@ export const startSelenaMeasurementFn = createServerFn({ method: "POST" })
 			idempotencyKey: z.string().min(1).max(200),
 		}),
 	)
-	.handler(async ({ data }) => {
-		const draft = await createSelenaOrderDraft(data);
-		if (!draft.paymentRecorded)
-			return { ...draft, approved: null, queued: null, stoppedAt: "payment" as const };
-
-		const context = await requireAdminContext();
-		const approved = await approveOrder(context, draft.orderId, `${data.idempotencyKey}:approve`);
-		const queued = await enqueueOrderRunsForOrder(context, draft.orderId, `${data.idempotencyKey}:enqueue`);
-		return {
-			...draft,
-			approved: { permits: approved.created, expected: approved.expected },
-			queued: { enqueued: queued.enqueued, skipped: queued.skipped, reason: queued.reason },
-			stoppedAt: queued.reason ? ("execution" as const) : null,
-		};
-	});
+	.handler(async ({ data }) => startSelenaMeasurement(await requireAdminContext(), data));

@@ -69,8 +69,26 @@ the limit that actually holds is the spend cap on the provider account.
 through free of charge while there is no online checkout — `AUGUST2026,FRIENDS`
 accepts either, matched case-insensitively. Unset means no code works and every
 request says the payment will be arranged by hand. A code marks the request
-free; it starts nothing, because a request is a lead and the paid order is
-still built on the desk.
+free; on its own it starts nothing, because a request is a lead and the paid
+order is still built on the desk.
+
+`SELENA_FREE_AUTO_DISPATCH_ENABLED=true` is what changes that, and only for a
+request a promo code already made free: the customer's own questions from their
+own confirmed profile are approved, ordered and queued in one step, and they see
+"the measurement has already started" instead of a promise to get back to them.
+A paid request is untouched by this and still goes through the desk.
+
+Switch it on only once a Visitor View measurement has actually completed by
+hand. Before that the automation would hand the first customer an automated
+failure, which is worse than the wait it removes.
+
+Two caps bound it: `SELENA_FREE_AUTO_DISPATCH_MAX_PER_DAY` (default 3, counted
+across every account, because a leaked code is used from fresh ones) and
+`SELENA_FREE_AUTO_DISPATCH_MAX_PER_PROJECT_PER_DAY` (default 1). A value that
+does not parse falls back to the default rather than to no limit, and `0` means
+never. A request that hits a cap, or whose measurement fails to start, stays in
+the operator inbox as `AUTO_FAILED` or unchanged with the reason in the audit
+log — the lead is written before any of this runs and is never lost to it.
 
 Measurement jobs are never scheduled. A run starts from an explicit action on a
 specific permit, and a claimed permit is spent: it cannot be retried into a
