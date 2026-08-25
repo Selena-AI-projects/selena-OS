@@ -1,15 +1,16 @@
+import { createBrightDataAdapter } from "@workspace/lib/adapters/brightdata";
 import { createOpenRouterAdapter, resolveCatalogApiModel } from "@workspace/lib/adapters/openrouter";
 import { db } from "@workspace/lib/db/db";
 import { isMaintenanceEnabled } from "@workspace/lib/run-policy";
 import { createSelenaMeasurementResolvers } from "@workspace/lib/selena-extraction-context";
 import { createNoopMeasurementAdapter } from "@workspace/lib/selena-measurement";
 import {
-	type MeasurementAdapterRegistry,
 	assertDispatchModes,
+	type MeasurementAdapterRegistry,
 	measurementConfigFromEnv,
 	runMeasurementForPermit,
 } from "@workspace/lib/selena-run-executor";
-import { type SelenaRepositoryContext, createSelenaRepositories } from "@workspace/lib/selena-visibility-repositories";
+import { createSelenaRepositories, type SelenaRepositoryContext } from "@workspace/lib/selena-visibility-repositories";
 import type { Job } from "pg-boss";
 
 export interface SelenaMeasureData {
@@ -27,6 +28,19 @@ export interface SelenaMeasureData {
 // "Turning measurement on" in SELENA_OWNER_OPERATING_GUIDE.md walks the full
 // chain.
 const ADAPTERS: MeasurementAdapterRegistry = { noop: createNoopMeasurementAdapter() };
+
+/**
+ * Bright Data's own default endpoint. One instance measures one surface, so a
+ * Visitor View run names the surface it bought: `brightdata-chatgpt` and its
+ * two siblings. Only the zone has to be supplied — it is the one value that is
+ * specific to the account rather than to Bright Data.
+ */
+const BRIGHTDATA_DEFAULT_ENDPOINT = "https://api.brightdata.com/request";
+const BRIGHTDATA_SURFACES = ["chatgpt", "gemini", "perplexity"] as const;
+
+function brightDataAdapterName(surface: (typeof BRIGHTDATA_SURFACES)[number]) {
+	return `brightdata-${surface}`;
+}
 
 // Both per-permit reads, tenant-scoped by the permit itself. Without the
 // extraction context a run is still stored and billed, but no mention,
@@ -51,6 +65,7 @@ export async function selenaMeasureJob(jobs: Job<SelenaMeasureData>[]): Promise<
 	// Constructed only when selected: building it validates OPENROUTER_API_KEY,
 	// and a permit executed by the inert noop adapter must not die on a key it
 	// would never use.
+	const brightDataSurface = BRIGHTDATA_SURFACES.find((surface) => config.adapter === brightDataAdapterName(surface));
 	const adapters: MeasurementAdapterRegistry =
 		config.adapter === "openrouter"
 			? {
@@ -63,7 +78,19 @@ export async function selenaMeasureJob(jobs: Job<SelenaMeasureData>[]): Promise<
 						resolveExtractionContext: resolvers.resolveExtractionContext,
 					}),
 				}
-			: ADAPTERS;
+			: brightDataSurface
+				? {
+						...ADAPTERS,
+						[brightDataAdapterName(brightDataSurface)]: createBrightDataAdapter({
+							apiKey: process.env.BRIGHTDATA_API_TOKEN ?? "",
+							endpoint: process.env.SELENA_BRIGHTDATA_ENDPOINT?.trim() || BRIGHTDATA_DEFAULT_ENDPOINT,
+							zone: process.env.SELENA_BRIGHTDATA_ZONE ?? "",
+							system: brightDataSurface,
+							fetchImpl: fetch,
+							resolveScenarioText: resolvers.resolveScenarioText,
+						}),
+					}
+				: ADAPTERS;
 	for (const job of jobs) {
 		const ctx: SelenaRepositoryContext = {
 			actorId: job.data.actorId ?? "worker:selena-measure",
