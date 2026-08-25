@@ -462,7 +462,10 @@ export function createBrightDataAdapter(deps: BrightDataAdapterDeps): SelenaMeas
 					const extracted = extractMeasurement({
 						answerText: answer.answerText,
 						sources: answer.sources,
-						system: deps.system,
+						// The sold surface, not the collector key: the executor refuses
+						// evidence attributed to a system the permit did not authorize,
+						// and a permit carries the catalog's name for it.
+						system: brightDataVisitorSurface[deps.system],
 						// Visitor View is the public surface answering a live query, so
 						// what it returned is a live-search observation.
 						captureMode: "live_search",

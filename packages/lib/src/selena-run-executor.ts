@@ -1,11 +1,12 @@
 import {
-	type RunOutcome,
-	type SelenaMeasurementConfig,
-	assertAdapterAllowed,
+	assertAdaptersConfigured,
 	assertMeasurementAllowed,
+	type RunOutcome,
+	resolveMeasurementAdapterName,
 	runOutcomeSchema,
+	type SelenaMeasurementConfig,
 } from "@workspace/selena-visibility-contracts";
-import { type ControlledCycleState, assertTransportAllowed } from "./run-policy";
+import { assertTransportAllowed, type ControlledCycleState } from "./run-policy";
 import type { SelenaExecutablePermit, SelenaMeasurementAdapter } from "./selena-measurement";
 
 // This module is the whole execution path, and it is pure: the adapter is
@@ -17,6 +18,7 @@ import type { SelenaExecutablePermit, SelenaMeasurementAdapter } from "./selena-
 // rather than restating the flag names it depends on.
 export {
 	assertDispatchModes,
+	measurementAdapterNamesFor,
 	measurementConfigFromEnv,
 	type SelenaMeasurementConfig,
 } from "@workspace/selena-visibility-contracts";
@@ -103,10 +105,16 @@ export async function runMeasurementForPermit<Ctx>(input: {
 	// Checked before anything is read or written: while measurement is off the
 	// runner touches neither storage nor an adapter.
 	if (!input.config.enabled) return { status: "skipped", reason: "SELENA_MEASUREMENT_DISABLED" };
-	assertAdapterAllowed(input.config.adapter, Object.keys(input.adapters));
-	const adapter = input.adapters[input.config.adapter];
+	// Before the permit is claimed, because claiming spends it: a configured
+	// name that cannot reach an approved, registered adapter must be refused
+	// while the permit is still unspent.
+	assertAdaptersConfigured(input.config.adapter, Object.keys(input.adapters));
 	const now = input.now ?? new Date();
 	const { permit, run, cycle } = await input.store.claim(input.ctx, input.permitId, { now });
+	// Chosen from the permit, not from the environment: a plan sells several
+	// systems and the surface a customer bought decides which adapter measures
+	// it.
+	const adapter = input.adapters[resolveMeasurementAdapterName(input.config.adapter, permit.systemId)];
 	const cycleState: ControlledCycleState = {
 		activeMaintenanceJobs: 0,
 		activeCohortJobs: 0,

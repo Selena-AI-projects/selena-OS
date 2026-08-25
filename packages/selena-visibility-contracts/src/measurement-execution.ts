@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { apiModelIds, type visitorSurfaces } from "./catalog.js";
 
 // Measurement execution is the only layer allowed to reach a provider, so it
 // ships inert: the flag is default-off and the adapter name defaults to the
@@ -40,6 +41,54 @@ export const ownerApprovedMeasurementAdapters = [
 ] as const;
 export type OwnerApprovedMeasurementAdapter = (typeof ownerApprovedMeasurementAdapters)[number];
 
+/**
+ * One environment variable names one adapter, but a plan sells several systems
+ * at once — the local plan alone buys three visitor surfaces. A family name is
+ * the routing rule for that: the concrete adapter is chosen per permit from the
+ * system that permit authorizes, so a surface the customer bought is never
+ * measured on a different one.
+ *
+ * A family widens nothing. Every destination is an individually owner-approved
+ * adapter, and each one is still checked against the approved list before it
+ * can run.
+ */
+const visitorRoutes = {
+	ChatGPT: "brightdata-chatgpt",
+	Gemini: "brightdata-gemini",
+	Perplexity: "brightdata-perplexity",
+} as const satisfies Record<(typeof visitorSurfaces)[number], OwnerApprovedMeasurementAdapter>;
+
+const bothChannelRoutes: Record<string, OwnerApprovedMeasurementAdapter> = { ...visitorRoutes };
+for (const model of apiModelIds) bothChannelRoutes[model] = "openrouter";
+
+export const measurementAdapterFamilies: Readonly<
+	Record<string, Readonly<Record<string, OwnerApprovedMeasurementAdapter>>>
+> = {
+	/** Visitor View across every sold surface; needs the Bright Data token only. */
+	brightdata: visitorRoutes,
+	/** Both channels at once, which is what the full landscape plan sells. */
+	auto: bothChannelRoutes,
+};
+
+/** Every adapter the configured name can reach — itself, unless it is a family. */
+export function measurementAdapterNamesFor(configuredAdapter: string): string[] {
+	const family = measurementAdapterFamilies[configuredAdapter];
+	return family ? [...new Set(Object.values(family))] : [configuredAdapter];
+}
+
+/**
+ * Which adapter measures this permit. Resolution needs the permit's system, so
+ * it happens after the permit is claimed — `assertAdaptersConfigured` is what
+ * runs before, so a misconfigured family is refused without spending one.
+ */
+export function resolveMeasurementAdapterName(configuredAdapter: string, systemId: string | null): string {
+	const family = measurementAdapterFamilies[configuredAdapter];
+	if (!family) return configuredAdapter;
+	const route = systemId === null ? undefined : family[systemId];
+	if (!route) throw new Error(`SELENA_ADAPTER_NO_ROUTE:${configuredAdapter}:${systemId ?? "null"}`);
+	return route;
+}
+
 export type SelenaMeasurementConfig = {
 	enabled: boolean;
 	adapter: string;
@@ -65,6 +114,11 @@ export function assertAdapterAllowed(adapterName: string, registered: readonly s
 	if (!registered.includes(adapterName)) throw new Error("SELENA_ADAPTER_NOT_REGISTERED");
 	if (!(ownerApprovedMeasurementAdapters as readonly string[]).includes(adapterName))
 		throw new Error("SELENA_LIVE_ADAPTER_REQUIRES_OWNER_GO");
+}
+
+/** The same gate over everything a configured name can route to. */
+export function assertAdaptersConfigured(configuredAdapter: string, registered: readonly string[]): void {
+	for (const name of measurementAdapterNamesFor(configuredAdapter)) assertAdapterAllowed(name, registered);
 }
 
 export const runOutcomeStatuses = ["SUCCEEDED", "INVALID", "FAILED"] as const;
