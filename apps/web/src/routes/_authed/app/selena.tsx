@@ -11,6 +11,9 @@ import {
 } from "@tabler/icons-react";
 import { createFileRoute, Link, useRouter } from "@tanstack/react-router";
 import { authClient } from "@workspace/lib/auth/client";
+import { parseGoogleMapsLocation } from "@workspace/lib/google-maps-location";
+import type { CycleDiffChange } from "@workspace/lib/selena-cycle-diff";
+import type { LedgerReport } from "@workspace/lib/selena-ledger-metrics";
 import { Button } from "@workspace/ui/components/button";
 import { Checkbox } from "@workspace/ui/components/checkbox";
 import { Input } from "@workspace/ui/components/input";
@@ -19,17 +22,22 @@ import { useEffect, useMemo, useState } from "react";
 import { SelenaWordmark } from "@/components/selena-wordmark";
 import { useAuth } from "@/hooks/use-auth";
 import { validateWebsiteUrl } from "@/lib/brand-website";
-import { parseGoogleMapsLocation } from "@workspace/lib/google-maps-location";
 import { resetPostHog } from "@/lib/posthog";
-import { SUGGESTION_LIMITS } from "@/lib/selena-suggestion";
+import { formatShare, type GroupView, groupView } from "@/lib/selena-measurement-view";
 import { ruleExample, ruleFixTask, ruleHow, ruleSteps, ruleTitle } from "@/lib/selena-rule-help";
+import { SUGGESTION_LIMITS } from "@/lib/selena-suggestion";
 import { humanizeSelenaError } from "@/lib/selena-workspace-errors";
-import type { LedgerReport } from "@workspace/lib/selena-ledger-metrics";
-import { groupView, formatShare, type GroupView } from "@/lib/selena-measurement-view";
+import { getSelenaAdminAccessFn } from "../../../server/selena-admin-orders";
 import { createSelenaProjectFn, getSelenaWorkspaceFn } from "../../../server/selena-client";
+import { type CycleCompareResult, getSelenaCycleCompareFn } from "../../../server/selena-cycle-compare";
 import { getSelenaMeasurementFn, type MeasurementView } from "../../../server/selena-measurement-view";
-import type { CycleDiffChange } from "@workspace/lib/selena-cycle-diff";
-import { getSelenaCycleCompareFn, type CycleCompareResult } from "../../../server/selena-cycle-compare";
+import {
+	cancelSelenaProfileSuggestionFn,
+	confirmSelenaProfileFn,
+	getSelenaProfileSuggestionFn,
+	startSelenaProfileSuggestionFn,
+} from "../../../server/selena-onboarding";
+import { prepareSelenaScenariosFn } from "../../../server/selena-order-desk";
 import {
 	getSelenaRunDetailFn,
 	listSelenaRunsFn,
@@ -41,17 +49,16 @@ import {
 	reviewSelenaScenarioFn,
 	type ScenarioListItem,
 } from "../../../server/selena-scenarios";
-import {
-	cancelSelenaProfileSuggestionFn,
-	confirmSelenaProfileFn,
-	getSelenaProfileSuggestionFn,
-	startSelenaProfileSuggestionFn,
-} from "../../../server/selena-onboarding";
-import { prepareSelenaScenariosFn } from "../../../server/selena-order-desk";
 import { collectSelenaWebsiteFn } from "../../../server/selena-website-collector";
 
 export const Route = createFileRoute("/_authed/app/selena")({
-	loader: () => getSelenaWorkspaceFn(),
+	loader: async () => ({
+		workspace: await getSelenaWorkspaceFn(),
+		// The owner runs measurements from the order desk, not by sending
+		// herself a request. Knowing who is looking is what lets the plan card
+		// point at the right door.
+		access: await getSelenaAdminAccessFn(),
+	}),
 	pendingComponent: WorkspaceSkeleton,
 	component: SelenaWorkspace,
 });
@@ -76,7 +83,8 @@ const emptyProfileForm = {
 };
 
 function SelenaWorkspace() {
-	const { projects } = Route.useLoaderData();
+	const { workspace, access } = Route.useLoaderData();
+	const { projects } = workspace;
 	const router = useRouter();
 	const { user } = useAuth();
 	const [selectedProjectId, setSelectedProjectId] = useState(projects[0]?.project.id ?? "");
@@ -644,7 +652,10 @@ function SetupProgress({ project, locale }: { project: WorkspaceProject; locale:
 	const steps = [
 		{ label: tr(locale, "Project created", "Проект создан"), complete: true },
 		{ label: tr(locale, "Brand profile confirmed", "Профиль бренда подтверждён"), complete: Boolean(project.profile) },
-		{ label: tr(locale, "Technical website check complete", "Техническая проверка сайта завершена"), complete: Boolean(project.website) },
+		{
+			label: tr(locale, "Technical website check complete", "Техническая проверка сайта завершена"),
+			complete: Boolean(project.website),
+		},
 		{
 			label: tr(locale, "AI visibility report available", "Отчёт о видимости в AI готов"),
 			complete: project.measurement?.status === "READY",
@@ -839,8 +850,20 @@ function SuggestionPicker({
 
 	return (
 		<div className="grid gap-4 border-t border-[#e6ddd1] pt-4">
-			{group(tr(locale, "Suggested competitors", "Предложенные конкуренты"), suggestion.competitors, checkedCompetitors, setCheckedCompetitors, "sc")}
-			{group(tr(locale, "Suggested questions", "Предложенные вопросы"), suggestion.questions, checkedQuestions, setCheckedQuestions, "sq")}
+			{group(
+				tr(locale, "Suggested competitors", "Предложенные конкуренты"),
+				suggestion.competitors,
+				checkedCompetitors,
+				setCheckedCompetitors,
+				"sc",
+			)}
+			{group(
+				tr(locale, "Suggested questions", "Предложенные вопросы"),
+				suggestion.questions,
+				checkedQuestions,
+				setCheckedQuestions,
+				"sq",
+			)}
 			<div className="flex flex-wrap items-center gap-3">
 				<Button
 					type="button"
@@ -1164,7 +1187,6 @@ function QuestionsPanel({ project, locale }: { project: WorkspaceProject; locale
 		setChecked(new Set((scenarios ?? []).filter((item) => item.status === "PROPOSED").map((item) => item.id)));
 	}, [scenarios]);
 
-
 	const decideChecked = async (decision: "APPROVED" | "REJECTED") => {
 		const targets = proposed.filter((scenario) => checked.has(scenario.id));
 		if (targets.length === 0) return;
@@ -1272,7 +1294,10 @@ function QuestionsPanel({ project, locale }: { project: WorkspaceProject; locale
 			) : (
 				<div className="mt-5 flex flex-col gap-3">
 					{proposed.map((scenario) => (
-						<div key={scenario.id} className="flex items-start gap-3 rounded-lg border border-[#e5dbcd] bg-[#fffdf8] p-4">
+						<div
+							key={scenario.id}
+							className="flex items-start gap-3 rounded-lg border border-[#e5dbcd] bg-[#fffdf8] p-4"
+						>
 							<Checkbox
 								id={`question-${scenario.id}`}
 								checked={checked.has(scenario.id)}
@@ -1287,10 +1312,7 @@ function QuestionsPanel({ project, locale }: { project: WorkspaceProject; locale
 								className="mt-1"
 							/>
 							<div className="min-w-0 flex-1">
-								<label
-									htmlFor={`question-${scenario.id}`}
-									className="text-xs uppercase tracking-wide text-[#6e6258]"
-								>
+								<label htmlFor={`question-${scenario.id}`} className="text-xs uppercase tracking-wide text-[#6e6258]">
 									{scenario.language.toUpperCase()} ·{" "}
 									{scenario.intentType === "branded"
 										? tr(locale, "names the brand", "с названием бренда")
@@ -1302,9 +1324,7 @@ function QuestionsPanel({ project, locale }: { project: WorkspaceProject; locale
 									rows={2}
 									className="selena-textarea mt-2"
 									value={drafts[scenario.id] ?? scenario.text}
-									onChange={(event) =>
-										setDrafts((current) => ({ ...current, [scenario.id]: event.target.value }))
-									}
+									onChange={(event) => setDrafts((current) => ({ ...current, [scenario.id]: event.target.value }))}
 								/>
 							</div>
 						</div>
@@ -1319,7 +1339,12 @@ function QuestionsPanel({ project, locale }: { project: WorkspaceProject; locale
 								)}
 							</p>
 							<div className="flex gap-2">
-								<Button type="button" size="sm" disabled={checked.size === 0 || bulkBusy} onClick={() => void decideChecked("APPROVED")}>
+								<Button
+									type="button"
+									size="sm"
+									disabled={checked.size === 0 || bulkBusy}
+									onClick={() => void decideChecked("APPROVED")}
+								>
 									{bulkBusy
 										? tr(locale, "Saving…", "Сохраняем…")
 										: tr(locale, "Approve checked", "Утвердить отмеченные")}
@@ -1336,7 +1361,7 @@ function QuestionsPanel({ project, locale }: { project: WorkspaceProject; locale
 							</div>
 						</div>
 					)}
-				{decided.length > 0 && (
+					{decided.length > 0 && (
 						<div className="rounded-lg border border-[#e5dbcd] bg-[#fffdf8] p-4">
 							<h3 className="text-sm font-semibold text-[#3d362e]">{tr(locale, "Decided", "Решённые")}</h3>
 							<ul className="mt-2 flex flex-col gap-1 text-sm text-[#3d362e]">
@@ -1397,13 +1422,13 @@ function MeasurementPanel({ project, locale }: { project: WorkspaceProject; loca
 						<h2 id="measurement-title" className="selena-heading text-2xl">
 							{tr(locale, "5 · Measurement", "5 · Замер")}
 						</h2>
-					<p className="mt-2 max-w-2xl text-sm leading-6 text-[#6e6258]">
-						{tr(
-							locale,
-							"What the ordered AI measurement observed. Questions naming the brand and category questions are counted separately and never merged into one score.",
-							"Что показал заказанный AI-замер. Вопросы с названием бренда и вопросы про категорию считаются раздельно и никогда не сводятся в один балл.",
-						)}
-					</p>
+						<p className="mt-2 max-w-2xl text-sm leading-6 text-[#6e6258]">
+							{tr(
+								locale,
+								"What the ordered AI measurement observed. Questions naming the brand and category questions are counted separately and never merged into one score.",
+								"Что показал заказанный AI-замер. Вопросы с названием бренда и вопросы про категорию считаются раздельно и никогда не сводятся в один балл.",
+							)}
+						</p>
 					</div>
 				</div>
 				{hasCycle && (
@@ -1820,6 +1845,7 @@ function VisitorApiSplit({ locale, report }: { locale: WorkspaceLocale; report: 
 }
 
 function ResultsPanel({ project, locale }: { project: WorkspaceProject; locale: WorkspaceLocale }) {
+	const { access } = Route.useLoaderData();
 	const result = project.recommendation;
 	const measurementReady = project.measurement?.status === "READY";
 	return (
@@ -1871,7 +1897,7 @@ function ResultsPanel({ project, locale }: { project: WorkspaceProject; locale: 
 							</dl>
 							{result.topActions.length > 0 && (
 								<div>
-								<h3 className="text-sm font-semibold text-[#181614]">
+									<h3 className="text-sm font-semibold text-[#181614]">
 										{tr(
 											locale,
 											`Priority actions — top ${Math.min(3, result.recommendationsCount)} of ${result.recommendationsCount}`,
@@ -1887,7 +1913,7 @@ function ResultsPanel({ project, locale }: { project: WorkspaceProject; locale: 
 												<span className="text-xs font-semibold text-[#8f5c34]">
 													{priorityLabel(item.priority, locale)}
 												</span>
-											<div>
+												<div>
 													<p className="font-medium text-[#181614]">
 														{ruleTitle(locale, item.ruleId, item.title)}
 														{item.ruleId && (
@@ -1896,7 +1922,9 @@ function ResultsPanel({ project, locale }: { project: WorkspaceProject; locale: 
 															</span>
 														)}
 													</p>
-												<p className="mt-1 text-sm leading-6 text-[#6e6258]">{ruleHow(locale, item.ruleId, item.action)}</p>
+													<p className="mt-1 text-sm leading-6 text-[#6e6258]">
+														{ruleHow(locale, item.ruleId, item.action)}
+													</p>
 													<details className="mt-2">
 														<summary className="cursor-pointer text-xs font-semibold text-[#8f5c34] underline underline-offset-4 [&::-webkit-details-marker]:hidden">
 															{tr(locale, "How to fix →", "Как исправить →")}
@@ -1933,16 +1961,24 @@ function ResultsPanel({ project, locale }: { project: WorkspaceProject; locale: 
 																	event.currentTarget.textContent = tr(locale, "Copied", "Скопировано");
 																}}
 															>
-																{tr(locale, "Copy a task for an AI developer", "Скопировать задание для AI-разработчика")}
+																{tr(
+																	locale,
+																	"Copy a task for an AI developer",
+																	"Скопировать задание для AI-разработчика",
+																)}
 															</button>
 														</div>
 													</details>
 												</div>
 											</li>
 										))}
-								</ul>
+									</ul>
 									{result.recommendationsCount > 3 && (
-										<Link to="/app/selena-report" search={{ project: project.project.id }} className="mt-3 inline-block">
+										<Link
+											to="/app/selena-report"
+											search={{ project: project.project.id }}
+											className="mt-3 inline-block"
+										>
 											<span className="text-sm font-semibold text-[#8f5c34] underline underline-offset-4">
 												{tr(
 													locale,
@@ -1988,7 +2024,7 @@ function ResultsPanel({ project, locale }: { project: WorkspaceProject; locale: 
 								"What customers see in live AI answer surfaces.",
 								"Что клиенты видят в пользовательских AI-сервисах.",
 							)}
-							href={orderPlanUrl(project.project.id, "snapshot")}
+							href={orderPlanUrl(project.project.id, "snapshot", access.isAdmin)}
 							planLabel={tr(locale, "Snapshot plan · $49/mo", "План Snapshot · $49/мес")}
 						/>
 						<ChannelSummary
@@ -1999,7 +2035,7 @@ function ResultsPanel({ project, locale }: { project: WorkspaceProject; locale: 
 								"A separate model-knowledge baseline without web search by default.",
 								"Отдельная проверка знаний моделей; веб-поиск по умолчанию выключен.",
 							)}
-							href={orderPlanUrl(project.project.id, "landscape")}
+							href={orderPlanUrl(project.project.id, "landscape", access.isAdmin)}
 							planLabel={tr(locale, "In the Landscape plan · $79/mo", "Входит в Landscape · $79/мес")}
 						/>
 					</div>
@@ -2023,7 +2059,10 @@ function ResultsPanel({ project, locale }: { project: WorkspaceProject; locale: 
  * form with the plan and project pre-selected — there is no online checkout,
  * so the form takes a request (and a promo code) instead of a payment.
  */
-function orderPlanUrl(projectId: string, plan: "snapshot" | "landscape"): string {
+function orderPlanUrl(projectId: string, plan: "snapshot" | "landscape", isAdmin: boolean): string {
+	// An admin who follows the client form ends up sending herself a lead and
+	// waiting for herself to answer it. The desk starts the measurement.
+	if (isAdmin) return "/app/selena-admin";
 	return `/app/selena-order?plan=${plan}&project=${projectId}`;
 }
 
