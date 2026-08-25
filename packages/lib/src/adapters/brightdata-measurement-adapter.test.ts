@@ -18,8 +18,10 @@ import {
 } from "./brightdata-measurement-adapter";
 
 const API_KEY = "brd-secret-owner-token";
-const ENDPOINT = "https://api.brightdata.com/request";
-const ZONE = "selena_visitor_view";
+const ENDPOINT = "https://api.brightdata.com/datasets/v3/scrape";
+const DATASET_ID = "gd_m7aof0k82r803d5bjm";
+/** The URL the adapter actually calls: the collector is chosen in the query. */
+const CALLED_URL = `${ENDPOINT}?dataset_id=${DATASET_ID}&notify=false`;
 const SCENARIO_TEXT = "Which spa in Canggu is best for a deep tissue massage?";
 
 function permitFor(overrides: Partial<SelenaExecutablePermit> = {}): SelenaExecutablePermit {
@@ -54,7 +56,7 @@ function adapterWith(fetchImpl: typeof fetch, overrides: Record<string, unknown>
 	return createBrightDataAdapter({
 		apiKey: API_KEY,
 		endpoint: ENDPOINT,
-		zone: ZONE,
+		datasetId: DATASET_ID,
 		system: "chatgpt",
 		fetchImpl,
 		resolveScenarioText: () => SCENARIO_TEXT,
@@ -87,7 +89,7 @@ afterEach(() => {
 });
 
 describe("Bright Data measurement adapter", () => {
-	it("sends one Visitor View request carrying the zone, the surface and the question", async () => {
+	it("sends one Visitor View request to the collector, carrying the question", async () => {
 		const fetchImpl = respondWith(jsonResponse(successPayload()));
 		const permit = permitFor();
 
@@ -96,7 +98,7 @@ describe("Bright Data measurement adapter", () => {
 		expect(fetchImpl).toHaveBeenCalledTimes(1);
 		expect(globalFetch).not.toHaveBeenCalled();
 		const [url, init] = fetchImpl.mock.calls[0];
-		expect(url).toBe(ENDPOINT);
+		expect(url).toBe(CALLED_URL);
 		expect(init?.method).toBe("POST");
 		const headers = init?.headers as Record<string, string>;
 		expect(headers.Authorization).toBe(`Bearer ${API_KEY}`);
@@ -104,12 +106,14 @@ describe("Bright Data measurement adapter", () => {
 
 		const rawBody = String(init?.body);
 		const body = JSON.parse(rawBody);
-		expect(body.zone).toBe(ZONE);
-		expect(body.system).toBe("chatgpt");
-		expect(body.prompt).toBe(SCENARIO_TEXT);
+		// The collector takes an input list, not a flat body — confirmed against
+		// the account's own code example.
+		expect(body.input).toHaveLength(1);
+		expect(body.input[0].url).toBe("https://chatgpt.com/");
+		expect(body.input[0].prompt).toBe(SCENARIO_TEXT);
 		// Visitor View is the search-backed surface a person sees; that is the
 		// whole difference from API View.
-		expect(body.web_search).toBe(true);
+		expect(body.input[0].web_search).toBe(true);
 		// The credential belongs in the header and nowhere else.
 		expect(rawBody).not.toContain(API_KEY);
 
@@ -202,8 +206,7 @@ describe("Bright Data measurement adapter", () => {
 		);
 
 		const outcome = await adapterWith(fetchImpl, {
-			buildRequestBody: (input: { zone: string; system: string; prompt: string }) => ({
-				zone: input.zone,
+			buildRequestBody: (input: { system: string; prompt: string }) => ({
 				collector: input.system,
 				query: input.prompt,
 			}),
@@ -215,7 +218,7 @@ describe("Bright Data measurement adapter", () => {
 		}).execute(permitFor());
 
 		const body = JSON.parse(String(fetchImpl.mock.calls[0][1]?.body));
-		expect(body).toEqual({ zone: ZONE, collector: "chatgpt", query: SCENARIO_TEXT });
+		expect(body).toEqual({ collector: "chatgpt", query: SCENARIO_TEXT });
 		expect(outcome).toMatchObject({ status: "SUCCEEDED", rawResponseReference: "brightdata:req-42" });
 
 		// A parser that throws on an unfamiliar payload is a refusal, not a crash.
@@ -364,7 +367,7 @@ describe("Bright Data measurement adapter", () => {
 		expect(() => adapterWith(fetchImpl, { endpoint: "http://api.brightdata.com/request" })).toThrow(
 			"BRIGHTDATA_ENDPOINT_INSECURE",
 		);
-		expect(() => adapterWith(fetchImpl, { zone: "  " })).toThrow("BRIGHTDATA_ZONE_MISSING");
+		expect(() => adapterWith(fetchImpl, { datasetId: "  " })).toThrow("BRIGHTDATA_DATASET_ID_MISSING");
 		expect(() => adapterWith(fetchImpl, { system: "claude" as BrightDataVisitorSystem })).toThrow(
 			"BRIGHTDATA_SYSTEM_UNSUPPORTED",
 		);

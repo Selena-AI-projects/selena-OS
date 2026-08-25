@@ -29,7 +29,15 @@ export type InertMeasurementAdapter = (typeof inertMeasurementAdapters)[number];
  * supplying credentials and a provider-side spend cap: `openrouter` (API View)
  * is approved on those terms.
  */
-export const ownerApprovedMeasurementAdapters = [...inertMeasurementAdapters, "openrouter"] as const;
+export const ownerApprovedMeasurementAdapters = [
+	...inertMeasurementAdapters,
+	"openrouter",
+	// Visitor View, one adapter per sold surface: a run is delivered under the
+	// surface the customer bought or not at all.
+	"brightdata-chatgpt",
+	"brightdata-gemini",
+	"brightdata-perplexity",
+] as const;
 export type OwnerApprovedMeasurementAdapter = (typeof ownerApprovedMeasurementAdapters)[number];
 
 export type SelenaMeasurementConfig = {

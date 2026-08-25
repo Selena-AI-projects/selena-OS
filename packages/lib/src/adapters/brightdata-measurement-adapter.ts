@@ -64,17 +64,31 @@ export type BrightDataAnswer = {
 };
 
 export type BrightDataRequestInput = {
-	zone: string;
 	system: BrightDataVisitorSystem;
 	prompt: string;
 };
+
+/**
+ * The page each collector is pointed at. Confirmed against the account's own
+ * three scrapers on 2026-08-25; the collector requires the url even though the
+ * prompt is what varies.
+ */
+export const brightDataSurfaceUrl = {
+	chatgpt: "https://chatgpt.com/",
+	gemini: "https://gemini.google.com/",
+	perplexity: "https://www.perplexity.ai",
+} as const satisfies Record<BrightDataVisitorSystem, string>;
 
 export type BrightDataAdapterDeps = {
 	apiKey: string;
 	/** Full Bright Data endpoint URL. HTTPS only — the key travels in a header. */
 	endpoint: string;
-	/** The Bright Data zone the call is billed to. */
-	zone: string;
+	/**
+	 * The collector this call runs. Bright Data selects the surface by dataset
+	 * id in the query string, not by a name in the body, so this is the value
+	 * that decides what is actually measured.
+	 */
+	datasetId: string;
 	/** Which visitor surface this adapter instance measures. */
 	system: BrightDataVisitorSystem;
 	/**
@@ -128,22 +142,33 @@ export function resolveBrightDataCost(reportedCostUsd?: number | null): {
 }
 
 /**
- * The default request body. `zone` bills the call, `system` selects the visitor
- * surface and `prompt` is the scenario question — the three facts the request
- * cannot be correct without. Everything else here is provisional.
+ * The request body, taken from the account's own code examples on 2026-08-25.
+ * The three collectors do not take the same input: Gemini carries an `index`
+ * and a top-level `limit_per_input`, ChatGPT takes the search toggle, and
+ * Perplexity takes neither.
  */
 export function buildBrightDataRequestBody(input: BrightDataRequestInput): Record<string, unknown> {
-	return {
-		zone: input.zone,
-		system: input.system,
-		prompt: input.prompt,
-		// Visitor View is the answer a person is shown, which on these surfaces
-		// is search-backed. ChatGPT's collector takes this toggle explicitly;
-		// the other surfaces always search, so sending it states the intent
-		// rather than changing their behavior.
-		web_search: true,
-		format: "json",
-	};
+	const url = brightDataSurfaceUrl[input.system];
+	if (input.system === "gemini") {
+		return { input: [{ url, prompt: input.prompt, index: 1 }], limit_per_input: null };
+	}
+	if (input.system === "chatgpt") {
+		return {
+			input: [
+				{
+					url,
+					prompt: input.prompt,
+					country: "",
+					// The account's example sends false. Visitor View is the
+					// search-backed answer a person is shown, so this channel sends
+					// true — with false it would be another API View under a name
+					// the customer did not buy.
+					web_search: true,
+				},
+			],
+		};
+	}
+	return { input: [{ url, prompt: input.prompt, country: "" }] };
 }
 
 const ANSWER_TEXT_FIELDS = [
@@ -323,11 +348,19 @@ export function createBrightDataAdapter(deps: BrightDataAdapterDeps): SelenaMeas
 	// The credential travels in a request header, so a plaintext endpoint would
 	// put it on the wire; a mock transport needs no URL scheme to be relaxed.
 	if (!/^https:\/\//i.test(deps.endpoint.trim())) throw new Error("BRIGHTDATA_ENDPOINT_INSECURE");
-	if (deps.zone.trim() === "") throw new Error("BRIGHTDATA_ZONE_MISSING");
+	if (deps.datasetId.trim() === "") throw new Error("BRIGHTDATA_DATASET_ID_MISSING");
 	if (!(brightDataVisitorSystems as readonly string[]).includes(deps.system))
 		throw new Error("BRIGHTDATA_SYSTEM_UNSUPPORTED");
 
-	const endpoint = deps.endpoint.trim();
+	// The collector is chosen in the query string, so the dataset id belongs to
+	// the URL rather than the body — and appending it here keeps every call for
+	// this instance pointed at the surface the instance was built for.
+	const endpoint = (() => {
+		const url = new URL(deps.endpoint.trim());
+		url.searchParams.set("dataset_id", deps.datasetId.trim());
+		url.searchParams.set("notify", "false");
+		return url.toString();
+	})();
 	const now = deps.now ?? (() => new Date());
 	const maxResponseBytes = deps.maxResponseBytes ?? DEFAULT_MAX_RESPONSE_BYTES;
 	const buildRequestBody = deps.buildRequestBody ?? buildBrightDataRequestBody;
@@ -361,7 +394,7 @@ export function createBrightDataAdapter(deps: BrightDataAdapterDeps): SelenaMeas
 						Authorization: `Bearer ${deps.apiKey}`,
 						"Content-Type": "application/json",
 					},
-					body: JSON.stringify(buildRequestBody({ zone: deps.zone, system: deps.system, prompt: scenarioText })),
+					body: JSON.stringify(buildRequestBody({ system: deps.system, prompt: scenarioText })),
 					signal: controller.signal,
 				});
 			} catch (error) {
