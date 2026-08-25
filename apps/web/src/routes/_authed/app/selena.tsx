@@ -83,7 +83,7 @@ const emptyProfileForm = {
 };
 
 function SelenaWorkspace() {
-	const { workspace, access } = Route.useLoaderData();
+	const { workspace } = Route.useLoaderData();
 	const { projects } = workspace;
 	const router = useRouter();
 	const { user } = useAuth();
