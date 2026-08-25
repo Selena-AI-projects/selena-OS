@@ -1,9 +1,10 @@
 # Wiring the Bright Data adapter for Visitor View
 
 This note covers one adapter: `packages/lib/src/adapters/brightdata-measurement-adapter.ts`.
-It is written and tested, registered nowhere, and cannot be selected. Keep it in
-this state until the two open questions at the bottom are answered against a
-real Bright Data response.
+It is registered, owner-approved and selectable. What is still unproven is the
+provider contract itself — the open questions at the bottom are answered from a
+real response, not from this repository, and until they are, treat any number it
+produces as unverified.
 
 It is a companion to "Turning measurement on" in `SELENA_OWNER_OPERATING_GUIDE.md`;
 nothing here replaces the gates described there.
@@ -16,51 +17,34 @@ Selling one as the other is the failure this adapter is shaped to avoid, so it
 accepts only `visitor_view` permits and only the three surfaces the catalog
 sells (`visitorSurfaces`).
 
-## Enabling it (five steps, in this order)
+## Turning it on
 
-1. **Put a hard spend cap on the Bright Data account itself**, per zone. It is
-   the only limit that still holds if this application misbehaves.
-2. **Supply credentials and routing to the worker**: the API token, the endpoint
-   URL (HTTPS — the adapter refuses plaintext, because the token travels in a
-   header), the zone the call is billed to, and one surface per adapter
-   instance. One instance measures one surface.
-3. **Give the adapter a way to read the scenario text.** A permit carries a
-   scenario id, not the question, and the adapter holds no database access on
-   purpose — pass a tenant-scoped reader as `resolveScenarioText`.
-4. **Register the adapter** in `apps/worker/src/jobs/selena-measure.ts`:
+1. **Put a hard spend cap on the Bright Data account itself.** It is the only
+   limit that still holds if this application misbehaves.
+2. **Give the worker `BRIGHTDATA_API_TOKEN`.** It is the only account-specific
+   value: the endpoint and the three collector ids are defaults in the worker,
+   overridable through `SELENA_BRIGHTDATA_ENDPOINT` and
+   `SELENA_BRIGHTDATA_DATASET_<SURFACE>`. The endpoint must be HTTPS — the
+   adapter refuses plaintext, because the token travels in a header.
+3. **Set `SELENA_MEASUREMENT_ADAPTER=brightdata`** together with
+   `SELENA_MEASUREMENT_ENABLED=true`. `brightdata` is a family, not an adapter:
+   one instance measures one surface, and a plan that sells three needs the
+   family to route each permit to the instance for the surface that permit
+   authorized. See "Wiring the Bright Data adapters for Visitor View" in the
+   owner guide for what a plain name does to a three-surface order.
 
-   ```ts
-   import { createBrightDataAdapter } from "@workspace/lib/adapters/brightdata";
-
-   const ADAPTERS: MeasurementAdapterRegistry = {
-     noop: createNoopMeasurementAdapter(),
-     brightdata: createBrightDataAdapter({
-       apiKey: process.env.BRIGHTDATA_API_TOKEN ?? "",
-       endpoint: process.env.SELENA_BRIGHTDATA_ENDPOINT ?? "",
-       zone: process.env.SELENA_BRIGHTDATA_ZONE ?? "",
-       system: "chatgpt",
-       fetchImpl: fetch,
-       resolveScenarioText: (permit) => scenarioTextFor(ctx, permit.scenarioId),
-     }),
-   };
-   ```
-
-5. **Widen the allowlist**, which is the actual owner gate: `assertAdapterAllowed`
-   in `packages/selena-visibility-contracts/src/measurement-execution.ts` accepts
-   only names listed in `inertMeasurementAdapters`, so `brightdata` has to be
-   added there — together with the test that pins the gate shut. Registering the
-   adapter without this edit changes nothing: the run is refused with
-   `SELENA_LIVE_ADAPTER_REQUIRES_OWNER_GO`.
-
-Only after all five does `SELENA_MEASUREMENT_ADAPTER=brightdata` with
-`SELENA_MEASUREMENT_ENABLED=true` start spending.
+The adapter reads the question through a tenant-scoped `resolveScenarioText` and
+the brand context through `resolveExtractionContext`, both supplied by the
+worker: a permit carries ids, not text, and the adapter holds no database access
+on purpose.
 
 ## What the adapter does and does not do
 
 - One permit is one POST. There is no retry and no polling loop inside it.
-- The request carries the zone, the surface and the scenario question. The token
-  is sent in the `Authorization` header and appears nowhere else — not in the
-  body, the URL, an outcome, or an error string.
+- The collector is named by `dataset_id` in the query string and the body
+  carries the surface URL and the scenario question. The token is sent in the
+  `Authorization` header and appears nowhere else — not in the body, the URL, an
+  outcome, or an error string.
 - The timeout never outlives the permit: the authorization window is the ceiling,
   so a call cannot return an answer nothing is allowed to record any more.
 - The run row stores a reference to the answer — Bright Data's own request id
@@ -105,10 +89,11 @@ Capture one real response per surface and confirm:
    snapshot. If that is the only flow available, this adapter's single-request
    shape is not sufficient on its own and needs a polling variant; the permit
    deadline then has to cover the whole snapshot wait.
-2. **Request body field names**: `zone`, `system`, `prompt`, `web_search`,
-   `format` are the adapter's defaults. The real names may differ (`dataset_id`,
-   `url`, `query`, `country`, …), and the surface may be selected by dataset id
-   rather than by name.
+2. **Request body shape per surface.** The collector is selected by
+   `dataset_id` in the query string; the body is built per surface
+   (`buildBrightDataRequestBody`) because the three collectors do not take the
+   same fields. Taken from the account's own scraper pages, not from a
+   successful call.
 3. **Answer field**: the default reads the first non-empty string among
    `answer_text_markdown`, `answer_text`, `answer`, `response_text`, `text`,
    `content`.
