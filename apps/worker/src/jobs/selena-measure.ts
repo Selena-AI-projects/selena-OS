@@ -47,12 +47,12 @@ const BRIGHTDATA_SURFACES = ["chatgpt", "gemini", "perplexity"] as const;
  */
 const BRIGHTDATA_DATASET_IDS: Record<(typeof BRIGHTDATA_SURFACES)[number], string> = {
 	chatgpt: "gd_m7aof0k82r803d5bjm",
-	// The account answers "dataset does not exist" for the id transcribed from
-	// its scraper page, so there is no default worth keeping: an adapter built
-	// on a wrong collector spends a permit to discover a 404. Empty means the
-	// surface is not registered, which the family check then refuses before a
-	// permit is claimed. Supply the real id in SELENA_BRIGHTDATA_DATASET_GEMINI.
-	gemini: "",
+	// Read off the account's own scraper page. The id transcribed by eye before
+	// it carried a capital Z where this one has a digit 2, and the account
+	// answered that as "dataset does not exist" — at the cost of a permit each
+	// time. An empty value here still means the surface is not registered, so
+	// the family is refused before a permit is claimed rather than after.
+	gemini: "gd_mbz66arm2mf9cu856y",
 	perplexity: "gd_m7dhdot1vw9a7gc1n",
 };
 
