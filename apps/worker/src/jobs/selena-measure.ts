@@ -35,8 +35,25 @@ const ADAPTERS: MeasurementAdapterRegistry = { noop: createNoopMeasurementAdapte
  * two siblings. Only the zone has to be supplied — it is the one value that is
  * specific to the account rather than to Bright Data.
  */
-const BRIGHTDATA_DEFAULT_ENDPOINT = "https://api.brightdata.com/request";
+const BRIGHTDATA_DEFAULT_ENDPOINT = "https://api.brightdata.com/datasets/v3/scrape";
 const BRIGHTDATA_SURFACES = ["chatgpt", "gemini", "perplexity"] as const;
+
+/**
+ * One collector per surface, taken from the account's own scrapers. They are
+ * defaults rather than secrets — a dataset id names a public collector — so a
+ * surface can be measured without another environment variable, and an
+ * override stays available if a collector is ever replaced.
+ */
+const BRIGHTDATA_DATASET_IDS: Record<(typeof BRIGHTDATA_SURFACES)[number], string> = {
+	chatgpt: "gd_m7aof0k82r803d5bjm",
+	gemini: "gd_mbz66armZmf9cu856y",
+	perplexity: "gd_m7dhdot1vw9a7gc1n",
+};
+
+function brightDataDatasetId(surface: (typeof BRIGHTDATA_SURFACES)[number]) {
+	const override = process.env[`SELENA_BRIGHTDATA_DATASET_${surface.toUpperCase()}`]?.trim();
+	return override || BRIGHTDATA_DATASET_IDS[surface];
+}
 
 function brightDataAdapterName(surface: (typeof BRIGHTDATA_SURFACES)[number]) {
 	return `brightdata-${surface}`;
@@ -84,7 +101,7 @@ export async function selenaMeasureJob(jobs: Job<SelenaMeasureData>[]): Promise<
 						[brightDataAdapterName(brightDataSurface)]: createBrightDataAdapter({
 							apiKey: process.env.BRIGHTDATA_API_TOKEN ?? "",
 							endpoint: process.env.SELENA_BRIGHTDATA_ENDPOINT?.trim() || BRIGHTDATA_DEFAULT_ENDPOINT,
-							zone: process.env.SELENA_BRIGHTDATA_ZONE ?? "",
+							datasetId: brightDataDatasetId(brightDataSurface),
 							system: brightDataSurface,
 							fetchImpl: fetch,
 							resolveScenarioText: resolvers.resolveScenarioText,
