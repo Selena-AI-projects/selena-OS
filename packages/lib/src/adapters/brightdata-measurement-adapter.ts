@@ -32,7 +32,11 @@ import { estimateRunCostUsd } from "../usage/cost";
 
 const DEFAULT_TIMEOUT_MS = 120_000;
 /** A visitor answer is prose plus a source list; past this it is a runaway page. */
-const DEFAULT_MAX_RESPONSE_BYTES = 1024 * 1024;
+// Measured on the account's own collectors: a ChatGPT answer arrived at 0.97 MB
+// and a Perplexity one at 2.6 MB, because the payload carries the rendered
+// answer alongside the text. A cap below those turns real answers into
+// RESPONSE_TOO_LARGE.
+const DEFAULT_MAX_RESPONSE_BYTES = 8 * 1024 * 1024;
 
 export const brightDataVisitorSystems = ["chatgpt", "gemini", "perplexity"] as const;
 export type BrightDataVisitorSystem = (typeof brightDataVisitorSystems)[number];
@@ -91,6 +95,9 @@ export type BrightDataAdapterDeps = {
 	datasetId: string;
 	/** Which visitor surface this adapter instance measures. */
 	system: BrightDataVisitorSystem;
+	/** How long to keep collecting an answer the collector went long on. */
+	snapshotTimeoutMs?: number;
+	snapshotPollMs?: number;
 	/**
 	 * Transport is injected rather than read off the global: it is what lets a
 	 * test exercise this module without a network, and what keeps the single
@@ -179,8 +186,33 @@ const ANSWER_TEXT_FIELDS = [
 	"text",
 	"content",
 ] as const;
-const SOURCE_FIELDS = ["citations", "links_attached", "sources"] as const;
+// ChatGPT returns an empty `citations` beside a populated `search_sources`, so
+// the list is read through rather than stopped at the first field present.
+const SOURCE_FIELDS = ["citations", "search_sources", "references", "links_attached", "sources"] as const;
 const REQUEST_ID_FIELDS = ["snapshot_id", "request_id", "response_id", "id"] as const;
+
+/**
+ * The scrape call waits for the answer and, when the collector runs past its
+ * window, replies with a snapshot handle instead — measured at about sixty
+ * seconds on both reachable surfaces. That reply is a receipt, not prose: a run
+ * that stops there records MALFORMED_RESPONSE on an answer that was produced
+ * and billed. These are where the answer is then collected.
+ */
+const PROGRESS_ENDPOINT = "https://api.brightdata.com/datasets/v3/progress";
+const SNAPSHOT_ENDPOINT = "https://api.brightdata.com/datasets/v3/snapshot";
+const DEFAULT_SNAPSHOT_TIMEOUT_MS = 300_000;
+const DEFAULT_SNAPSHOT_POLL_MS = 10_000;
+
+/** The handle a receipt carries, when the payload is only a receipt. */
+export function snapshotIdFrom(payload: unknown): string | null {
+	const record = asRecord(Array.isArray(payload) ? payload[0] : payload);
+	if (!record) return null;
+	for (const field of REQUEST_ID_FIELDS) {
+		const value = record[field];
+		if (typeof value === "string" && value.trim() !== "") return value.trim();
+	}
+	return null;
+}
 
 function asRecord(value: unknown): Record<string, unknown> | null {
 	return typeof value === "object" && value !== null && !Array.isArray(value)
@@ -365,6 +397,53 @@ export function createBrightDataAdapter(deps: BrightDataAdapterDeps): SelenaMeas
 	const maxResponseBytes = deps.maxResponseBytes ?? DEFAULT_MAX_RESPONSE_BYTES;
 	const buildRequestBody = deps.buildRequestBody ?? buildBrightDataRequestBody;
 	const parseAnswer = deps.parseAnswer ?? parseBrightDataAnswer;
+	const snapshotTimeoutMs = deps.snapshotTimeoutMs ?? DEFAULT_SNAPSHOT_TIMEOUT_MS;
+	const snapshotPollMs = deps.snapshotPollMs ?? DEFAULT_SNAPSHOT_POLL_MS;
+
+	/**
+	 * Collects an answer the collector went long on. Bounded by both its own
+	 * budget and the permit deadline, and it stays inside the one authorized
+	 * provider call: the same answer is being waited for, not a second one.
+	 * A snapshot that never becomes ready yields null, which the caller records
+	 * as a timeout — never as an answer that was empty.
+	 */
+	async function awaitSnapshot(snapshotId: string, budgetMs: number): Promise<unknown | null> {
+		if (budgetMs <= 0) return null;
+		const headers = { Authorization: `Bearer ${deps.apiKey}` };
+		// The budget comes from the injected clock, so permit expiry stays
+		// testable; elapsed time has to come from the wall clock, because a
+		// fixed clock would never let the loop finish.
+		const deadline = Date.now() + budgetMs;
+		while (Date.now() < deadline) {
+			const progress = await deps
+				.fetchImpl(`${PROGRESS_ENDPOINT}/${encodeURIComponent(snapshotId)}`, { headers })
+				.catch(() => null);
+			const state = progress?.ok ? ((await progress.json().catch(() => null)) as { status?: string } | null) : null;
+			if (state?.status === "ready") break;
+			if (state?.status === "failed") return null;
+			const remaining = deadline - Date.now();
+			if (remaining <= 0) return null;
+			await new Promise((resolve) => setTimeout(resolve, Math.min(snapshotPollMs, remaining)));
+		}
+		const snapshot = await deps
+			.fetchImpl(`${SNAPSHOT_ENDPOINT}/${encodeURIComponent(snapshotId)}?format=json`, { headers })
+			.catch(() => null);
+		if (!snapshot?.ok) {
+			await snapshot?.body?.cancel().catch(() => {});
+			return null;
+		}
+		let body: string;
+		try {
+			body = await readBodyWithinLimit(snapshot, maxResponseBytes);
+		} catch {
+			return null;
+		}
+		try {
+			return JSON.parse(body);
+		} catch {
+			return body;
+		}
+	}
 
 	async function execute(permit: SelenaExecutablePermit): Promise<RunOutcome> {
 		let scenarioText: string;
@@ -434,7 +513,26 @@ export function createBrightDataAdapter(deps: BrightDataAdapterDeps): SelenaMeas
 			} catch {
 				answer = null;
 			}
-			if (!answer) return invalidOutcome(permit, "MALFORMED_RESPONSE", costFields());
+			// No answer but a handle to one: the reply is a receipt, and the
+			// answer it stands for has already been produced and billed.
+			// Abandoning it here would record a paid answer as an unreadable
+			// payload.
+			if (!answer) {
+				const snapshotId = snapshotIdFrom(payload);
+				if (snapshotId === null) return invalidOutcome(permit, "MALFORMED_RESPONSE", costFields());
+				const collected = await awaitSnapshot(
+					snapshotId,
+					Math.min(snapshotTimeoutMs, permit.expiresAt.getTime() - now().getTime()),
+				);
+				if (collected === null) return invalidOutcome(permit, "SNAPSHOT_NOT_READY", costFields());
+				try {
+					answer = parseAnswer(collected);
+				} catch {
+					answer = null;
+				}
+				if (!answer) return invalidOutcome(permit, "MALFORMED_RESPONSE", costFields());
+				answer = { ...answer, providerRequestId: answer.providerRequestId ?? snapshotId };
+			}
 			// Storing the answer text (CABINET_MODEL §4a) must never store the
 			// credential: a surface that echoes request material back would
 			// otherwise write the key into a row read by more people than hold
