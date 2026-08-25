@@ -214,9 +214,11 @@ permit authorizes. `SELENA_MEASUREMENT_ADAPTER=auto` does the same across both
 channels — visitor surfaces to Bright Data, API models to OpenRouter — which is
 what the full landscape plan needs, and it requires both credentials.
 
-Naming one adapter directly (`brightdata-chatgpt`) still works and is the
-narrower thing to do for a first test: it measures one surface and refuses the
-other two rather than mismeasuring them.
+Naming one adapter directly (`brightdata-chatgpt`) is for a scope that sells
+that one surface. Do not use it to "start small" on a three-surface order: a
+plain name is not routing, so the Gemini and Perplexity permits are spent on the
+ChatGPT collector, and the guard then refuses their answers as evidence for a
+system the permit did not authorize. Paid, and no numbers. Set the family.
 
 Every member of a family passes the same owner gate, and the whole family is
 checked before a permit is claimed — a family missing one registered adapter is
