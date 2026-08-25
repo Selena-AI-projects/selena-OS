@@ -7,6 +7,7 @@ import { createNoopMeasurementAdapter } from "@workspace/lib/selena-measurement"
 import {
 	assertDispatchModes,
 	type MeasurementAdapterRegistry,
+	measurementAdapterNamesFor,
 	measurementConfigFromEnv,
 	runMeasurementForPermit,
 } from "@workspace/lib/selena-run-executor";
@@ -30,10 +31,10 @@ export interface SelenaMeasureData {
 const ADAPTERS: MeasurementAdapterRegistry = { noop: createNoopMeasurementAdapter() };
 
 /**
- * Bright Data's own default endpoint. One instance measures one surface, so a
- * Visitor View run names the surface it bought: `brightdata-chatgpt` and its
- * two siblings. Only the zone has to be supplied — it is the one value that is
- * specific to the account rather than to Bright Data.
+ * Bright Data's own default endpoint. One adapter instance measures one
+ * surface — `brightdata-chatgpt` and its two siblings — so a plan that sells
+ * three of them is configured as the `brightdata` family and every instance it
+ * routes to is built here. Only the API token is account-specific.
  */
 const BRIGHTDATA_DEFAULT_ENDPOINT = "https://api.brightdata.com/datasets/v3/scrape";
 const BRIGHTDATA_SURFACES = ["chatgpt", "gemini", "perplexity"] as const;
@@ -79,14 +80,15 @@ export async function selenaMeasureJob(jobs: Job<SelenaMeasureData>[]): Promise<
 	// provider calls for the same work, doubling spend and breaking cardinality.
 	assertDispatchModes(isMaintenanceEnabled(process.env.SCHEDULE_MAINTENANCE_ENABLED), true);
 	const repositories = createSelenaRepositories(db);
-	// Constructed only when selected: building it validates OPENROUTER_API_KEY,
-	// and a permit executed by the inert noop adapter must not die on a key it
-	// would never use.
-	const brightDataSurface = BRIGHTDATA_SURFACES.find((surface) => config.adapter === brightDataAdapterName(surface));
-	const adapters: MeasurementAdapterRegistry =
-		config.adapter === "openrouter"
+	// Constructed only where selected: building the OpenRouter adapter validates
+	// OPENROUTER_API_KEY, and a permit executed by the inert noop adapter must
+	// not die on a key it would never use. A family name selects several at
+	// once, because one plan is measured across several systems.
+	const selected = new Set(measurementAdapterNamesFor(config.adapter));
+	const adapters: MeasurementAdapterRegistry = {
+		...ADAPTERS,
+		...(selected.has("openrouter")
 			? {
-					...ADAPTERS,
 					openrouter: createOpenRouterAdapter({
 						apiKey: process.env.OPENROUTER_API_KEY ?? "",
 						model: resolveCatalogApiModel(process.env.SELENA_OPENROUTER_MODEL),
@@ -95,19 +97,22 @@ export async function selenaMeasureJob(jobs: Job<SelenaMeasureData>[]): Promise<
 						resolveExtractionContext: resolvers.resolveExtractionContext,
 					}),
 				}
-			: brightDataSurface
-				? {
-						...ADAPTERS,
-						[brightDataAdapterName(brightDataSurface)]: createBrightDataAdapter({
-							apiKey: process.env.BRIGHTDATA_API_TOKEN ?? "",
-							endpoint: process.env.SELENA_BRIGHTDATA_ENDPOINT?.trim() || BRIGHTDATA_DEFAULT_ENDPOINT,
-							datasetId: brightDataDatasetId(brightDataSurface),
-							system: brightDataSurface,
-							fetchImpl: fetch,
-							resolveScenarioText: resolvers.resolveScenarioText,
-						}),
-					}
-				: ADAPTERS;
+			: {}),
+		...Object.fromEntries(
+			BRIGHTDATA_SURFACES.filter((surface) => selected.has(brightDataAdapterName(surface))).map((surface) => [
+				brightDataAdapterName(surface),
+				createBrightDataAdapter({
+					apiKey: process.env.BRIGHTDATA_API_TOKEN ?? "",
+					endpoint: process.env.SELENA_BRIGHTDATA_ENDPOINT?.trim() || BRIGHTDATA_DEFAULT_ENDPOINT,
+					datasetId: brightDataDatasetId(surface),
+					system: surface,
+					fetchImpl: fetch,
+					resolveScenarioText: resolvers.resolveScenarioText,
+					resolveExtractionContext: resolvers.resolveExtractionContext,
+				}),
+			]),
+		),
+	};
 	for (const job of jobs) {
 		const ctx: SelenaRepositoryContext = {
 			actorId: job.data.actorId ?? "worker:selena-measure",

@@ -4,13 +4,13 @@ import { fileURLToPath } from "node:url";
 import type { RunOutcome } from "@workspace/selena-visibility-contracts";
 import { describe, expect, it, vi } from "vitest";
 import type { ControlledCycleState } from "./run-policy";
+import { createNoopMeasurementAdapter, type SelenaExecutablePermit } from "./selena-measurement";
 import {
+	executePermit,
 	type MeasurementAdapter,
 	type MeasurementRunStore,
-	executePermit,
 	runMeasurementForPermit,
 } from "./selena-run-executor";
-import { type SelenaExecutablePermit, createNoopMeasurementAdapter } from "./selena-measurement";
 
 const now = new Date("2026-08-19T10:00:00.000Z");
 
@@ -229,11 +229,56 @@ describe("Selena measurement runner", () => {
 				permitId: "permit-1",
 				ctx,
 				store,
-				adapters: { noop: adapter, brightdata: adapter },
-				config: { enabled: true, adapter: "brightdata" },
+				adapters: { noop: adapter, scraperapi: adapter },
+				config: { enabled: true, adapter: "scraperapi" },
 				now,
 			}),
 		).rejects.toThrow("SELENA_LIVE_ADAPTER_REQUIRES_OWNER_GO");
+		expect(claim).not.toHaveBeenCalled();
+	});
+
+	it("measures a permit on the adapter for the system it authorized", async () => {
+		for (const [systemId, expected] of [
+			["ChatGPT", "brightdata-chatgpt"],
+			["Perplexity", "brightdata-perplexity"],
+		] as const) {
+			const { store } = storeFor(permitFor({ systemId, channel: "VISITOR" }));
+			const reached: string[] = [];
+			const adapters = Object.fromEntries(
+				["brightdata-chatgpt", "brightdata-gemini", "brightdata-perplexity"].map((name) => {
+					const { adapter, execute } = spyAdapter();
+					execute.mockImplementation(async (permit: SelenaExecutablePermit) => {
+						reached.push(name);
+						return { dispatchKey: permit.dispatchKey, status: "SUCCEEDED", validity: "VALID" } as const;
+					});
+					return [name, adapter];
+				}),
+			);
+			await runMeasurementForPermit({
+				permitId: "permit-1",
+				ctx,
+				store,
+				adapters: { noop: createNoopMeasurementAdapter(), ...adapters },
+				config: { enabled: true, adapter: "brightdata" },
+				now,
+			});
+			expect(reached).toEqual([expected]);
+		}
+	});
+
+	it("refuses a family whose adapters are not all registered, before a permit is spent", async () => {
+		const { store, claim } = storeFor();
+		const { adapter } = spyAdapter();
+		await expect(
+			runMeasurementForPermit({
+				permitId: "permit-1",
+				ctx,
+				store,
+				adapters: { noop: adapter, "brightdata-chatgpt": adapter },
+				config: { enabled: true, adapter: "brightdata" },
+				now,
+			}),
+		).rejects.toThrow("SELENA_ADAPTER_NOT_REGISTERED");
 		expect(claim).not.toHaveBeenCalled();
 	});
 

@@ -1,8 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
 	assertAdapterAllowed,
+	assertAdaptersConfigured,
 	assertMeasurementAllowed,
+	measurementAdapterNamesFor,
 	measurementConfigFromEnv,
+	resolveMeasurementAdapterName,
 	runOutcomeSchema,
 } from "./measurement-execution";
 
@@ -28,6 +31,35 @@ describe("Selena measurement execution boundary", () => {
 		// openrouter is owner-approved: registered and named, it may execute.
 		expect(() => assertAdapterAllowed("openrouter", ["noop", "openrouter"])).not.toThrow();
 		expect(() => assertAdapterAllowed("openrouter", ["noop"])).toThrow("SELENA_ADAPTER_NOT_REGISTERED");
+	});
+
+	it("measures each system on the adapter that sells it, not on one name for the whole service", () => {
+		expect(resolveMeasurementAdapterName("brightdata", "ChatGPT")).toBe("brightdata-chatgpt");
+		expect(resolveMeasurementAdapterName("brightdata", "Perplexity")).toBe("brightdata-perplexity");
+		// Both channels of the full landscape plan, from one configured name.
+		expect(resolveMeasurementAdapterName("auto", "Gemini")).toBe("brightdata-gemini");
+		expect(resolveMeasurementAdapterName("auto", "anthropic/claude-haiku-4.5")).toBe("openrouter");
+		// A plain name still means itself, so a single-surface run stays possible.
+		expect(resolveMeasurementAdapterName("brightdata-chatgpt", "ChatGPT")).toBe("brightdata-chatgpt");
+		expect(resolveMeasurementAdapterName("noop", null)).toBe("noop");
+	});
+
+	it("refuses a system the configured family cannot measure rather than guessing one", () => {
+		expect(() => resolveMeasurementAdapterName("brightdata", "anthropic/claude-haiku-4.5")).toThrow(
+			"SELENA_ADAPTER_NO_ROUTE",
+		);
+		expect(() => resolveMeasurementAdapterName("brightdata", null)).toThrow("SELENA_ADAPTER_NO_ROUTE");
+	});
+
+	it("holds every adapter a family can reach to the same owner gate", () => {
+		const brightData = ["brightdata-chatgpt", "brightdata-gemini", "brightdata-perplexity"];
+		expect(measurementAdapterNamesFor("brightdata").sort()).toEqual([...brightData].sort());
+		expect(measurementAdapterNamesFor("auto").sort()).toEqual([...brightData, "openrouter"].sort());
+		expect(() => assertAdaptersConfigured("brightdata", ["noop", ...brightData])).not.toThrow();
+		// One missing member is enough: the family is refused before a permit is spent.
+		expect(() => assertAdaptersConfigured("brightdata", ["noop", "brightdata-chatgpt"])).toThrow(
+			"SELENA_ADAPTER_NOT_REGISTERED",
+		);
 	});
 
 	it("accepts a well-formed outcome and rejects incoherent or unknown fields", () => {

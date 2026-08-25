@@ -6,7 +6,9 @@ import {
 	visitorSurfaces,
 } from "@workspace/selena-visibility-contracts";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { ControlledCycleState } from "../run-policy";
 import type { SelenaExecutablePermit } from "../selena-measurement";
+import { executePermit } from "../selena-run-executor";
 import { estimateRunCostUsd } from "../usage/cost";
 import {
 	type BrightDataVisitorSystem,
@@ -30,7 +32,8 @@ function permitFor(overrides: Partial<SelenaExecutablePermit> = {}): SelenaExecu
 		organizationId: "org-1",
 		cycleId: "cycle-1",
 		scenarioId: "scenario-1",
-		systemId: "chatgpt",
+		// The catalog's name for the surface, which is what a real permit carries.
+		systemId: "ChatGPT",
 		channel: "VISITOR",
 		dispatchKey: "order-1:scenario-1:ChatGPT:0:1",
 		expiresAt: new Date("2026-08-19T11:00:00.000Z"),
@@ -444,7 +447,7 @@ describe("Bright Data measurement adapter", () => {
 		}).execute(permitFor());
 		expect(() => runOutcomeSchema.parse(withContext)).not.toThrow();
 		expect(withContext.measurement).toEqual({
-			system: "chatgpt",
+			system: "ChatGPT",
 			language: "en",
 			region: "ID",
 			extractorVersion: "selena-extract/1",
@@ -460,6 +463,39 @@ describe("Bright Data measurement adapter", () => {
 
 		const withoutContext = await adapterWith(respondWith(jsonResponse(payload))).execute(permitFor());
 		expect(withoutContext.measurement).toBeUndefined();
+	});
+
+	it("attributes evidence to the surface the permit authorized, so the executor keeps it", async () => {
+		const extraction = {
+			brandTerms: ["KORA Food Hall"],
+			ownedDomains: ["korafoodhall.com"],
+			competitors: [],
+			language: "en",
+			region: "ID",
+		};
+		for (const [system, surface] of Object.entries(brightDataVisitorSurface)) {
+			const permit = permitFor({ systemId: surface });
+			const outcome = await executePermit({
+				permit,
+				adapter: adapterWith(respondWith(jsonResponse(successPayload())), {
+					system,
+					resolveExtractionContext: () => extraction,
+				}),
+				cycleState: {
+					activeMaintenanceJobs: 0,
+					activeCohortJobs: 0,
+					cohortId: permit.cycleId,
+					expectedJobs: 1,
+					expectedProviderCalls: 1,
+					seenCohortIds: new Set<string>(),
+					globalEmergencyStop: false,
+					orderStopped: false,
+				} satisfies ControlledCycleState,
+				config: { enabled: true, adapter: `brightdata-${system}` },
+				now: now(),
+			});
+			expect(outcome.measurement?.system).toBe(surface);
+		}
 	});
 
 	it("keeps a paid answer VALID when the extraction context cannot be resolved", async () => {

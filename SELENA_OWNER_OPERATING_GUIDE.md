@@ -192,6 +192,36 @@ What the adapter does and does not do, so the first invoice holds no surprises:
   bodies and request errors can echo the API key back, and run rows are read by
   more people than hold the credential.
 
+### Wiring the Bright Data adapters for Visitor View
+
+Visitor View is what the local plan sells: what a person actually sees on
+ChatGPT, Gemini and Perplexity. One adapter instance measures one surface, and
+the account supplies one collector per surface, so the worker holds three of
+them — `brightdata-chatgpt`, `brightdata-gemini`, `brightdata-perplexity`.
+
+`BRIGHTDATA_API_TOKEN` on the worker is the only account-specific value. The
+collector ids are defaults in the code because a dataset id names a public
+collector rather than a secret; `SELENA_BRIGHTDATA_DATASET_CHATGPT` and its two
+siblings override one if a collector is ever replaced, and
+`SELENA_BRIGHTDATA_ENDPOINT` overrides the API address.
+
+`SELENA_MEASUREMENT_ADAPTER=brightdata` is the name to set — a **family**, not
+an adapter. One plan sells three surfaces, and a single adapter name would send
+all three to one of them: the customer would pay for a Gemini answer measured on
+ChatGPT, which the executor then refuses as evidence for a system the permit did
+not authorize. The family routes per permit instead, from the surface that
+permit authorizes. `SELENA_MEASUREMENT_ADAPTER=auto` does the same across both
+channels — visitor surfaces to Bright Data, API models to OpenRouter — which is
+what the full landscape plan needs, and it requires both credentials.
+
+Naming one adapter directly (`brightdata-chatgpt`) still works and is the
+narrower thing to do for a first test: it measures one surface and refuses the
+other two rather than mismeasuring them.
+
+Every member of a family passes the same owner gate, and the whole family is
+checked before a permit is claimed — a family missing one registered adapter is
+refused while the permit is still unspent, not after it has been paid for.
+
 ## Before accepting a paid order
 
 - Set package prices in the admin pricing configuration.
