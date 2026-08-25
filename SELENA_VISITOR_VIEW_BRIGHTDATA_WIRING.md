@@ -72,7 +72,31 @@ on purpose.
   sources, provider-named `answer.citedUrls` and text-derived domains are three
   different origins and are never pooled into one figure.
 
-## What must be confirmed on a real response before the first paid run
+## Confirmed on a real response, 2026-08-25
+
+The first live calls were made from CI against the account's own collectors.
+What they settled:
+
+1. **The exchange is two-legged.** `datasets/v3/scrape` waits about sixty
+   seconds and then replies with `{message, snapshot_id}` — a receipt. The
+   answer is collected from `datasets/v3/progress/{id}` and
+   `datasets/v3/snapshot/{id}`. A run that stops at the receipt records an
+   answer that was produced and billed as an unreadable payload.
+2. **The answer field is `answer_text_markdown`** on both reachable surfaces.
+3. **Sources are not in the same field on both.** Perplexity fills `citations`;
+   ChatGPT returns `citations` empty beside a populated `search_sources`. A
+   reader that stops at the first field present reports a cited answer as
+   uncited.
+4. **Payloads are large.** 0.97 MB from ChatGPT and 2.6 MB from Perplexity,
+   because the rendered answer travels with the text.
+5. **The Gemini collector id is wrong.** The account answers `dataset does not
+   exist`. Its default is now empty, so the surface is not registered and the
+   family is refused before a permit is claimed; supply the real id in
+   `SELENA_BRIGHTDATA_DATASET_GEMINI`.
+
+## Still open
+
+
 
 The request body and the response field names are a **hypothesis**, taken from
 the field names this repository's existing collector reads

@@ -47,7 +47,12 @@ const BRIGHTDATA_SURFACES = ["chatgpt", "gemini", "perplexity"] as const;
  */
 const BRIGHTDATA_DATASET_IDS: Record<(typeof BRIGHTDATA_SURFACES)[number], string> = {
 	chatgpt: "gd_m7aof0k82r803d5bjm",
-	gemini: "gd_mbz66armZmf9cu856y",
+	// The account answers "dataset does not exist" for the id transcribed from
+	// its scraper page, so there is no default worth keeping: an adapter built
+	// on a wrong collector spends a permit to discover a 404. Empty means the
+	// surface is not registered, which the family check then refuses before a
+	// permit is claimed. Supply the real id in SELENA_BRIGHTDATA_DATASET_GEMINI.
+	gemini: "",
 	perplexity: "gd_m7dhdot1vw9a7gc1n",
 };
 
@@ -99,7 +104,9 @@ export async function selenaMeasureJob(jobs: Job<SelenaMeasureData>[]): Promise<
 				}
 			: {}),
 		...Object.fromEntries(
-			BRIGHTDATA_SURFACES.filter((surface) => selected.has(brightDataAdapterName(surface))).map((surface) => [
+			BRIGHTDATA_SURFACES.filter(
+				(surface) => selected.has(brightDataAdapterName(surface)) && brightDataDatasetId(surface) !== "",
+			).map((surface) => [
 				brightDataAdapterName(surface),
 				createBrightDataAdapter({
 					apiKey: process.env.BRIGHTDATA_API_TOKEN ?? "",

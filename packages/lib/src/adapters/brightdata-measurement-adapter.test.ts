@@ -203,6 +203,41 @@ describe("Bright Data measurement adapter", () => {
 		expect(parseBrightDataAnswer({ nothing: "known" })).toBeNull();
 	});
 
+	it("collects the answer a receipt stands for instead of refusing the receipt", async () => {
+		// The scrape call replies with a handle when the collector runs long.
+		// Stopping there would record a produced, billed answer as unreadable.
+		const responses = [
+			jsonResponse({ message: "Timeout, use snapshot_id to fetch", snapshot_id: "s_77" }),
+			jsonResponse({ status: "ready" }),
+			jsonResponse([{ answer_text_markdown: "KORA Food Hall is the one purpose-built option." }]),
+		];
+		const seen: string[] = [];
+		const fetchImpl = vi.fn(async (input: RequestInfo | URL) => {
+			seen.push(String(input));
+			return responses.shift() as Response;
+		}) as unknown as typeof fetch;
+
+		const outcome = await adapterWith(fetchImpl, { snapshotPollMs: 0 }).execute(permitFor());
+		expect(outcome).toMatchObject({ status: "SUCCEEDED", validity: "VALID" });
+		// The run stays auditable on the provider's side by the handle it was given.
+		expect(outcome.rawResponseReference).toBe("brightdata:s_77");
+		expect(seen[1]).toContain("/progress/s_77");
+		expect(seen[2]).toContain("/snapshot/s_77");
+	});
+
+	it("records a snapshot that never arrives as unfinished, not as an empty answer", async () => {
+		const fetchImpl = vi.fn(async (input: RequestInfo | URL) =>
+			String(input).includes("/scrape")
+				? jsonResponse({ message: "queued", snapshot_id: "s_78" })
+				: jsonResponse({ status: "running" }),
+		) as unknown as typeof fetch;
+
+		const outcome = await adapterWith(fetchImpl, { snapshotPollMs: 0, snapshotTimeoutMs: 0 }).execute(permitFor());
+		expect(outcome).toMatchObject({ status: "INVALID", invalidReason: "SNAPSHOT_NOT_READY" });
+		// Silence from the provider must never reach the ledger as evidence.
+		expect(outcome.measurement).toBeUndefined();
+	});
+
 	it("lets the owner pin the confirmed request and response shape without editing the adapter", async () => {
 		const fetchImpl = respondWith(
 			new Response(JSON.stringify({ visible_answer: "Confirmed answer." }), { status: 200 }),
@@ -225,7 +260,9 @@ describe("Bright Data measurement adapter", () => {
 		expect(outcome).toMatchObject({ status: "SUCCEEDED", rawResponseReference: "brightdata:req-42" });
 
 		// A parser that throws on an unfamiliar payload is a refusal, not a crash.
-		const thrown = await adapterWith(respondWith(jsonResponse(successPayload())), {
+		// The payload carries no handle, so there is nothing to collect and the
+		// refusal is about the shape rather than about a snapshot.
+		const thrown = await adapterWith(respondWith(jsonResponse({ unfamiliar: true })), {
 			parseAnswer: () => {
 				throw new Error("unfamiliar payload");
 			},
