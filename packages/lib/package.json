@@ -43,6 +43,7 @@
 		,"./website-security": "./src/website-security.ts"
 		,"./selena-monitoring": "./src/selena-monitoring.ts"
 		,"./selena-flow": "./src/selena-flow.ts"
+		,"./selena-control-room": "./src/selena-control-room.ts"
 		,"./public-source-adapters": "./src/public-source-adapters.ts"
 		,"./public-provider-gates": "./src/public-provider-gates.ts"
 		,"./recommendation-persistence": "./src/recommendation-persistence.ts"

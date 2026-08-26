@@ -11,6 +11,7 @@ import {
 	IconReport,
 	IconSitemap,
 	IconSpeakerphone,
+	IconShieldCheck,
 	IconTable,
 	IconTarget,
 	IconTimeline,
@@ -117,6 +118,17 @@ export function AppSidebar({
 		groups.push({
 			label: "Dashboard",
 			items: dashboardItems,
+		});
+
+		groups.push({
+			label: "Control Room",
+			items: [
+				{
+					title: "Content Control",
+					url: "/control-room",
+					icon: IconShieldCheck,
+				},
+			],
 		});
 
 		// Settings section - only show if onboarded
