@@ -1034,7 +1034,7 @@ export const scrContentAssets = selenaRegistrySchema.table(
 		sha256: text("sha256").notNull(),
 		mimeType: text("mime_type").notNull(),
 		sizeBytes: integer("size_bytes").notNull(),
-		scanStatus: scrAssetScanStatusEnum().notNull().default("QUARANTINED"),
+		scanStatus: scrAssetScanStatusEnum("scan_status").notNull().default("QUARANTINED"),
 		scanProviderEventRef: text("scan_provider_event_ref"),
 		rightsExpiresAt: timestamp("rights_expires_at", { withTimezone: true }),
 		consentExpiresAt: timestamp("consent_expires_at", { withTimezone: true }),
