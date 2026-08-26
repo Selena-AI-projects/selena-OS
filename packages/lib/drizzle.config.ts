@@ -12,13 +12,17 @@ if (!databaseUrl) {
 }
 const stagingDatabaseUrl = new URL(databaseUrl);
 const stagingRole = stagingDatabaseUrl.searchParams.get("options") ?? process.env.PGOPTIONS;
+const usesAllowedStagingEndpoint =
+	stagingDatabaseUrl.hostname.startsWith("db.") || stagingDatabaseUrl.hostname.endsWith(".pooler.supabase.com");
 if (
 	isStagingMvp &&
 	(stagingDatabaseUrl.port !== "5432" ||
-		!stagingDatabaseUrl.hostname.startsWith("db.") ||
+		!usesAllowedStagingEndpoint ||
 		!stagingRole?.includes("role=selena_schema_owner"))
 ) {
-	throw new Error("SELENA_MIGRATION_DATABASE_URL must use direct port 5432 with the selena_schema_owner startup role");
+	throw new Error(
+		"SELENA_MIGRATION_DATABASE_URL must use a direct or session-mode Supabase endpoint on port 5432 with the selena_schema_owner startup role",
+	);
 }
 
 const dbCredentials = { url: databaseUrl };
