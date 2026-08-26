@@ -1,5 +1,5 @@
-import { createServerFn } from "@tanstack/react-start";
 import { randomUUID } from "node:crypto";
+import { createServerFn } from "@tanstack/react-start";
 import { selenaWebDb as db } from "@workspace/lib/db/db";
 import { isSelenaStagingMvp } from "@workspace/lib/db/provisioning";
 import {
@@ -12,8 +12,8 @@ import {
 	scrIncidents,
 	scrKillSwitches,
 	scrMetricSnapshots,
-	scrReleaseIntents,
 	scrPublicationAttempts,
+	scrReleaseIntents,
 	scrReleaseManifests,
 	scrReleaseOutboxEvents,
 } from "@workspace/lib/db/schema";
@@ -27,7 +27,7 @@ import {
 } from "@workspace/lib/selena-control-room";
 import { and, desc, eq, isNull, sql } from "drizzle-orm";
 import { z } from "zod";
-import { canWrite, resolveSessionAuthContext, type AuthContext } from "../lib/selena-auth-context";
+import { type AuthContext, canWrite, resolveSessionAuthContext } from "../lib/selena-auth-context";
 
 type ControlRoomDatabase = Pick<typeof db, "execute" | "insert" | "select" | "update">;
 type AuditDatabase = Pick<ControlRoomDatabase, "execute" | "insert" | "select">;
@@ -447,7 +447,12 @@ export const bootstrapStagingControlRoomFn = createServerFn({ method: "POST" })
 		const contentHash = contentVersionHash({ body, ctaUrl, claims: [], evidence, disclosure, policyVersion });
 
 		return withControlRoomTransaction(context, data.brandId, async (tx) => {
-			let [account] = await tx
+			const bootstrapResult = await tx.execute(sql`
+			SELECT channel_account_id, created
+			FROM selena_registry.ensure_staging_dry_run_channel_account()
+		`);
+			const bootstrapRow = bootstrapResult.rows?.[0] as { created?: boolean } | undefined;
+			const [account] = await tx
 				.select()
 				.from(scrChannelAccounts)
 				.where(
@@ -459,19 +464,8 @@ export const bootstrapStagingControlRoomFn = createServerFn({ method: "POST" })
 					),
 				)
 				.limit(1);
-			if (!account) {
-				[account] = await tx
-					.insert(scrChannelAccounts)
-					.values({
-						organizationId: context.tenantId,
-						brandId: data.brandId,
-						platform: "linkedin_page_dry_run",
-						providerAccountRef: STAGING_DEMO_ACCOUNT_REF,
-						status: "DRY_RUN",
-						allowlisted: false,
-						createdBy: context.actorId,
-					})
-					.returning();
+			if (!account) throw new Error("Staging dry-run account was not created");
+			if (bootstrapRow?.created) {
 				await appendAudit(tx, {
 					context,
 					brandId: data.brandId,
