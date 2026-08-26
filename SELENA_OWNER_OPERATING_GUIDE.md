@@ -224,6 +224,40 @@ Every member of a family passes the same owner gate, and the whole family is
 checked before a permit is claimed — a family missing one registered adapter is
 refused while the permit is still unspent, not after it has been paid for.
 
+### Measuring the owner's own projects on Railway
+
+`pnpm -C packages/lib measure:selena-journal` runs the owner's own projects
+through the product's own chain — configuration lock, order, run permits, the
+executor, the evidence ledger — from a command instead of the order desk. The
+result lands in the same tables a paid measurement writes to, so the report
+screens read it like any other.
+
+It exists to get off a CI runner. A runner is billed by the wall clock and
+spends nearly all of it idle waiting on a collector: one full pass bought about
+ninety cents of answers and cost six dollars of machine time. Railway is already
+running and already paid for.
+
+It is not a scheduler. One invocation measures the projects named in one
+variable, and it refuses to start without a spend ceiling it checks before the
+first request:
+
+| Variable | What it does |
+|---|---|
+| `SELENA_JOURNAL_TENANT` | The organization the projects and evidence belong to |
+| `SELENA_JOURNAL_PROJECTS` | Comma-separated slugs, or `all` |
+| `SELENA_JOURNAL_MAX_COST_USD` | Refuses to run if the plan would exceed it |
+
+It also needs what any live measurement needs: `DATABASE_URL`,
+`BRIGHTDATA_API_TOKEN`, `SELENA_MEASUREMENT_ENABLED=true` and a
+`SELENA_MEASUREMENT_ADAPTER` that reaches a Visitor View collector.
+
+The question sets live in `packages/lib/src/selena-journal-scenarios.ts` and are
+versioned: the version is the prompt family's identity, so changing a question
+starts a new series rather than adding rows to the old one. A third-party set
+may be measured — the answers are public and the cost is ours — but its result
+does not reach a public page without that owner's recorded yes, and the script
+says so as it runs.
+
 ## Before accepting a paid order
 
 - Set package prices in the admin pricing configuration.
