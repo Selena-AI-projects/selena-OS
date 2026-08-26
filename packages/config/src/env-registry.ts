@@ -58,6 +58,13 @@ export const ENV_REGISTRY: EnvVarSpec[] = [
 		description: "Restricted PostgreSQL connection used only by Selena Control Room server functions.",
 	},
 	{
+		name: "SELENA_MIGRATION_DATABASE_URL",
+		scope: "server",
+		requiredBy: "optional",
+		credential: true,
+		description: "Dedicated PostgreSQL migration identity; never available to normal web or worker runtime.",
+	},
+	{
 		name: "SELENA_STAGING_MVP",
 		scope: "server",
 		requiredBy: "optional",
