@@ -9,7 +9,8 @@
 		"compare:onboarding": "tsx scripts/compare-onboarding.ts",
 		"generate:auth-schema": "bash scripts/generate-auth-schema.sh",
 		"verify:membership-dedupe": "tsx scripts/verify-membership-dedupe.ts",
-		"rehearse:selena-stub-cycle": "tsx scripts/selena-stub-cycle.ts"
+		"rehearse:selena-stub-cycle": "tsx scripts/selena-stub-cycle.ts",
+		"measure:selena-journal": "tsx scripts/selena-measure-journal.ts"
 	},
 	"exports": {
 		"./db/db": "./src/db/db.ts",
