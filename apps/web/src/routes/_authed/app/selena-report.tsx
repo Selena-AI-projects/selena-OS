@@ -6,8 +6,9 @@
  */
 import { Link, createFileRoute } from "@tanstack/react-router";
 import { Button } from "@workspace/ui/components/button";
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import { z } from "zod";
+import type { GraderChannel } from "@workspace/lib/selena-grader-report";
 import { getSelenaWorkspaceFn } from "../../../server/selena-client";
 import { type CycleCompareResult, getSelenaCycleCompareFn } from "../../../server/selena-cycle-compare";
 import { PRIORITY_LABELS, ruleExample, ruleFixTask, ruleHow, ruleSteps, ruleTitle } from "@/lib/selena-rule-help";
@@ -21,6 +22,60 @@ export const Route = createFileRoute("/_authed/app/selena-report")({
 });
 
 type ReportLocale = "en" | "ru";
+type ReportModel = NonNullable<GraderReportView["report"]>;
+type AnswerStateMap = Record<string, { loading: boolean; text: string | null }>;
+type ReportSectionId =
+	| "overview"
+	| "visibility"
+	| "share-of-voice"
+	| "query-fan-out"
+	| "ai-answers"
+	| "citations"
+	| "competitors"
+	| "commercial-queries"
+	| "prompt-library"
+	| "ai-systems"
+	| "opportunities"
+	| "recommendations"
+	| "action-plan"
+	| "evidence-ledger"
+	| "brand-profile"
+	| "markets"
+	| "data-sources"
+	| "team";
+type QuestionSystemColumn = {
+	key: string;
+	systemId: string;
+	channel: GraderChannel;
+	captureModes: string[];
+};
+
+const REPORT_SECTION_TARGETS: Record<ReportSectionId, string> = {
+	overview: "overview",
+	visibility: "visibility",
+	"share-of-voice": "share-of-voice",
+	"query-fan-out": "query-fan-out",
+	"ai-answers": "ai-answers",
+	citations: "citations",
+	competitors: "share-of-voice",
+	"commercial-queries": "prompt-library",
+	"prompt-library": "prompt-library",
+	"ai-systems": "visibility",
+	opportunities: "opportunities",
+	recommendations: "recommendations",
+	"action-plan": "recommendations",
+	"evidence-ledger": "evidence-ledger",
+	"brand-profile": "brand-profile",
+	markets: "brand-profile",
+	"data-sources": "citations",
+	team: "brand-profile",
+};
+
+const REPORT_SECTION_IDS = new Set<ReportSectionId>(Object.keys(REPORT_SECTION_TARGETS) as ReportSectionId[]);
+
+function isReportSectionId(value: string | null): value is ReportSectionId {
+	return value !== null && REPORT_SECTION_IDS.has(value as ReportSectionId);
+}
 
 function tr(locale: ReportLocale, english: string, russian: string): string {
 	return locale === "ru" ? russian : english;
@@ -57,6 +112,188 @@ function captureLabel(locale: ReportLocale, channel: "VISITOR" | "API", captureM
 function systemLabel(locale: ReportLocale, systemId: string): string {
 	if (systemId === "unattributed") return tr(locale, "System not recorded", "Система не записана");
 	return SYSTEM_LABELS[systemId] ?? systemId;
+}
+
+function systemKey(system: { channel: GraderChannel; systemId: string }): string {
+	return `${system.channel}:${system.systemId}`;
+}
+
+function compareQuestionSystemColumn(left: QuestionSystemColumn, right: QuestionSystemColumn): number {
+	return left.channel === right.channel
+		? left.systemId.localeCompare(right.systemId)
+		: left.channel === "VISITOR"
+			? -1
+			: 1;
+}
+
+function questionSystemColumns(report: ReportModel): QuestionSystemColumn[] {
+	const columns = new Map<string, QuestionSystemColumn>();
+	for (const system of report.systems)
+		columns.set(systemKey(system), {
+			key: systemKey(system),
+			systemId: system.systemId,
+			channel: system.channel,
+			captureModes: system.captureModes,
+		});
+	for (const question of report.questions)
+		for (const system of question.systems)
+			if (!columns.has(systemKey(system)))
+				columns.set(systemKey(system), {
+					key: systemKey(system),
+					systemId: system.systemId,
+					channel: system.channel,
+					captureModes: system.captureModes,
+				});
+	return [...columns.values()].sort(compareQuestionSystemColumn);
+}
+
+function questionCellLabel(
+	locale: ReportLocale,
+	result: ReportModel["questions"][number]["systems"][number] | undefined,
+): string {
+	if (!result) return tr(locale, "not asked", "не спрашивали");
+	if (result.answersAnalyzed === 0) return tr(locale, "UNKNOWN", "НЕИЗВЕСТНО");
+	if (result.brandMentioned > 0)
+		return tr(
+			locale,
+			`${result.brandMentioned} of ${result.answersAnalyzed}`,
+			`${result.brandMentioned} из ${result.answersAnalyzed}`,
+		);
+	return tr(locale, `0 of ${result.answersAnalyzed}`, `0 из ${result.answersAnalyzed}`);
+}
+
+function questionCellClass(result: ReportModel["questions"][number]["systems"][number] | undefined): string {
+	if (!result || result.answersAnalyzed === 0) return "border-[#e6ddd1] bg-[#f7f2ea] text-[#6e6258]";
+	if (result.brandMentioned > 0) return "border-[#bedbc8] bg-[#edf7ef] text-[#285f3e]";
+	return "border-[#ead1c4] bg-[#fff7f1] text-[#8f5c34]";
+}
+
+function runButtonClass(mentioned: boolean | null): string {
+	if (mentioned === true) return "border-[#bedbc8] bg-[#edf7ef] text-[#285f3e]";
+	if (mentioned === false) return "border-[#ead1c4] bg-[#fff7f1] text-[#8f5c34]";
+	return "border-[#e6ddd1] bg-[#f7f2ea] text-[#6e6258]";
+}
+
+function AIAnswersTable({
+	report,
+	locale,
+	answers,
+	onOpenAnswer,
+}: {
+	report: ReportModel;
+	locale: ReportLocale;
+	answers: AnswerStateMap;
+	onOpenAnswer: (runId: string) => void;
+}) {
+	const columns = questionSystemColumns(report);
+	if (report.questions.length === 0)
+		return (
+			<p className="mt-4 text-sm text-[#6e6258]">
+				{tr(locale, "UNKNOWN — no approved question text is attached to this cycle.", "НЕИЗВЕСТНО — к этому циклу не привязан текст утверждённых вопросов.")}
+			</p>
+		);
+	return (
+		<div className="mt-4 overflow-x-auto">
+			<table className="w-full min-w-[920px] border-collapse text-sm">
+				<thead>
+					<tr className="border-b border-[#e6ddd1] text-left text-xs font-semibold uppercase tracking-wide text-[#6e6258]">
+						<th className="w-[22rem] py-3 pr-4">{tr(locale, "Question", "Вопрос")}</th>
+						<th className="w-28 py-3 pr-4">{tr(locale, "Type", "Тип")}</th>
+						{columns.map((system) => (
+							<th key={system.key} className="min-w-40 py-3 pr-4 align-bottom">
+								<span className="block normal-case tracking-normal text-[#181614]">
+									{systemLabel(locale, system.systemId)}
+								</span>
+								<span className="block normal-case tracking-normal">
+									{system.channel === "VISITOR" ? "Visitor View" : "API View"}
+								</span>
+							</th>
+						))}
+					</tr>
+				</thead>
+				<tbody>
+					{report.questions.map((question) => {
+						const results = new Map(question.systems.map((system) => [systemKey(system), system]));
+						const openedRuns = question.systems.flatMap((system) =>
+							system.runs
+								.filter((run) => answers[run.runId])
+								.map((run) => ({
+									run,
+									system,
+									answer: answers[run.runId],
+								})),
+						);
+						return (
+							<Fragment key={question.scenarioId}>
+								<tr className="border-b border-[#e6ddd1] align-top">
+									<td className="py-3 pr-4">
+										<p className="font-medium leading-6 text-[#181614]">{question.text}</p>
+										<p className="mt-1 text-xs uppercase tracking-wide text-[#6e6258]">{question.language}</p>
+									</td>
+									<td className="py-3 pr-4 text-xs text-[#6e6258]">
+										{question.branded
+											? tr(locale, "names the brand", "с названием бренда")
+											: tr(locale, "category", "категорийный")}
+									</td>
+									{columns.map((column) => {
+										const result = results.get(column.key);
+										return (
+											<td key={column.key} className="py-3 pr-4">
+												<span
+													className={`inline-flex min-h-8 items-center rounded-full border px-3 py-1 text-xs font-semibold tabular-nums ${questionCellClass(result)}`}
+												>
+													{questionCellLabel(locale, result)}
+												</span>
+												{result && result.runs.length > 0 && (
+													<div className="mt-2 flex flex-wrap gap-1.5 print:hidden">
+														{result.runs.map((run, index) => (
+															<button
+																key={run.runId}
+																type="button"
+																className={`min-h-8 rounded-full border px-2.5 text-[0.7rem] font-semibold ${runButtonClass(run.brandMentioned)}`}
+																onClick={() => onOpenAnswer(run.runId)}
+																title={tr(locale, "Open answer text", "Открыть текст ответа")}
+															>
+																{index + 1}
+															</button>
+														))}
+													</div>
+												)}
+											</td>
+										);
+									})}
+								</tr>
+								{openedRuns.length > 0 && (
+									<tr className="border-b border-[#e6ddd1]">
+										<td colSpan={columns.length + 2} className="bg-[#fbf7ef] px-4 py-3">
+											<div className="grid gap-3">
+												{openedRuns.map(({ run, system, answer }) => (
+													<div key={run.runId} className="rounded-lg border border-[#e6ddd1] bg-[#fffdf8] p-3">
+														<p className="text-xs font-semibold uppercase tracking-wide text-[#6e6258]">
+															{systemLabel(locale, system.systemId)} ·{" "}
+															{system.channel === "VISITOR" ? "Visitor View" : "API View"} ·{" "}
+															{run.brandMentioned === null
+																? tr(locale, "UNKNOWN", "НЕИЗВЕСТНО")
+																: run.brandMentioned
+																	? tr(locale, "brand named", "бренд назван")
+																	: tr(locale, "brand not named", "бренд не назван")}
+														</p>
+														<p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-[#3d362e]">
+															{answer.loading ? tr(locale, "Loading…", "Загружаем…") : answer.text}
+														</p>
+													</div>
+												))}
+											</div>
+										</td>
+									</tr>
+								)}
+							</Fragment>
+						);
+					})}
+				</tbody>
+			</table>
+		</div>
+	);
 }
 
 const SIGNAL_LABELS: Record<string, [string, string]> = {
@@ -115,8 +352,12 @@ function Ring({ fraction, label, caption }: { fraction: number | null; label: st
 	);
 }
 
-function SectionCard({ children }: { children: React.ReactNode }) {
-	return <section className="selena-section">{children}</section>;
+function SectionCard({ children, id }: { children: React.ReactNode; id?: string }) {
+	return (
+		<section id={id ? `report-section-${id}` : undefined} className="selena-section scroll-mt-6">
+			{children}
+		</section>
+	);
 }
 
 function SectionTitle({ title, lead }: { title: string; lead?: string }) {
@@ -125,6 +366,138 @@ function SectionTitle({ title, lead }: { title: string; lead?: string }) {
 			<h2 className="selena-heading text-2xl">{title}</h2>
 			{lead && <p className="mt-2 max-w-2xl text-sm leading-6 text-[#6e6258]">{lead}</p>}
 		</div>
+	);
+}
+
+function railValue(locale: ReportLocale, value: number | null, fallback: string): string {
+	return value === null ? fallback : new Intl.NumberFormat(locale === "ru" ? "ru-RU" : "en-US").format(value);
+}
+
+function ReportContextRail({
+	view,
+	report,
+	locale,
+	activeSection,
+	onSelect,
+}: {
+	view: GraderReportView | null;
+	report: ReportModel | null;
+	locale: ReportLocale;
+	activeSection: ReportSectionId;
+	onSelect: (section: ReportSectionId) => void;
+}) {
+	const noMeasurement = tr(locale, "no measurement", "нет замера");
+	const notSetUp = tr(locale, "not set up", "не настроено");
+	const unknown = tr(locale, "UNKNOWN", "НЕИЗВЕСТНО");
+	const brand = view?.inputs?.brandName || view?.project.name || tr(locale, "No brand selected", "Бренд не выбран");
+	const market = [view?.project.country, view?.project.region].filter(Boolean).join(" · ") || unknown;
+	const questionsCount = report?.questions.length ?? null;
+	const systemsCount = report?.systems.length ?? null;
+	const competitorsCount =
+		report?.roster.filter((entry) => !entry.isBrand).length ?? view?.inputs?.competitorsConfigured ?? null;
+	const groups: {
+		title: string;
+		items: { id: ReportSectionId; label: string; value: string }[];
+	}[] = [
+		{
+			title: tr(locale, "Measurement", "Замер"),
+			items: [
+				{ id: "overview", label: tr(locale, "Overview", "Обзор"), value: view?.cycle ? view.cycle.status : noMeasurement },
+				{ id: "visibility", label: tr(locale, "Visibility", "Видимость"), value: railValue(locale, systemsCount, noMeasurement) },
+				{
+					id: "share-of-voice",
+					label: tr(locale, "Share of Voice", "Доля голоса"),
+					value: report && report.methodology.answersAnalyzed > 0 ? tr(locale, "measured", "измерено") : noMeasurement,
+				},
+				{ id: "query-fan-out", label: tr(locale, "Query Fan-Out", "Разворачивание запроса"), value: unknown },
+				{ id: "ai-answers", label: tr(locale, "AI Answers", "AI-ответы"), value: railValue(locale, questionsCount, noMeasurement) },
+				{ id: "citations", label: tr(locale, "Citations", "Источники"), value: railValue(locale, report?.overall.citationGap.length ?? null, noMeasurement) },
+			],
+		},
+		{
+			title: tr(locale, "Market context", "Контекст рынка"),
+			items: [
+				{ id: "competitors", label: tr(locale, "Competitors", "Конкуренты"), value: railValue(locale, competitorsCount, notSetUp) },
+				{ id: "commercial-queries", label: tr(locale, "Commercial Queries", "Коммерческие вопросы"), value: railValue(locale, questionsCount, notSetUp) },
+				{ id: "prompt-library", label: tr(locale, "Prompt Library", "Библиотека вопросов"), value: railValue(locale, questionsCount, notSetUp) },
+				{ id: "ai-systems", label: tr(locale, "AI Systems", "AI-системы"), value: railValue(locale, systemsCount, noMeasurement) },
+			],
+		},
+		{
+			title: tr(locale, "Improvement", "Улучшение"),
+			items: [
+				{ id: "opportunities", label: tr(locale, "Opportunities", "Возможности"), value: railValue(locale, report?.gaps.length ?? null, noMeasurement) },
+				{ id: "recommendations", label: tr(locale, "Recommendations", "Рекомендации"), value: railValue(locale, report?.recommendations.length ?? view?.freeAudit?.actions.length ?? null, notSetUp) },
+				{ id: "action-plan", label: tr(locale, "Action Plan", "План действий"), value: railValue(locale, view?.freeAudit?.actions.length ?? report?.recommendations.length ?? null, notSetUp) },
+				{ id: "evidence-ledger", label: tr(locale, "Evidence Ledger", "Журнал доказательств"), value: railValue(locale, report?.methodology.answersAnalyzed ?? null, noMeasurement) },
+			],
+		},
+		{
+			title: tr(locale, "Settings", "Настройки"),
+			items: [
+				{ id: "brand-profile", label: tr(locale, "Brand Profile", "Профиль бренда"), value: view?.inputs ? tr(locale, "set", "задан") : notSetUp },
+				{ id: "markets", label: tr(locale, "Markets & Languages", "Рынки и языки"), value: market },
+				{ id: "data-sources", label: tr(locale, "Data Sources", "Источники данных"), value: report ? tr(locale, "from runs", "из прогонов") : notSetUp },
+				{ id: "team", label: tr(locale, "Team & Access", "Команда и доступ"), value: tr(locale, "session", "сессия") },
+			],
+		},
+	];
+	const body = (
+		<div className="rounded-2xl border border-[#e6ddd1] bg-[#fffdf8] p-4 shadow-[0_16px_38px_-32px_rgba(24,22,20,0.42)]">
+			<div>
+				<p className="text-[0.68rem] font-bold uppercase tracking-[0.18em] text-[#8f5c34]">Selena Systems</p>
+				<label className="mt-3 block text-xs font-semibold text-[#6e6258]" htmlFor="report-product">
+					{tr(locale, "Product", "Продукт")}
+				</label>
+				<select
+					id="report-product"
+					className="mt-1 min-h-11 w-full rounded-lg border border-[#d9cfc2] bg-[#fffdf8] px-3 text-sm font-semibold text-[#181614]"
+					defaultValue="ai-visibility"
+				>
+					<option value="ai-visibility">AI Visibility</option>
+				</select>
+			</div>
+			<div className="mt-5 border-t border-[#e6ddd1] pt-4">
+				<p className="text-[0.68rem] font-bold uppercase tracking-[0.18em] text-[#6e6258]">
+					{tr(locale, "Current brand", "Текущий бренд")}
+				</p>
+				<p className="mt-2 font-semibold text-[#181614]">{brand}</p>
+				<p className="mt-1 break-words text-xs text-[#6e6258]">{view?.inputs?.primaryDomain || tr(locale, "website not set", "сайт не задан")}</p>
+				<p className="mt-1 text-xs text-[#6e6258]">{market}</p>
+			</div>
+			<nav className="mt-5 grid gap-5" aria-label={tr(locale, "Report sections", "Разделы отчёта")}>
+				{groups.map((group) => (
+					<div key={group.title}>
+						<p className="text-[0.68rem] font-bold uppercase tracking-[0.18em] text-[#6e6258]">{group.title}</p>
+						<div className="mt-2 grid gap-1">
+							{group.items.map((item) => (
+								<button
+									key={item.id}
+									type="button"
+									data-selected={activeSection === item.id || undefined}
+									className="flex min-h-10 items-center justify-between gap-3 rounded-lg px-2.5 py-2 text-left text-sm text-[#3d362e] hover:bg-[#f5eee2] data-[selected]:bg-[#181614] data-[selected]:text-[#fffdf8]"
+									onClick={() => onSelect(item.id)}
+								>
+									<span>{item.label}</span>
+									<span className="shrink-0 text-xs opacity-75">{item.value}</span>
+								</button>
+							))}
+						</div>
+					</div>
+				))}
+			</nav>
+		</div>
+	);
+	return (
+		<aside className="lg:sticky lg:top-5 lg:self-start">
+			<details className="lg:hidden">
+				<summary className="min-h-11 cursor-pointer rounded-xl border border-[#e6ddd1] bg-[#fffdf8] px-4 py-3 text-sm font-semibold text-[#181614]">
+					{tr(locale, "Dashboard context", "Контекст дашборда")}
+				</summary>
+				<div className="mt-3">{body}</div>
+			</details>
+			<div className="hidden lg:block">{body}</div>
+		</aside>
 	);
 }
 
@@ -137,10 +510,13 @@ function SelenaReportPage() {
 	const [compare, setCompare] = useState<CycleCompareResult | null>(null);
 	const [failed, setFailed] = useState(false);
 	const [answers, setAnswers] = useState<Record<string, { loading: boolean; text: string | null }>>({});
+	const [activeSection, setActiveSection] = useState<ReportSectionId>("overview");
 
 	useEffect(() => {
 		const saved = window.localStorage.getItem("selena-workspace-locale");
 		setLocale(saved === "ru" || saved === "en" ? saved : navigator.language.startsWith("ru") ? "ru" : "en");
+		const savedSection = window.localStorage.getItem("selena-report-section");
+		if (isReportSectionId(savedSection)) setActiveSection(savedSection);
 	}, []);
 
 	useEffect(() => {
@@ -195,6 +571,15 @@ function SelenaReportPage() {
 					: current,
 			);
 		}
+	};
+
+	const selectReportSection = (section: ReportSectionId) => {
+		setActiveSection(section);
+		window.localStorage.setItem("selena-report-section", section);
+		const target = document.getElementById(`report-section-${REPORT_SECTION_TARGETS[section]}`);
+		if (!target) return;
+		const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+		target.scrollIntoView({ block: "start", behavior: prefersReducedMotion ? "auto" : "smooth" });
 	};
 
 	const report = view?.report ?? null;
@@ -266,7 +651,15 @@ function SelenaReportPage() {
 				</div>
 			</section>
 
-			<main className="mx-auto mt-7 flex max-w-5xl flex-col gap-6 px-5">
+			<main className="mx-auto mt-7 grid max-w-7xl gap-6 px-5 lg:grid-cols-[18rem_minmax(0,1fr)]">
+				<ReportContextRail
+					view={view}
+					report={report}
+					locale={locale}
+					activeSection={activeSection}
+					onSelect={selectReportSection}
+				/>
+				<div className="flex min-w-0 flex-col gap-6">
 				{failed && (
 					<SectionCard>
 						<p className="text-sm text-[#9a5f14]">{tr(locale, "Could not load the report.", "Не удалось загрузить отчёт.")}</p>
@@ -290,7 +683,7 @@ function SelenaReportPage() {
 				)}
 
 				{view?.inputs && (
-					<SectionCard>
+					<SectionCard id="brand-profile">
 						<SectionTitle
 							title={tr(locale, "What you provided", "Что вы ввели")}
 							lead={tr(
@@ -326,10 +719,9 @@ function SelenaReportPage() {
 				)}
 
 				{view && !report && !failed && (
-					<>
-						{view.freeAudit ? (
+					view.freeAudit ? (
 							<>
-								<SectionCard>
+								<SectionCard id="overview">
 									<SectionTitle
 										title={tr(locale, "How this was checked — free", "Как проверялось — бесплатно")}
 										lead={tr(
@@ -357,7 +749,7 @@ function SelenaReportPage() {
 									</p>
 								</SectionCard>
 
-								<SectionCard>
+								<SectionCard id="data-sources">
 									{(() => {
 										// The technical readiness score, like the agent-readiness graders:
 										// a severity-weighted share of passing checks. It scores the SITE's
@@ -439,7 +831,7 @@ function SelenaReportPage() {
 								</SectionCard>
 
 								{view.freeAudit.actions.length > 0 && (
-									<SectionCard>
+									<SectionCard id="recommendations">
 										<SectionTitle
 											title={tr(locale, "Website action plan", "План улучшения сайта")}
 											lead={tr(
@@ -514,7 +906,7 @@ function SelenaReportPage() {
 									</SectionCard>
 								)}
 
-								<SectionCard>
+								<SectionCard id="visibility">
 									<SectionTitle
 										title={tr(locale, "What a measurement unlocks", "Что откроется после замера")}
 										lead={tr(
@@ -557,7 +949,7 @@ function SelenaReportPage() {
 								</SectionCard>
 							</>
 						) : (
-							<SectionCard>
+							<SectionCard id="overview">
 								<SectionTitle title={tr(locale, "No checks yet", "Проверок ещё не было")} />
 								<p className="mt-3 text-sm text-[#6e6258]">
 									{tr(
@@ -570,14 +962,13 @@ function SelenaReportPage() {
 									<Button type="button">{tr(locale, "Open the cabinet", "Открыть кабинет")}</Button>
 								</Link>
 							</SectionCard>
-						)}
-					</>
+						)
 				)}
 
 				{report && (
 					<>
 						{report.methodology.answersExpected === 0 ? (
-							<SectionCard>
+							<SectionCard id="overview">
 								<SectionTitle title={tr(locale, "How this was measured", "Как проверялось")} />
 								<p className="mt-3 text-sm text-[#6e6258]">
 									{tr(
@@ -588,7 +979,7 @@ function SelenaReportPage() {
 								</p>
 							</SectionCard>
 						) : (
-						<SectionCard>
+						<SectionCard id="overview">
 							<SectionTitle
 								title={tr(locale, "How this was measured", "Как проверялось")}
 								lead={tr(
@@ -664,8 +1055,8 @@ function SelenaReportPage() {
 							{ list: apiSystems, title: tr(locale, "What models know on their own — API View", "Внутреннее знание моделей — API View") },
 						]
 							.filter((group) => group.list.length > 0)
-							.map((group) => (
-								<SectionCard key={group.title}>
+							.map((group, index) => (
+								<SectionCard key={group.title} id={index === 0 ? "visibility" : undefined}>
 									<SectionTitle
 										title={group.title}
 										lead={tr(
@@ -755,7 +1146,44 @@ function SelenaReportPage() {
 								</SectionCard>
 							))}
 
-						<SectionCard>
+						<SectionCard id="ai-answers">
+							<SectionTitle
+								title={tr(locale, "AI answers by question", "AI-ответы по вопросам")}
+								lead={tr(
+									locale,
+									"One approved question per row. Each system cell shows whether the brand was named in that system's measured answers; numbered chips open the exact answer text behind the cell.",
+									"Один утверждённый вопрос в строке. В каждой ячейке системы видно, назван ли бренд в её ответах; цифры открывают конкретные тексты ответов.",
+								)}
+							/>
+							<AIAnswersTable report={report} locale={locale} answers={answers} onOpenAnswer={openAnswer} />
+							<p className="mt-3 max-w-3xl text-xs italic text-[#6e6258]">
+								{tr(
+									locale,
+									"UNKNOWN means the run has no analyzable answer yet or the retained text was not available; it is never counted as a miss.",
+									"НЕИЗВЕСТНО означает, что у прогона пока нет разобранного ответа или сохранённый текст недоступен; это никогда не считается промахом.",
+								)}
+							</p>
+						</SectionCard>
+
+						<SectionCard id="query-fan-out">
+							<SectionTitle
+								title={tr(locale, "Query fan-out", "Разворачивание запроса")}
+								lead={tr(
+									locale,
+									"When an AI surface expands one approved question into supporting searches, this section shows those subqueries from retained evidence.",
+									"Когда AI-сервис разворачивает утверждённый вопрос в дополнительные поисковые запросы, этот раздел показывает эти подзапросы из сохранённых доказательств.",
+								)}
+							/>
+							<p className="mt-4 text-sm font-semibold text-[#9a5f14]">
+								{tr(
+									locale,
+									"UNKNOWN — this cycle retains questions, systems, answers, citations and sources, but no query fan-out payload was stored for these runs.",
+									"НЕИЗВЕСТНО — в этом цикле сохранены вопросы, системы, ответы, цитаты и источники, но payload разворачивания запросов для этих прогонов не сохранён.",
+								)}
+							</p>
+						</SectionCard>
+
+						<SectionCard id="share-of-voice">
 							<SectionTitle
 								title={tr(locale, "Who occupies the answers", "Кто занимает ответы")}
 								lead={tr(
@@ -788,18 +1216,18 @@ function SelenaReportPage() {
 												const rest = report.roster.slice(4).reduce((total, entry) => total + entry.answersMentioned, 0);
 												const segments = [
 													...top.map((entry, index) => ({
+														key: entry.name,
 														value: entry.answersMentioned,
 														color: entry.isBrand ? DONUT_COLORS[0] : DONUT_COLORS[Math.min(index, DONUT_COLORS.length - 1)],
 													})),
-													{ value: rest, color: DONUT_OTHER },
+													{ key: "other", value: rest, color: DONUT_OTHER },
 												].filter((segment) => segment.value > 0);
 												let offset = 0;
-												return segments.map((segment, index) => {
+												return segments.map((segment) => {
 													const length = (segment.value / rosterTotal) * circumference;
 													const element = (
-														// eslint-disable-next-line react/no-array-index-key
 														<circle
-															key={index}
+															key={segment.key}
 															cx="100"
 															cy="100"
 															r="80"
@@ -861,7 +1289,7 @@ function SelenaReportPage() {
 							)}
 						</SectionCard>
 
-						<SectionCard>
+						<SectionCard id="opportunities">
 							<SectionTitle
 								title={tr(locale, "Where you are absent and competitors are not", "Где вас нет, а конкуренты есть")}
 								lead={tr(
@@ -913,7 +1341,7 @@ function SelenaReportPage() {
 							)}
 						</SectionCard>
 
-						<SectionCard>
+						<SectionCard id="citations">
 							<SectionTitle
 								title={tr(locale, "Where AI takes its data from", "Откуда AI берёт данные")}
 								lead={tr(
@@ -952,7 +1380,7 @@ function SelenaReportPage() {
 						</SectionCard>
 
 						{report.recommendations.length > 0 && (
-							<SectionCard>
+							<SectionCard id="recommendations">
 								<div className="flex flex-wrap items-start justify-between gap-3">
 									<SectionTitle
 										title={tr(locale, "What to do next", "Что делать дальше")}
@@ -1022,7 +1450,7 @@ function SelenaReportPage() {
 							</SectionCard>
 						)}
 
-						<SectionCard>
+						<SectionCard id="prompt-library">
 							<SectionTitle
 								title={tr(locale, "The questions we asked", "Вопросы, которые мы задали")}
 								lead={tr(
@@ -1044,7 +1472,7 @@ function SelenaReportPage() {
 							</div>
 						</SectionCard>
 
-						<SectionCard>
+						<SectionCard id="evidence-ledger">
 							<SectionTitle title={tr(locale, "Why these numbers can be trusted", "Почему этим цифрам можно верить")} />
 							<div className="mt-4 grid gap-3 sm:grid-cols-2">
 								{[
@@ -1089,7 +1517,7 @@ function SelenaReportPage() {
 									"Что изменилось между двумя последними замерами — наблюдения, никогда не причины.",
 								)}
 							/>
-							{!compare || !compare.comparable ? (
+							{!compare?.comparable ? (
 								<p className="mt-4 text-sm font-semibold text-[#9a5f14]">
 									{tr(
 										locale,
@@ -1152,6 +1580,7 @@ function SelenaReportPage() {
 						</section>
 					</>
 				)}
+				</div>
 			</main>
 		</div>
 	);

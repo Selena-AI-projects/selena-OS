@@ -70,6 +70,34 @@ describe("buildGraderReport", () => {
 		expect(report.methodology).toMatchObject({ questions: 3, answersExpected: 3, answersAnalyzed: 2, answersMissing: 1 });
 	});
 
+	it("attaches per-system results to each approved question without turning missing answers into misses", () => {
+		const report = buildGraderReport({
+			subjects,
+			runs: [
+				run({ systemId: "chatgpt", scenarioId: "q1", text: "best cafe in Ubud", answer: "Try KORA Food Hall." }),
+				run({ systemId: "chatgpt", scenarioId: "q1", text: "best cafe in Ubud", answer: null }),
+				run({ systemId: "gemini", scenarioId: "q1", text: "best cafe in Ubud", answer: "Try Zest Ubud." }),
+			],
+		});
+		expect(report.questions).toHaveLength(1);
+		expect(report.questions[0]).toMatchObject({
+			scenarioId: "q1",
+			systems: [
+				{
+					systemId: "chatgpt",
+					answersExpected: 2,
+					answersAnalyzed: 1,
+					brandMentioned: 1,
+					runs: [
+						{ brandMentioned: true },
+						{ brandMentioned: null },
+					],
+				},
+				{ systemId: "gemini", answersExpected: 1, answersAnalyzed: 1, brandMentioned: 0 },
+			],
+		});
+	});
+
 	it("orders visitor systems before API systems", () => {
 		const report = buildGraderReport({
 			subjects,

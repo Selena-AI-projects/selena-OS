@@ -75,11 +75,28 @@ export type GraderRecommendation =
 	| { kind: "OWN_SITE_UNDERCITED"; domain: string; timesCited: number; topExternalDomain: string; topExternalCited: number }
 	| { kind: "CATEGORY_CONTENT"; missedAnswers: number; categoryAnswers: number; exampleQuestions: string[] };
 
+export type GraderQuestionRunResult = {
+	runId: string;
+	/** Null means the run produced no analyzable answer; it is UNKNOWN, not false. */
+	brandMentioned: boolean | null;
+};
+
+export type GraderQuestionSystemResult = {
+	systemId: string;
+	channel: GraderChannel;
+	answersExpected: number;
+	answersAnalyzed: number;
+	brandMentioned: number;
+	captureModes: string[];
+	runs: GraderQuestionRunResult[];
+};
+
 export type GraderQuestion = {
 	scenarioId: string;
 	text: string;
 	language: string;
 	branded: boolean;
+	systems: GraderQuestionSystemResult[];
 };
 
 export type GraderReport = {
@@ -123,6 +140,17 @@ function mean(values: readonly number[]): number {
 	return total / values.length;
 }
 
+function compareSystemIdentity(
+	left: Pick<GraderQuestionSystemResult, "channel" | "systemId">,
+	right: Pick<GraderQuestionSystemResult, "channel" | "systemId">,
+): number {
+	return left.channel === right.channel
+		? left.systemId.localeCompare(right.systemId)
+		: left.channel === "VISITOR"
+			? -1
+			: 1;
+}
+
 const MAX_GAP_COMPETITORS = 3;
 const MAX_GAP_DOMAINS = 3;
 const MAX_SOURCE_RECOMMENDATIONS = 3;
@@ -148,9 +176,41 @@ export function buildGraderReport(input: {
 				text: run.scenarioText,
 				language: run.scenarioLanguage,
 				branded: isBrandedQuestion(run.scenarioText, subjects.brand),
+				systems: [],
 			});
 	const questions = [...questionsById.values()];
 	const brandedIds = new Set(questions.filter((q) => q.branded).map((q) => q.scenarioId));
+
+	const questionSystemRuns = new Map<string, GraderRunInput[]>();
+	for (const run of runs) {
+		if (!withQuestion(run)) continue;
+		const key = `${run.scenarioId}:${run.channel}:${run.systemId}`;
+		const bucket = questionSystemRuns.get(key) ?? [];
+		bucket.push(run);
+		questionSystemRuns.set(key, bucket);
+	}
+	for (const question of questions) {
+		question.systems = [...questionSystemRuns.values()]
+			.filter((systemRuns) => systemRuns[0]?.scenarioId === question.scenarioId)
+			.map((systemRuns): GraderQuestionSystemResult => {
+				const analyzed = systemRuns.filter((run) => run.analysis !== null);
+				return {
+					systemId: systemRuns[0].systemId,
+					channel: systemRuns[0].channel,
+					answersExpected: systemRuns.length,
+					answersAnalyzed: analyzed.length,
+					brandMentioned: analyzed.filter((run) => (run.analysis as AnswerAnalysis).brandMentioned).length,
+					captureModes: [
+						...new Set(systemRuns.map((run) => run.captureMode).filter((mode): mode is string => Boolean(mode))),
+					],
+					runs: systemRuns.map((run) => ({
+						runId: run.runId,
+						brandMentioned: run.analysis === null ? null : run.analysis.brandMentioned,
+					})),
+				};
+			})
+			.sort(compareSystemIdentity);
+	}
 
 	// Per-system breakdown; VISITOR systems come first, matching how the
 	// report is read (what customers see, then what models know).
@@ -189,11 +249,7 @@ export function buildGraderReport(input: {
 			};
 		})
 		.sort((left, right) =>
-			left.channel === right.channel
-				? left.systemId.localeCompare(right.systemId)
-				: left.channel === "VISITOR"
-					? -1
-					: 1,
+			compareSystemIdentity(left, right)
 		);
 
 	const allAnalyses = runs.filter((run) => run.analysis !== null).map((run) => run.analysis as AnswerAnalysis);
