@@ -32,8 +32,37 @@ export const Route = createFileRoute("/_authed/app/$brand/control-room")({
 			],
 		};
 	},
+	errorComponent: ({ error, reset }) => <ControlRoomLoadError error={error} reset={reset} />,
 	component: ControlRoomPage,
 });
+
+function ControlRoomLoadError({ error, reset }: { error: unknown; reset: () => void }) {
+	const message = error instanceof Error ? error.message : "";
+	const correlationId = message.match(/Reference:\s*([0-9a-f-]{36})/i)?.[1] ?? "unavailable";
+
+	return (
+		<div className="mx-auto flex min-h-[40vh] w-full max-w-xl items-center">
+			<Card className="w-full rounded-md shadow-none">
+				<CardHeader>
+					<div className="flex items-center gap-2 text-destructive">
+						<IconAlertTriangle aria-hidden="true" />
+						<CardTitle className="text-base">Control Room is temporarily unavailable</CardTitle>
+					</div>
+				</CardHeader>
+				<CardContent className="space-y-4 text-sm text-muted-foreground">
+					<p>
+						No content was changed or released. Retry the request; if it continues, provide this reference to support.
+					</p>
+					<p className="font-mono text-xs text-foreground">Reference: {correlationId}</p>
+					<Button onClick={reset} type="button">
+						<IconRefresh />
+						Retry
+					</Button>
+				</CardContent>
+			</Card>
+		</div>
+	);
+}
 
 function formatDate(value: Date | string | null | undefined): string {
 	if (!value) return "-";

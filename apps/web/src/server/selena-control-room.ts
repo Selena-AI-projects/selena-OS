@@ -3,7 +3,6 @@ import { randomUUID } from "node:crypto";
 import { selenaWebDb as db } from "@workspace/lib/db/db";
 import { isSelenaStagingMvp } from "@workspace/lib/db/provisioning";
 import {
-	brands,
 	scrApprovals,
 	scrAuditEvents,
 	scrChannelAccounts,
@@ -71,20 +70,11 @@ function assertHumanReviewer(context: AuthContext): void {
 	}
 }
 
-async function requireBrand(database: Pick<ControlRoomDatabase, "select">, context: AuthContext, brandId: string) {
-	const [brand] = await database
-		.select({ id: brands.id, organizationId: brands.organizationId, name: brands.name })
-		.from(brands)
-		.where(and(eq(brands.id, brandId), eq(brands.organizationId, context.tenantId)))
-		.limit(1);
-	if (!brand) throw new Error("Forbidden: brand is outside the active organization");
-	return brand;
-}
-
 async function withControlRoomTransaction<T>(
 	context: AuthContext,
 	brandId: string,
 	operation: (tx: ControlRoomDatabase) => Promise<T>,
+	correlationId = randomUUID(),
 ): Promise<T> {
 	return db.transaction(async (tx) => {
 		await tx.execute(sql`
@@ -93,12 +83,13 @@ async function withControlRoomTransaction<T>(
 				${context.tenantId},
 				${brandId},
 				${context.role},
-				${randomUUID()},
-				${"web"},
-				${context.authType}
-			)
-		`);
-		await requireBrand(tx, context, brandId);
+			${correlationId},
+			${"web"},
+			${context.authType}
+		)
+	`);
+		// set_request_context is the database boundary: its SECURITY DEFINER
+		// membership/brand check runs before any RLS-protected Control Room query.
 		return operation(tx);
 	});
 }
@@ -158,244 +149,275 @@ function validFutureDate(value: Date | null | undefined): Date | null {
 export const getControlRoomWorkspaceFn = createServerFn({ method: "GET" })
 	.validator(brandSchema)
 	.handler(async ({ data }) => {
-		const context = await resolveSessionAuthContext();
-		return withControlRoomTransaction(context, data.brandId, async (tx) => {
-			const db = tx;
-			const scope = and(
-				eq(scrContentItems.organizationId, context.tenantId),
-				eq(scrContentItems.brandId, data.brandId),
+		const correlationId = randomUUID();
+		try {
+			const context = await resolveSessionAuthContext();
+			return await withControlRoomTransaction(
+				context,
+				data.brandId,
+				async (tx) => {
+					const db = tx;
+					const scope = and(
+						eq(scrContentItems.organizationId, context.tenantId),
+						eq(scrContentItems.brandId, data.brandId),
+					);
+					const [
+						content,
+						releaseIntents,
+						outboxEvents,
+						versions,
+						assets,
+						accounts,
+						approvals,
+						manifests,
+						publications,
+						incidents,
+						audits,
+						metrics,
+						killSwitches,
+					] = await Promise.all([
+						db.select().from(scrContentItems).where(scope).orderBy(desc(scrContentItems.updatedAt)).limit(40),
+						db
+							.select({
+								id: scrReleaseIntents.id,
+								approvalId: scrReleaseIntents.approvalId,
+								platform: scrReleaseIntents.platform,
+								status: scrReleaseIntents.status,
+								createdAt: scrReleaseIntents.createdAt,
+							})
+							.from(scrReleaseIntents)
+							.where(
+								and(
+									eq(scrReleaseIntents.organizationId, context.tenantId),
+									eq(scrReleaseIntents.brandId, data.brandId),
+								),
+							)
+							.orderBy(desc(scrReleaseIntents.createdAt))
+							.limit(40),
+						db
+							.select({
+								id: scrReleaseOutboxEvents.id,
+								releaseIntentId: scrReleaseOutboxEvents.releaseIntentId,
+								eventType: scrReleaseOutboxEvents.eventType,
+								status: scrReleaseOutboxEvents.status,
+								attemptCount: scrReleaseOutboxEvents.attemptCount,
+								availableAt: scrReleaseOutboxEvents.availableAt,
+							})
+							.from(scrReleaseOutboxEvents)
+							.where(
+								and(
+									eq(scrReleaseOutboxEvents.organizationId, context.tenantId),
+									eq(scrReleaseOutboxEvents.brandId, data.brandId),
+								),
+							)
+							.orderBy(desc(scrReleaseOutboxEvents.createdAt))
+							.limit(40),
+						db
+							.select({
+								id: scrContentVersions.id,
+								contentId: scrContentVersions.contentId,
+								version: scrContentVersions.version,
+								policyVersion: scrContentVersions.policyVersion,
+								contentHash: scrContentVersions.contentHash,
+								evidenceExpiresAt: scrContentVersions.evidenceExpiresAt,
+								createdAt: scrContentVersions.createdAt,
+							})
+							.from(scrContentVersions)
+							.where(
+								and(
+									eq(scrContentVersions.organizationId, context.tenantId),
+									eq(scrContentVersions.brandId, data.brandId),
+								),
+							)
+							.orderBy(desc(scrContentVersions.createdAt))
+							.limit(40),
+						db
+							.select({
+								id: scrContentAssets.id,
+								contentVersionId: scrContentAssets.contentVersionId,
+								scanStatus: scrContentAssets.scanStatus,
+								createdAt: scrContentAssets.createdAt,
+							})
+							.from(scrContentAssets)
+							.where(
+								and(eq(scrContentAssets.organizationId, context.tenantId), eq(scrContentAssets.brandId, data.brandId)),
+							)
+							.orderBy(desc(scrContentAssets.createdAt))
+							.limit(80),
+						db
+							.select({
+								id: scrChannelAccounts.id,
+								platform: scrChannelAccounts.platform,
+								providerAccountRef: scrChannelAccounts.providerAccountRef,
+								status: scrChannelAccounts.status,
+								allowlisted: scrChannelAccounts.allowlisted,
+								createdAt: scrChannelAccounts.createdAt,
+							})
+							.from(scrChannelAccounts)
+							.where(
+								and(
+									eq(scrChannelAccounts.organizationId, context.tenantId),
+									eq(scrChannelAccounts.brandId, data.brandId),
+								),
+							)
+							.orderBy(desc(scrChannelAccounts.createdAt))
+							.limit(20),
+						db
+							.select({
+								id: scrApprovals.id,
+								contentVersionId: scrApprovals.contentVersionId,
+								channelAccountId: scrApprovals.channelAccountId,
+								decision: scrApprovals.decision,
+								contentHash: scrApprovals.contentHash,
+								expiresAt: scrApprovals.expiresAt,
+								createdAt: scrApprovals.createdAt,
+							})
+							.from(scrApprovals)
+							.where(and(eq(scrApprovals.organizationId, context.tenantId), eq(scrApprovals.brandId, data.brandId)))
+							.orderBy(desc(scrApprovals.createdAt))
+							.limit(80),
+						db
+							.select({
+								id: scrReleaseManifests.id,
+								status: scrReleaseManifests.status,
+								platform: scrReleaseManifests.platform,
+								manifestHash: scrReleaseManifests.manifestHash,
+								expiresAt: scrReleaseManifests.expiresAt,
+								createdAt: scrReleaseManifests.createdAt,
+							})
+							.from(scrReleaseManifests)
+							.where(
+								and(
+									eq(scrReleaseManifests.organizationId, context.tenantId),
+									eq(scrReleaseManifests.brandId, data.brandId),
+								),
+							)
+							.orderBy(desc(scrReleaseManifests.createdAt))
+							.limit(40),
+						db
+							.select({
+								id: scrPublicationAttempts.id,
+								status: scrPublicationAttempts.status,
+								platform: scrPublicationAttempts.platform,
+								platformObjectId: scrPublicationAttempts.providerReferenceId,
+								updatedAt: scrPublicationAttempts.occurredAt,
+							})
+							.from(scrPublicationAttempts)
+							.where(
+								and(
+									eq(scrPublicationAttempts.organizationId, context.tenantId),
+									eq(scrPublicationAttempts.brandId, data.brandId),
+								),
+							)
+							.orderBy(desc(scrPublicationAttempts.occurredAt))
+							.limit(40),
+						db
+							.select({
+								id: scrIncidents.id,
+								severity: scrIncidents.severity,
+								code: scrIncidents.code,
+								summary: scrIncidents.summary,
+								status: scrIncidents.status,
+							})
+							.from(scrIncidents)
+							.where(and(eq(scrIncidents.organizationId, context.tenantId), eq(scrIncidents.brandId, data.brandId)))
+							.orderBy(desc(scrIncidents.createdAt))
+							.limit(40),
+						db
+							.select({
+								id: scrAuditEvents.id,
+								action: scrAuditEvents.action,
+								actorId: scrAuditEvents.actorId,
+								aggregateType: scrAuditEvents.aggregateType,
+								eventHash: scrAuditEvents.eventHash,
+								createdAt: scrAuditEvents.createdAt,
+							})
+							.from(scrAuditEvents)
+							.where(and(eq(scrAuditEvents.organizationId, context.tenantId), eq(scrAuditEvents.brandId, data.brandId)))
+							.orderBy(desc(scrAuditEvents.createdAt))
+							.limit(80),
+						db
+							.select({
+								id: scrMetricSnapshots.id,
+								quality: scrMetricSnapshots.quality,
+								observedAt: scrMetricSnapshots.observedAt,
+								dataCutoffAt: scrMetricSnapshots.dataCutoffAt,
+								definitionVersion: scrMetricSnapshots.definitionVersion,
+							})
+							.from(scrMetricSnapshots)
+							.where(
+								and(
+									eq(scrMetricSnapshots.organizationId, context.tenantId),
+									eq(scrMetricSnapshots.brandId, data.brandId),
+								),
+							)
+							.orderBy(desc(scrMetricSnapshots.observedAt))
+							.limit(80),
+						db
+							.select({
+								id: scrKillSwitches.id,
+								scope: scrKillSwitches.scope,
+								brandId: scrKillSwitches.brandId,
+								channelAccountId: scrKillSwitches.channelAccountId,
+								reason: scrKillSwitches.reason,
+								createdAt: scrKillSwitches.createdAt,
+							})
+							.from(scrKillSwitches)
+							.where(and(eq(scrKillSwitches.organizationId, context.tenantId), eq(scrKillSwitches.active, true)))
+							.orderBy(desc(scrKillSwitches.createdAt))
+							.limit(20),
+					]);
+
+					const contentById = new Map(content.map((item) => [item.id, item]));
+					const assetsByVersion = new Map<string, typeof assets>();
+					for (const asset of assets) {
+						assetsByVersion.set(asset.contentVersionId, [
+							...(assetsByVersion.get(asset.contentVersionId) ?? []),
+							asset,
+						]);
+					}
+					const latestApprovalByVersion = new Map<string, (typeof approvals)[number]>();
+					for (const approval of approvals) {
+						if (!latestApprovalByVersion.has(approval.contentVersionId))
+							latestApprovalByVersion.set(approval.contentVersionId, approval);
+					}
+
+					return {
+						role: context.role,
+						stagingMvp: isSelenaStagingDemo(context, data.brandId),
+						content,
+						versions,
+						assets,
+						accounts,
+						approvals,
+						releaseIntents,
+						outboxEvents,
+						manifests,
+						publications,
+						incidents,
+						audits,
+						metrics,
+						killSwitches,
+						reviewQueue: versions.map((version) => ({
+							id: version.id,
+							title: contentById.get(version.contentId)?.title ?? "Archived content",
+							version: version.version,
+							contentHash: version.contentHash,
+							assetCount: assetsByVersion.get(version.id)?.length ?? 0,
+							latestDecision: latestApprovalByVersion.get(version.id)?.decision ?? null,
+							createdAt: version.createdAt,
+						})),
+					};
+				},
+				correlationId,
 			);
-			const [
-				content,
-				releaseIntents,
-				outboxEvents,
-				versions,
-				assets,
-				accounts,
-				approvals,
-				manifests,
-				publications,
-				incidents,
-				audits,
-				metrics,
-				killSwitches,
-			] = await Promise.all([
-				db.select().from(scrContentItems).where(scope).orderBy(desc(scrContentItems.updatedAt)).limit(40),
-				db
-					.select({
-						id: scrReleaseIntents.id,
-						approvalId: scrReleaseIntents.approvalId,
-						platform: scrReleaseIntents.platform,
-						status: scrReleaseIntents.status,
-						createdAt: scrReleaseIntents.createdAt,
-					})
-					.from(scrReleaseIntents)
-					.where(
-						and(eq(scrReleaseIntents.organizationId, context.tenantId), eq(scrReleaseIntents.brandId, data.brandId)),
-					)
-					.orderBy(desc(scrReleaseIntents.createdAt))
-					.limit(40),
-				db
-					.select({
-						id: scrReleaseOutboxEvents.id,
-						releaseIntentId: scrReleaseOutboxEvents.releaseIntentId,
-						eventType: scrReleaseOutboxEvents.eventType,
-						status: scrReleaseOutboxEvents.status,
-						attemptCount: scrReleaseOutboxEvents.attemptCount,
-						availableAt: scrReleaseOutboxEvents.availableAt,
-					})
-					.from(scrReleaseOutboxEvents)
-					.where(
-						and(
-							eq(scrReleaseOutboxEvents.organizationId, context.tenantId),
-							eq(scrReleaseOutboxEvents.brandId, data.brandId),
-						),
-					)
-					.orderBy(desc(scrReleaseOutboxEvents.createdAt))
-					.limit(40),
-				db
-					.select({
-						id: scrContentVersions.id,
-						contentId: scrContentVersions.contentId,
-						version: scrContentVersions.version,
-						policyVersion: scrContentVersions.policyVersion,
-						contentHash: scrContentVersions.contentHash,
-						evidenceExpiresAt: scrContentVersions.evidenceExpiresAt,
-						createdAt: scrContentVersions.createdAt,
-					})
-					.from(scrContentVersions)
-					.where(
-						and(eq(scrContentVersions.organizationId, context.tenantId), eq(scrContentVersions.brandId, data.brandId)),
-					)
-					.orderBy(desc(scrContentVersions.createdAt))
-					.limit(40),
-				db
-					.select({
-						id: scrContentAssets.id,
-						contentVersionId: scrContentAssets.contentVersionId,
-						scanStatus: scrContentAssets.scanStatus,
-						createdAt: scrContentAssets.createdAt,
-					})
-					.from(scrContentAssets)
-					.where(and(eq(scrContentAssets.organizationId, context.tenantId), eq(scrContentAssets.brandId, data.brandId)))
-					.orderBy(desc(scrContentAssets.createdAt))
-					.limit(80),
-				db
-					.select({
-						id: scrChannelAccounts.id,
-						platform: scrChannelAccounts.platform,
-						providerAccountRef: scrChannelAccounts.providerAccountRef,
-						status: scrChannelAccounts.status,
-						allowlisted: scrChannelAccounts.allowlisted,
-						createdAt: scrChannelAccounts.createdAt,
-					})
-					.from(scrChannelAccounts)
-					.where(
-						and(eq(scrChannelAccounts.organizationId, context.tenantId), eq(scrChannelAccounts.brandId, data.brandId)),
-					)
-					.orderBy(desc(scrChannelAccounts.createdAt))
-					.limit(20),
-				db
-					.select({
-						id: scrApprovals.id,
-						contentVersionId: scrApprovals.contentVersionId,
-						channelAccountId: scrApprovals.channelAccountId,
-						decision: scrApprovals.decision,
-						contentHash: scrApprovals.contentHash,
-						expiresAt: scrApprovals.expiresAt,
-						createdAt: scrApprovals.createdAt,
-					})
-					.from(scrApprovals)
-					.where(and(eq(scrApprovals.organizationId, context.tenantId), eq(scrApprovals.brandId, data.brandId)))
-					.orderBy(desc(scrApprovals.createdAt))
-					.limit(80),
-				db
-					.select({
-						id: scrReleaseManifests.id,
-						status: scrReleaseManifests.status,
-						platform: scrReleaseManifests.platform,
-						manifestHash: scrReleaseManifests.manifestHash,
-						expiresAt: scrReleaseManifests.expiresAt,
-						createdAt: scrReleaseManifests.createdAt,
-					})
-					.from(scrReleaseManifests)
-					.where(
-						and(
-							eq(scrReleaseManifests.organizationId, context.tenantId),
-							eq(scrReleaseManifests.brandId, data.brandId),
-						),
-					)
-					.orderBy(desc(scrReleaseManifests.createdAt))
-					.limit(40),
-				db
-					.select({
-						id: scrPublicationAttempts.id,
-						status: scrPublicationAttempts.status,
-						platform: scrPublicationAttempts.platform,
-						platformObjectId: scrPublicationAttempts.providerReferenceId,
-						updatedAt: scrPublicationAttempts.occurredAt,
-					})
-					.from(scrPublicationAttempts)
-					.where(
-						and(
-							eq(scrPublicationAttempts.organizationId, context.tenantId),
-							eq(scrPublicationAttempts.brandId, data.brandId),
-						),
-					)
-					.orderBy(desc(scrPublicationAttempts.occurredAt))
-					.limit(40),
-				db
-					.select({
-						id: scrIncidents.id,
-						severity: scrIncidents.severity,
-						code: scrIncidents.code,
-						summary: scrIncidents.summary,
-						status: scrIncidents.status,
-					})
-					.from(scrIncidents)
-					.where(and(eq(scrIncidents.organizationId, context.tenantId), eq(scrIncidents.brandId, data.brandId)))
-					.orderBy(desc(scrIncidents.createdAt))
-					.limit(40),
-				db
-					.select({
-						id: scrAuditEvents.id,
-						action: scrAuditEvents.action,
-						actorId: scrAuditEvents.actorId,
-						aggregateType: scrAuditEvents.aggregateType,
-						eventHash: scrAuditEvents.eventHash,
-						createdAt: scrAuditEvents.createdAt,
-					})
-					.from(scrAuditEvents)
-					.where(and(eq(scrAuditEvents.organizationId, context.tenantId), eq(scrAuditEvents.brandId, data.brandId)))
-					.orderBy(desc(scrAuditEvents.createdAt))
-					.limit(80),
-				db
-					.select({
-						id: scrMetricSnapshots.id,
-						quality: scrMetricSnapshots.quality,
-						observedAt: scrMetricSnapshots.observedAt,
-						dataCutoffAt: scrMetricSnapshots.dataCutoffAt,
-						definitionVersion: scrMetricSnapshots.definitionVersion,
-					})
-					.from(scrMetricSnapshots)
-					.where(
-						and(eq(scrMetricSnapshots.organizationId, context.tenantId), eq(scrMetricSnapshots.brandId, data.brandId)),
-					)
-					.orderBy(desc(scrMetricSnapshots.observedAt))
-					.limit(80),
-				db
-					.select({
-						id: scrKillSwitches.id,
-						scope: scrKillSwitches.scope,
-						brandId: scrKillSwitches.brandId,
-						channelAccountId: scrKillSwitches.channelAccountId,
-						reason: scrKillSwitches.reason,
-						createdAt: scrKillSwitches.createdAt,
-					})
-					.from(scrKillSwitches)
-					.where(and(eq(scrKillSwitches.organizationId, context.tenantId), eq(scrKillSwitches.active, true)))
-					.orderBy(desc(scrKillSwitches.createdAt))
-					.limit(20),
-			]);
-
-			const contentById = new Map(content.map((item) => [item.id, item]));
-			const assetsByVersion = new Map<string, typeof assets>();
-			for (const asset of assets) {
-				assetsByVersion.set(asset.contentVersionId, [...(assetsByVersion.get(asset.contentVersionId) ?? []), asset]);
-			}
-			const latestApprovalByVersion = new Map<string, (typeof approvals)[number]>();
-			for (const approval of approvals) {
-				if (!latestApprovalByVersion.has(approval.contentVersionId))
-					latestApprovalByVersion.set(approval.contentVersionId, approval);
-			}
-
-			return {
-				role: context.role,
-				stagingMvp: isSelenaStagingDemo(context, data.brandId),
-				content,
-				versions,
-				assets,
-				accounts,
-				approvals,
-				releaseIntents,
-				outboxEvents,
-				manifests,
-				publications,
-				incidents,
-				audits,
-				metrics,
-				killSwitches,
-				reviewQueue: versions.map((version) => ({
-					id: version.id,
-					title: contentById.get(version.contentId)?.title ?? "Archived content",
-					version: version.version,
-					contentHash: version.contentHash,
-					assetCount: assetsByVersion.get(version.id)?.length ?? 0,
-					latestDecision: latestApprovalByVersion.get(version.id)?.decision ?? null,
-					createdAt: version.createdAt,
-				})),
-			};
-		});
+		} catch (error) {
+			console.error("selena_control_room_load_failed", {
+				correlationId,
+				error: error instanceof Error ? error.message : "Unknown error",
+			});
+			throw new Error(`Control Room could not load. Reference: ${correlationId}`);
+		}
 	});
 
 export const bootstrapStagingControlRoomFn = createServerFn({ method: "POST" })
