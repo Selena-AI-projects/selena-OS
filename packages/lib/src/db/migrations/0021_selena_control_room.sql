@@ -56,6 +56,21 @@ END $$;
 
 GRANT selena_schema_owner TO selena_migrator;
 
+-- Hosted PostgreSQL migration executors are not necessarily superusers. Grant
+-- the executor temporary membership so this migration can set the schema-owner
+-- role, then revoke that temporary membership after the schema is in place.
+DO $$
+DECLARE
+  v_executor name := session_user;
+BEGIN
+  IF NOT pg_has_role(v_executor, 'selena_schema_owner', 'member') THEN
+    EXECUTE format('GRANT selena_schema_owner TO %I', v_executor);
+    PERFORM set_config('selena.migration_executor_grant_created', 'true', true);
+  ELSE
+    PERFORM set_config('selena.migration_executor_grant_created', 'false', true);
+  END IF;
+END $$;
+
 -- The private schemas are owned by the dedicated schema role. It needs only
 -- database-level CREATE during this clean-install migration, not at runtime.
 DO $$
@@ -1156,6 +1171,15 @@ COMMENT ON SCHEMA selena_performance IS
 COMMENT ON TABLE selena_registry.content_assets IS
   'Storage contract only: private bucket, server-mediated upload, SHA-256, MIME/size validation, scanner evidence, immutable originals, derivatives, signed downloads, object versioning, and storage backup/restore are external implementation requirements.';
 RESET ROLE;
+
+DO $$
+DECLARE
+  v_executor name := session_user;
+BEGIN
+  IF current_setting('selena.migration_executor_grant_created', true) = 'true' THEN
+    EXECUTE format('REVOKE selena_schema_owner FROM %I', v_executor);
+  END IF;
+END $$;
 
 REVOKE ALL ON TABLE public.secrets FROM selena_web_runtime, selena_gateway_runtime, selena_trigger_runtime,
   selena_ingestion_runtime, selena_analytics_runtime, selena_scanner_runtime;
