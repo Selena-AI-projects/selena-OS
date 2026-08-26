@@ -10,7 +10,7 @@
  *
  * Ownership is load-bearing. A third-party set may be measured — the answers
  * are public and the cost is ours — but its result never reaches a public page
- * without that owner's recorded yes.
+ * without that owner's recorded yes, kept here as `consent`.
  */
 
 export type JournalScenario = {
@@ -20,6 +20,19 @@ export type JournalScenario = {
 	language: string;
 	market: string;
 	ownership: "own" | "third-party";
+	/**
+	 * A third party's permission to publish their result. Absent means no:
+	 * the run still happens, the numbers stay internal.
+	 */
+	consent?: {
+		grantedBy: string;
+		recordedBy: string;
+		/** ISO date. */
+		recordedOn: string;
+		scope: string;
+		/** How the permission reached us, and what evidence exists for it. */
+		source: string;
+	};
 	/** Where the question set came from, published with the result. */
 	basis: "search-console" | "owner-brief" | "category-draft";
 	/** Matched on word boundaries; a hit counts as a mention. */
@@ -46,6 +59,15 @@ export const journalScenarios: Readonly<Record<string, JournalScenario>> = {
 		language: "en",
 		market: "Убуд, Бали",
 		ownership: "third-party",
+		consent: {
+			grantedBy: "Big Dragon Villas Ubud",
+			recordedBy: "Selena Systems",
+			recordedOn: "2026-08-26",
+			scope:
+				"Публикация результата замера AI-видимости — числа, названные вместо них заведения и источники — в журнале Selena Systems.",
+			source:
+				"Разрешение передано владельцем Selena Systems со слов Big Dragon Villas в ходе совместной работы над их видимостью. Письменного подтверждения от Big Dragon Villas в деле нет.",
+		},
 		basis: "category-draft",
 		strongAliases: ["Big Dragon Villas", "bigdragonvillasubud.com", "Big Dragon Villas Ubud"],
 		weakAliases: ["Big Dragon"],
