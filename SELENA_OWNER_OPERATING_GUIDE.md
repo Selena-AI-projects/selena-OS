@@ -226,7 +226,7 @@ refused while the permit is still unspent, not after it has been paid for.
 
 ### Measuring the owner's own projects on Railway
 
-`pnpm -C packages/lib measure:selena-journal` runs the owner's own projects
+`pnpm -C apps/worker measure:journal` runs the owner's own projects
 through the product's own chain — configuration lock, order, run permits, the
 executor, the evidence ledger — from a command instead of the order desk. The
 result lands in the same tables a paid measurement writes to, so the report
