@@ -116,5 +116,16 @@ USER worker
 ENTRYPOINT ["/entrypoint.sh"]
 CMD ["npx", "tsx", "src/index.ts"]
 
+# Measurement stage — runs one measurement of the owner's own projects, then
+# exits. Same shape as the migrate stage: a job, not a server. The script
+# refuses a second run of the same question set on the same day, so a platform
+# that restarts what exits cannot turn a job into a spending loop.
+FROM base AS measure
+WORKDIR /app
+
+COPY --from=builder /deploy/lib ./
+
+CMD ["npx", "tsx", "scripts/selena-measure-journal.ts"]
+
 # The service name selects the final runtime stage: web or worker.
 FROM ${RAILWAY_SERVICE_NAME} AS final

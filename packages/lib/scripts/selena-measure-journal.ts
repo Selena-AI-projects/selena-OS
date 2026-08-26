@@ -24,7 +24,7 @@
  */
 
 import { visitorSurfaces } from "@workspace/selena-visibility-contracts";
-import { and, eq } from "drizzle-orm";
+import { and, eq, gte } from "drizzle-orm";
 import { createBrightDataAdapter } from "../src/adapters/brightdata-measurement-adapter";
 import { db } from "../src/db/db";
 import * as schema from "../src/db/schema";
@@ -85,6 +85,9 @@ if (unknown.length > 0) {
 	console.error(`Unknown project(s): ${unknown.join(", ")}. Known: ${journalScenarioSlugs.join(", ")}`);
 	process.exit(2);
 }
+
+/** Repeating a same-day measurement is deliberate, never a restart's doing. */
+const FORCE = process.env.SELENA_JOURNAL_FORCE === "1";
 
 const ctx: SelenaRepositoryContext = {
 	actorId: "selena-measure-journal",
@@ -195,8 +198,40 @@ async function inPool<T, R>(items: T[], size: number, worker: (item: T) => Promi
 	return results;
 }
 
+/**
+ * Whether this project's current question set was already measured today.
+ *
+ * The guard is not tidiness. A one-off command lives on a platform that
+ * restarts what exits, and a restart that re-measures is a restart that spends
+ * again — so a second run on the same day for the same set costs nothing and
+ * says why.
+ */
+async function alreadyMeasuredToday(projectId: string, version: string): Promise<boolean> {
+	const dayStart = new Date();
+	dayStart.setUTCHours(0, 0, 0, 0);
+	const [prior] = await db
+		.select({ id: schema.svConfigurationLocks.id })
+		.from(schema.svConfigurationLocks)
+		.where(
+			and(
+				eq(schema.svConfigurationLocks.projectId, projectId),
+				eq(schema.svConfigurationLocks.organizationId, tenantId),
+				eq(schema.svConfigurationLocks.engineSha, version),
+				gte(schema.svConfigurationLocks.createdAt, dayStart),
+			),
+		)
+		.limit(1);
+	return Boolean(prior);
+}
+
 async function measure(slug: string): Promise<void> {
 	const { project, scenario } = await projectFor(slug);
+	if (!FORCE && (await alreadyMeasuredToday(project.id, scenario.version))) {
+		console.log(
+			`${scenario.brand}: already measured today on ${scenario.version} — set SELENA_JOURNAL_FORCE=1 to repeat`,
+		);
+		return;
+	}
 	const rows = await scenarioRowsFor(project.id, slug);
 	const systems = visitorSurfaces.map((systemId) => ({ systemId, channel: "VISITOR" as const }));
 	const expectedRuns = rows.length * systems.length;
