@@ -251,6 +251,14 @@ It also needs what any live measurement needs: `DATABASE_URL`,
 `BRIGHTDATA_API_TOKEN`, `SELENA_MEASUREMENT_ENABLED=true` and a
 `SELENA_MEASUREMENT_ADAPTER` that reaches a Visitor View collector.
 
+On Railway it runs as its own service. The Dockerfile picks its stage from the
+service name — `web`, `worker`, `migrate` and now `measure` — so a service named
+anything else fails to build, and a service named `measure` is the job. It runs
+once and exits; a second run of the same question set on the same day costs
+nothing and says so, because a platform that restarts what exits must not be
+able to turn a job into a spending loop. `SELENA_JOURNAL_FORCE=1` repeats it on
+purpose.
+
 The question sets live in `packages/lib/src/selena-journal-scenarios.ts` and are
 versioned: the version is the prompt family's identity, so changing a question
 starts a new series rather than adding rows to the old one. A third-party set
