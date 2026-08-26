@@ -11,19 +11,17 @@ if (!databaseUrl) {
 	throw new Error("DATABASE_URL is required for the migration runner");
 }
 const stagingDatabaseUrl = new URL(databaseUrl);
+const stagingRole = stagingDatabaseUrl.searchParams.get("options") ?? process.env.PGOPTIONS;
+if (
+	isStagingMvp &&
+	(stagingDatabaseUrl.port !== "5432" ||
+		!stagingDatabaseUrl.hostname.startsWith("db.") ||
+		!stagingRole?.includes("role=selena_schema_owner"))
+) {
+	throw new Error("SELENA_MIGRATION_DATABASE_URL must use direct port 5432 with the selena_schema_owner startup role");
+}
 
-const dbCredentials = isStagingMvp
-	? {
-		host: stagingDatabaseUrl.hostname,
-		port: stagingDatabaseUrl.port ? Number(stagingDatabaseUrl.port) : undefined,
-		user: decodeURIComponent(stagingDatabaseUrl.username),
-		password: decodeURIComponent(stagingDatabaseUrl.password),
-		database: decodeURIComponent(stagingDatabaseUrl.pathname.slice(1)),
-		// Supavisor's staging chain is encrypted but cannot currently be
-		// verified by Node. Keep this exception strictly inside the staging MVP.
-		ssl: { rejectUnauthorized: false },
-	}
-	: { url: databaseUrl };
+const dbCredentials = { url: databaseUrl };
 
 export default defineConfig({
 	schema: ["./src/db/schema.ts", "./src/db/schema-auth.ts"],

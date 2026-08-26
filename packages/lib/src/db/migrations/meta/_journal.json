@@ -162,6 +162,13 @@
       "when": 1787751397000,
       "tag": "0022_grant_web_performance_schema",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1787755000000,
+      "tag": "0023_repair_web_performance_schema_usage",
+      "breakpoints": true
     }
   ]
 }
