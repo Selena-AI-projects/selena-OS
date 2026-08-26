@@ -63,12 +63,14 @@ DO $$
 DECLARE
   v_executor name := session_user;
 BEGIN
-  IF NOT pg_has_role(v_executor, 'selena_schema_owner', 'member') THEN
-    EXECUTE format('GRANT selena_schema_owner TO %I', v_executor);
-    PERFORM set_config('selena.migration_executor_grant_created', 'true', true);
+  IF current_setting('server_version_num')::integer >= 160000 THEN
+    -- PostgreSQL 16+ creates memberships from CREATEROLE with SET FALSE.
+    -- Re-grant explicitly so the executor can switch for this transaction.
+    EXECUTE format('GRANT selena_schema_owner TO %I WITH SET TRUE', v_executor);
   ELSE
-    PERFORM set_config('selena.migration_executor_grant_created', 'false', true);
+    EXECUTE format('GRANT selena_schema_owner TO %I', v_executor);
   END IF;
+  PERFORM set_config('selena.migration_executor_grant_created', 'true', true);
 END $$;
 
 -- The private schemas are owned by the dedicated schema role. It needs only
