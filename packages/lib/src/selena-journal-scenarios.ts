@@ -27,7 +27,14 @@ export type JournalScenario = {
 	/** Short enough to belong to someone else: flagged for a human, never counted. */
 	weakAliases: readonly string[];
 	questions: readonly string[];
-	/** The set this measurement belongs to, so two runs can be compared. */
+	/**
+	 * The question set's identity, not the channel's. Several of these read
+	 * `api-view` because that is the run the set was first minted for, and they
+	 * keep that name on purpose: the string is what makes two measurements
+	 * comparable, so renaming it would split one series into two for the sake of
+	 * a label. Which channel a measurement used is recorded per run, in the run
+	 * row's own `channel` and `system_id`, where it cannot be mistaken.
+	 */
 	version: string;
 };
 

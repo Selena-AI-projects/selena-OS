@@ -261,7 +261,15 @@ purpose.
 
 The question sets live in `packages/lib/src/selena-journal-scenarios.ts` and are
 versioned: the version is the prompt family's identity, so changing a question
-starts a new series rather than adding rows to the old one. A third-party set
+starts a new series rather than adding rows to the old one. Several versions
+read `api-view` because that is the run the set was first minted for; the name
+identifies the questions, not the channel, and which channel a measurement used
+is on each run row. Renaming them would split one series in two to fix a label.
+
+To run it on a schedule rather than by hand, give the `measure` service a cron
+schedule in its Railway settings. A month apart is the useful spacing for a
+visibility series, and the same-day guard means a schedule that fires twice
+cannot measure twice. A third-party set
 may be measured — the answers are public and the cost is ours — but its result
 does not reach a public page without that owner's recorded yes, and the script
 says so as it runs.
