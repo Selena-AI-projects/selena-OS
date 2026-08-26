@@ -4,6 +4,7 @@ import { getDefaultDelayHours } from "@workspace/lib/constants";
 import { db } from "@workspace/lib/db/db";
 import { brands, promptRuns, prompts } from "@workspace/lib/db/schema";
 import { getOrgEntitlementsMap } from "@workspace/lib/entitlements";
+import { reconcilePromptRunAggregates } from "@workspace/lib/prompt-run-aggregates";
 import { parseScrapeTargets } from "@workspace/lib/providers";
 import {
 	computeMaintenanceDecisions,
@@ -50,6 +51,15 @@ export async function scheduleMaintenanceJob(jobs: Job<ScheduleMaintenanceData>[
 		} catch (error) {
 			console.error("[schedule-maintenance] Maintenance check failed:", error);
 			throw error; // Will trigger retry
+		}
+
+		// Drift guard for the hourly rollup, isolated so it can never block
+		// prompt scheduling.
+		try {
+			await reconcilePromptRunAggregates(db);
+		} catch (error) {
+			console.error("[schedule-maintenance] Aggregate reconcile failed:", error);
+			Sentry.captureException(error);
 		}
 	}
 }

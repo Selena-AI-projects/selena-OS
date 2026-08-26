@@ -11,9 +11,16 @@ import { createSelenaRepositories } from "@workspace/lib/selena-visibility-repos
 import { actionPlanSchema, projectCreateSchema } from "@workspace/selena-visibility-contracts";
 import { and, desc, eq } from "drizzle-orm";
 import { z } from "zod";
+import { readStoredGoogleMapsLocation } from "@workspace/lib/google-maps-location";
 import { resolveSessionAuthContext } from "../lib/selena-auth-context";
 
-const repositories = createSelenaRepositories(db);
+const repositories = /* @__PURE__ */ createSelenaRepositories(db);
+
+const PRIORITY_ORDER = ["NOW", "NEXT", "LATER"];
+function priorityRank(priority: string): number {
+	const index = PRIORITY_ORDER.indexOf(priority);
+	return index === -1 ? PRIORITY_ORDER.length : index;
+}
 
 export const listSelenaProjectsFn = createServerFn({ method: "GET" }).handler(async () => {
 	const context = await resolveSessionAuthContext();
@@ -105,6 +112,7 @@ export const getSelenaWorkspaceFn = createServerFn({ method: "GET" }).handler(as
 							brandName: profile.brandName,
 							primaryDomain: profile.primaryDomain,
 							publicProfiles: Array.isArray(profile.publicProfiles) ? profile.publicProfiles : [],
+							mapsLocation: readStoredGoogleMapsLocation(profile.mapsLocation),
 							competitors: Array.isArray(profile.competitorSnapshot) ? profile.competitorSnapshot : [],
 							scenarios: Array.isArray(profile.scenarioSnapshot) ? profile.scenarioSnapshot : [],
 							confirmedAt: profile.confirmedAt?.toISOString() ?? null,
@@ -133,8 +141,17 @@ export const getSelenaWorkspaceFn = createServerFn({ method: "GET" }).handler(as
 							topActions:
 								actionPlan?.recommendations
 									.filter((item) => !item.blocked)
-									.slice(0, 3)
-									.map((item) => ({ title: item.title, action: item.action, priority: item.priority })) ?? [],
+									// Ordered by priority, not by the order the rules happen to
+									// run in: the three shown here are the whole plan for a
+									// customer who reads no further.
+									.sort((left, right) => priorityRank(left.priority) - priorityRank(right.priority))
+								.slice(0, 3)
+									.map((item) => ({
+										ruleId: actionPlan.findings.find((finding) => finding.id === item.findingId)?.ruleId ?? "",
+										title: item.title,
+										action: item.action,
+										priority: item.priority,
+									})) ?? [],
 						}
 					: null,
 			};

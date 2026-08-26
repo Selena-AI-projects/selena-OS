@@ -125,11 +125,20 @@ export interface VoiceShare {
 	mentions: number;
 	/** Share of total mentions across the brand + all competitors, 0..1. Exact
 	 * ratio (not pre-rounded) — round once at the display layer so the table,
-	 * donut, and trend never disagree by a point. */
-	share: number;
+	 * donut, and trend never disagree by a point. Null when nobody was
+	 * mentioned at all: an empty set is unmeasured, not a zero share. */
+	share: number | null;
 	isBrand: boolean;
 }
 
+/**
+ * An empty set is not a measured zero: when the denominator is 0 nothing was
+ * observed, so the metric is null and the UI says "no data" instead of "0%".
+ * A real 0% requires a non-empty denominator.
+ */
+export function percentOrNull(numerator: number, denominator: number): number | null {
+	return denominator > 0 ? Math.round((numerator / denominator) * 100) : null;
+}
 /**
  * Share of voice across the brand and its competitors. Inputs must be in a
  * consistent unit (e.g. "# of runs that mentioned this entity"), so the brand's
@@ -151,7 +160,7 @@ export function computeShareOfVoice(
 		name,
 		mentions,
 		isBrand,
-		share: total === 0 ? 0 : mentions / total,
+		share: total === 0 ? null : mentions / total,
 	});
 	const entries = [mk(brand.name, brand.mentions, true), ...competitors.map((c) => mk(c.name, c.mentions, false))].sort(
 		(a, b) => b.mentions - a.mentions,

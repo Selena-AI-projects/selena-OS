@@ -80,6 +80,13 @@ declare global {
 			readonly SENTRY_PROJECT?: string;
 			readonly SENTRY_AUTH_TOKEN?: string;
 			readonly DISABLE_TELEMETRY?: string;
+			readonly SELENA_ANSWER_RETENTION_ENABLED?: string;
+			readonly SELENA_SUGGEST_BUDGET_USD?: string;
+			readonly SELENA_EVIDENCE_S3_ENDPOINT?: string;
+			readonly SELENA_EVIDENCE_S3_BUCKET?: string;
+			readonly SELENA_EVIDENCE_S3_REGION?: string;
+			readonly SELENA_EVIDENCE_S3_ACCESS_KEY_ID?: string;
+			readonly SELENA_EVIDENCE_S3_SECRET_ACCESS_KEY?: string;
 			readonly STRIPE_SECRET_KEY?: string;
 			readonly STRIPE_WEBHOOK_SECRET?: string;
 			readonly RESEND_API_KEY?: string;

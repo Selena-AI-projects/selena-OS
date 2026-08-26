@@ -2,19 +2,21 @@
  * Server-only helpers for the async brand-analysis job.
  *
  * All pg-boss coupling for the onboarding analysis lives here so the server
- * functions in `@/server/onboarding` stay thin (and free of direct db
- * imports). The web app enqueues the work and then polls the job's result
- * *by brand* — the brand id is the org id, so callers prove access to the
- * brand and we never hand a job's output to someone outside that org.
+ * functions that use it stay thin (and free of direct db imports). The web app
+ * enqueues the work and then polls the job's result *by request key* — the id
+ * of whatever the analysis was started for (an Elmo brand, a Selena project).
+ * Callers prove access to that record first, so a job's output never reaches
+ * someone outside the org that asked for it.
  *
  * Reading the result goes straight at pg-boss's `pgboss.job` table rather than
  * `getJobById`, because the client polls by brand (not by an opaque job id it
  * has to round-trip). The columns used here (`name`, `data`, `state`,
  * `output`, `created_on`) are stable across the pinned pg-boss v12 line.
  */
-import { sql } from "drizzle-orm";
+
 import { db } from "@workspace/lib/db/db";
-import { cleanOnboardingUrl, type OnboardingSuggestion } from "@workspace/lib/onboarding";
+import { cleanOnboardingUrl, type OnboardingSuggestion, type QuestionStyle } from "@workspace/lib/onboarding";
+import { sql } from "drizzle-orm";
 import { getBoss } from "@/lib/boss-client";
 import { extractDomain } from "@/lib/domain-categories";
 
@@ -33,11 +35,31 @@ export type AnalyzeBrandStatus =
 	| { status: "done"; suggestion: OnboardingSuggestion }
 	| { status: "failed"; error: string };
 
+/**
+ * Which product a job belongs to. Both products key jobs by a UUID (Elmo by
+ * brand id, Selena by project id), and a brand name can be shaped like a UUID,
+ * so the raw ids share a namespace. The product prefix keeps one product from
+ * reading or cancelling the other's job by guessing its id.
+ */
+export type AnalyzeBrandProduct = "elmo" | "selena";
+
 export interface AnalyzeBrandInput {
-	/** Brand id (== org id) the analysis belongs to. Must be access-checked by the caller. */
-	brandId: string;
+	product: AnalyzeBrandProduct;
+	/** Id the result is read back by. Must be access-checked by the caller. */
+	requestKey: string;
 	website: string;
 	brandName?: string;
+	/** Free-text place context; scopes competitors and prompts to the area. */
+	locationHint?: string;
+	maxCompetitors?: number;
+	maxPrompts?: number;
+	/** How suggested questions are phrased; the analyzer's default when unset. */
+	questionStyle?: QuestionStyle;
+}
+
+/** The namespaced value actually stored in and queried from the job payload. */
+function namespacedKey(product: AnalyzeBrandProduct, requestKey: string): string {
+	return `${product}:${requestKey}`;
 }
 
 interface JobRow {
@@ -47,12 +69,12 @@ interface JobRow {
 	output: unknown;
 }
 
-/** The most recent analyze-brand job for a brand, regardless of state. */
-async function latestJobForBrand(brandId: string): Promise<JobRow | undefined> {
+/** The most recent analyze-brand job for a request key, regardless of state. */
+async function latestJob(namespaced: string): Promise<JobRow | undefined> {
 	const result = await db.execute(sql`
 		SELECT id, state, data, output
 		FROM pgboss.job
-		WHERE name = ${ANALYZE_BRAND_QUEUE} AND data->>'brandId' = ${brandId}
+		WHERE name = ${ANALYZE_BRAND_QUEUE} AND data->>'requestKey' = ${namespaced}
 		ORDER BY created_on DESC
 		LIMIT 1
 	`);
@@ -71,7 +93,7 @@ function analysisKey(website: string): string {
 }
 
 /**
- * Enqueue a brand analysis, deduped by the brand + page it runs for.
+ * Enqueue a brand analysis, deduped by the request key + page it runs for.
  *
  * If an analysis for this page is already in flight we reuse it instead of
  * paying for a second run; once a job reaches a terminal state a fresh analysis
@@ -88,19 +110,27 @@ function analysisKey(website: string): string {
  */
 export async function enqueueAnalyzeBrand(input: AnalyzeBrandInput): Promise<void> {
 	const boss = await getBoss();
-	const key = analysisKey(input.website);
+	const pageKey = analysisKey(input.website);
 
-	const latest = await latestJobForBrand(input.brandId);
-	if (latest && IN_FLIGHT_STATES.has(latest.state) && analysisKey(latest.data?.website ?? "") === key) {
+	const latest = await latestJob(namespacedKey(input.product, input.requestKey));
+	if (latest && IN_FLIGHT_STATES.has(latest.state) && analysisKey(latest.data?.website ?? "") === pageKey) {
 		return;
 	}
 
-	await boss.send(ANALYZE_BRAND_QUEUE, input);
+	// Store the namespaced value so a poll/cancel for one product can never
+	// match the other product's job, even when the raw ids are equal.
+	await boss.send(ANALYZE_BRAND_QUEUE, {
+		...input,
+		requestKey: namespacedKey(input.product, input.requestKey),
+	});
 }
 
-/** Poll the status/result of the latest brand-analysis job for a brand. */
-export async function getAnalyzeBrandStatus(brandId: string): Promise<AnalyzeBrandStatus> {
-	const job = await latestJobForBrand(brandId);
+/** Poll the status/result of the latest brand-analysis job for a request key. */
+export async function getAnalyzeBrandStatus(
+	product: AnalyzeBrandProduct,
+	requestKey: string,
+): Promise<AnalyzeBrandStatus> {
+	const job = await latestJob(namespacedKey(product, requestKey));
 
 	// No job yet — the enqueue may not be visible, or the worker hasn't picked
 	// it up. Either way the client should keep polling.
@@ -112,7 +142,8 @@ export async function getAnalyzeBrandStatus(brandId: string): Promise<AnalyzeBra
 	}
 	if (job.state === "failed" || job.state === "cancelled") {
 		console.error("[analyze-brand] job ended without a result", {
-			brandId,
+			product,
+			requestKey,
 			jobId: job.id,
 			state: job.state,
 		});
@@ -122,12 +153,11 @@ export async function getAnalyzeBrandStatus(brandId: string): Promise<AnalyzeBra
 }
 
 /**
- * Best-effort cancel of an in-flight analysis for a brand. Used when the user
- * backs out of the wizard so the worker doesn't keep grinding on a result
- * nobody is waiting for.
+ * Best-effort cancel of an in-flight analysis. Used when the user backs out so
+ * the worker doesn't keep grinding on a result nobody is waiting for.
  */
-export async function cancelAnalyzeBrand(brandId: string): Promise<void> {
-	const job = await latestJobForBrand(brandId);
+export async function cancelAnalyzeBrand(product: AnalyzeBrandProduct, requestKey: string): Promise<void> {
+	const job = await latestJob(namespacedKey(product, requestKey));
 	if (!job || !IN_FLIGHT_STATES.has(job.state)) {
 		return;
 	}

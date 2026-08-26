@@ -57,6 +57,60 @@ describe("analyzeBrand", () => {
 		expect(ctx.website).toBe("example.com");
 	});
 
+	it("scopes the research prompt to the location hint when one is given", async () => {
+		const withLocation = await buildAnalysisContext({
+			website: "https://example.com",
+			locationHint: "Kora Food Hall, Canggu, Indonesia (coordinates -8.65, 115.14)",
+		});
+		expect(withLocation.prompt).toContain("Kora Food Hall, Canggu, Indonesia");
+		expect(withLocation.prompt).toContain("local business");
+
+		const withoutLocation = await buildAnalysisContext({ website: "https://example.com" });
+		expect(withoutLocation.prompt).not.toContain("local business");
+	});
+
+	it("asks for one customer persona only in the customer question style", async () => {
+		const customer = await buildAnalysisContext({
+			website: "https://example.com",
+			questionStyle: "customer",
+		});
+		expect(customer.prompt).toContain("ONE primary customer persona");
+		expect(customer.prompt).toContain("asked verbatim");
+
+		// With a location, every directive follows the style: no fragment
+		// examples in customer mode, and the search wording stays what it was
+		// before styles existed so queued jobs' prompts do not shift.
+		const customerLocal = await buildAnalysisContext({
+			website: "https://example.com",
+			questionStyle: "customer",
+			locationHint: "Canggu, Indonesia",
+		});
+		expect(customerLocal.prompt).toContain('"where do i get good [category] in [area]?"');
+		expect(customerLocal.prompt).not.toContain('"best [category] in [area]"');
+		const searchLocal = await buildAnalysisContext({
+			website: "https://example.com",
+			locationHint: "Canggu, Indonesia",
+		});
+		expect(searchLocal.prompt).toContain(
+			'Make suggested prompts local discovery queries that name the neighborhood or city (e.g. "best [category] in [area]"), not global ones.',
+		);
+
+		// The default keeps the Elmo search-fragment behavior byte for byte.
+		const search = await buildAnalysisContext({ website: "https://example.com" });
+		expect(search.prompt).not.toContain("persona");
+		const explicit = await buildAnalysisContext({ website: "https://example.com", questionStyle: "search" });
+		expect(explicit.prompt).toBe(search.prompt);
+	});
+
+	it("does not ask for a persona when prompt generation is disabled", async () => {
+		const ctx = await buildAnalysisContext({
+			website: "https://example.com",
+			questionStyle: "customer",
+			maxPrompts: 0,
+		});
+		expect(ctx.prompt).not.toContain("persona");
+	});
+
 	it("rejects unsupported protocols before calling analysis services", async () => {
 		await expect(buildAnalysisContext({ website: "ftp://example.com/private" })).rejects.toThrow(
 			'Could not parse website "ftp://example.com/private"',

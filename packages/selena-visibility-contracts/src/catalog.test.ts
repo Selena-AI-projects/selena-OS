@@ -6,6 +6,7 @@ import {
 	assertHardCaps,
 	createOrderLock,
 	getPlan,
+	monthlyAnswerAllowance,
 	isApiViewWebSearchEnabled,
 	orderLockHash,
 	plannedAnswers,
@@ -38,12 +39,12 @@ describe("Selena RC6 catalog", () => {
 		expect(plannedAnswers(scope)).toBe(800);
 		expect(() => validateCatalogScope({ ...scope, languageScenarios: 101 })).toThrow("SCENARIO_LIMIT_EXCEEDED");
 	});
-	it("Expert Verified is 10 families × 2 languages × 8 × 5", () =>
+	it("Expert Verified is 25 questions × 2 languages × 8 × 5", () =>
 		expect(
 			plannedAnswers({
-				...base("expert-verified", { languages: ["en", "id"], systems: apiSystems, languageScenarios: 20, repeats: 5 }),
+				...base("expert-verified", { languages: ["en", "id"], systems: apiSystems, languageScenarios: 50, repeats: 5 }),
 			}),
-		).toBe(800));
+		).toBe(2000));
 	it("keeps Visitor and API channels distinct and API web search off", () => {
 		expect(getPlan("full-ai-landscape").channelScope).toEqual(["VISITOR_VIEW", "API_VIEW"]);
 		expect(isApiViewWebSearchEnabled()).toBe(false);
@@ -117,5 +118,26 @@ describe("Selena RC6 catalog", () => {
 				retryReserve: 1,
 			}),
 		).toThrow("RETRY_RESERVE_EXCEEDED");
+	});
+});
+
+describe("question limits", () => {
+	it("keeps 25 questions per measurement on every self-service paid tier", () => {
+		expect(getPlan("visitor-local").questionLimitPerMeasurement).toBe(25);
+		expect(getPlan("full-ai-landscape").questionLimitPerMeasurement).toBe(25);
+		expect(getPlan("expert-verified").questionLimitPerMeasurement).toBe(25);
+		expect(getPlan("growth-90-days").questionLimitPerMeasurement).toBeNull();
+	});
+});
+
+describe("monthlyAnswerAllowance", () => {
+	it("computes the quoted allowances from the catalog itself", () => {
+		expect(monthlyAnswerAllowance("visitor-local")).toBe(300);
+		expect(monthlyAnswerAllowance("full-ai-landscape")).toBe(800);
+		expect(monthlyAnswerAllowance("expert-verified")).toBe(2000);
+	});
+
+	it("reports no computable allowance for a negotiated plan", () => {
+		expect(monthlyAnswerAllowance("growth-90-days")).toBeNull();
 	});
 });

@@ -28,6 +28,7 @@ import {
 	emptyCategoryCounts,
 } from "@/lib/domain-categories";
 import { categorizeDomain } from "@/lib/domain-categories.server";
+import { percentOrNull } from "@/lib/visibility-stats";
 
 export interface VisibilityTimeSeriesPoint {
 	date: string;
@@ -41,9 +42,9 @@ export type CitationTimeSeriesPoint = { date: string } & Record<CitationCategory
 export interface DashboardSummaryResponse {
 	totalPrompts: number;
 	totalRuns: number;
-	averageVisibility: number;
-	nonBrandedVisibility: number;
-	brandedVisibility: number;
+	averageVisibility: number | null;
+	nonBrandedVisibility: number | null;
+	brandedVisibility: number | null;
 	visibilityTimeSeries: VisibilityTimeSeriesPoint[];
 	citationTimeSeries: CitationTimeSeriesPoint[];
 	lastUpdatedAt: string | null;
@@ -139,10 +140,11 @@ export const getDashboardSummaryFn = createServerFn({ method: "GET" })
 
 		const totalQualifyingRuns = totalBrandedRuns + totalNonBrandedRuns;
 		const totalMentioned = totalBrandedMentioned + totalNonBrandedMentioned;
-		const averageVisibility = totalQualifyingRuns > 0 ? Math.round((totalMentioned / totalQualifyingRuns) * 100) : 0;
-		const nonBrandedVisibility =
-			totalNonBrandedRuns > 0 ? Math.round((totalNonBrandedMentioned / totalNonBrandedRuns) * 100) : 0;
-		const brandedVisibility = totalBrandedRuns > 0 ? Math.round((totalBrandedMentioned / totalBrandedRuns) * 100) : 100;
+		// Empty set -> null, never a confident 0 (or a confident 100): a brand
+		// with no qualifying runs was not measured, and the UI must say so.
+		const averageVisibility = percentOrNull(totalMentioned, totalQualifyingRuns);
+		const nonBrandedVisibility = percentOrNull(totalNonBrandedMentioned, totalNonBrandedRuns);
+		const brandedVisibility = percentOrNull(totalBrandedMentioned, totalBrandedRuns);
 
 		// Build visibility time series directly from LVCF-smoothed data (no rolling window needed)
 		const visibilityTimeSeries: VisibilityTimeSeriesPoint[] = dateRange.map((date) => {

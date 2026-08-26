@@ -19,6 +19,14 @@ export {
 	OVERDUE_ALERT_GRACE_MS,
 } from "./maintenance";
 export {
+	assertGlobalProviderStop,
+	assertSuggestSpendAllowed,
+	isGlobalProviderStopEngaged,
+	PROVIDER_STOP_ENV,
+	SUGGEST_BUDGET_ENV,
+	SUGGEST_FREE_BUDGET_CLASS,
+} from "./spend-gate";
+export {
 	dailyRunCeiling,
 	defaultPlatformPicks,
 	dueToleranceMs,

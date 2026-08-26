@@ -33,6 +33,10 @@ import { Route as AuthedAppBrandRouteImport } from './routes/_authed/app/$brand'
 import { Route as AuthedAppAcademyRouteImport } from './routes/_authed/app/academy'
 import { Route as AuthedAppNewRouteImport } from './routes/_authed/app/new'
 import { Route as AuthedAppSelenaRouteImport } from './routes/_authed/app/selena'
+import { Route as AuthedAppSelenaAdminRouteImport } from './routes/_authed/app/selena-admin'
+import { Route as AuthedAppSelenaOrderRouteImport } from './routes/_authed/app/selena-order'
+import { Route as AuthedAppSelenaReportRouteImport } from './routes/_authed/app/selena-report'
+import { Route as AuthedAppSelenaSourcesRouteImport } from './routes/_authed/app/selena-sources'
 import { Route as AuthedReportsIndexRouteImport } from './routes/_authed/reports/index'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
 import { Route as ApiManifestIndexRouteImport } from './routes/api/manifest/index'
@@ -58,6 +62,7 @@ import { Route as ApiV1PromptsPromptIdRouteImport } from './routes/api/v1/prompt
 import { Route as ApiV1ReportsIndexRouteImport } from './routes/api/v1/reports/index'
 import { Route as ApiV1ReportsReportIdRouteImport } from './routes/api/v1/reports/$reportId'
 import { Route as ApiV1SelenaActionPlanRouteImport } from './routes/api/v1/selena/action-plan'
+import { Route as ApiV1SelenaCitationGapsRouteImport } from './routes/api/v1/selena/citation-gaps'
 import { Route as ApiV1SelenaDashboardRouteImport } from './routes/api/v1/selena/dashboard'
 import { Route as ApiV1SelenaProfilesRouteImport } from './routes/api/v1/selena/profiles'
 import { Route as ApiV1SelenaPublicScanRouteImport } from './routes/api/v1/selena/public-scan'
@@ -84,7 +89,12 @@ import { Route as ApiV1SelenaProjectsIndexRouteImport } from './routes/api/v1/se
 import { Route as ApiV1SelenaQuotesIndexRouteImport } from './routes/api/v1/selena/quotes/index'
 import { Route as ApiV1SelenaReadinessVerifyRouteImport } from './routes/api/v1/selena/readiness/verify'
 import { Route as ApiV1SelenaScenariosIndexRouteImport } from './routes/api/v1/selena/scenarios/index'
+import { Route as ApiV1SelenaPilotCyclesIndexRouteImport } from './routes/api/v1/selena/pilot/cycles/index'
+import { Route as ApiV1SelenaPilotObservationsIndexRouteImport } from './routes/api/v1/selena/pilot/observations/index'
 import { Route as ApiV1SelenaReadinessScansScanIdRouteImport } from './routes/api/v1/selena/readiness/scans/$scanId'
+import { Route as ApiV1SelenaPilotObservationsObservationIdReviewRouteImport } from './routes/api/v1/selena/pilot/observations/$observationId/review'
+import { Route as ApiV1SelenaPilotCyclesCycleIdTasksIndexRouteImport } from './routes/api/v1/selena/pilot/cycles/$cycleId/tasks/index'
+import { Route as ApiV1SelenaPilotCyclesCycleIdTasksGenerateRouteImport } from './routes/api/v1/selena/pilot/cycles/$cycleId/tasks/generate'
 import { Route as ApiV1SelenaReadinessScansScanIdFixesFindingIdRouteImport } from './routes/api/v1/selena/readiness/scans/$scanId/fixes/$findingId'
 
 const IndexRoute = IndexRouteImport.update({
@@ -205,6 +215,26 @@ const AuthedAppNewRoute = AuthedAppNewRouteImport.update({
 const AuthedAppSelenaRoute = AuthedAppSelenaRouteImport.update({
   id: '/selena',
   path: '/selena',
+  getParentRoute: () => AuthedAppRoute,
+} as any)
+const AuthedAppSelenaAdminRoute = AuthedAppSelenaAdminRouteImport.update({
+  id: '/selena-admin',
+  path: '/selena-admin',
+  getParentRoute: () => AuthedAppRoute,
+} as any)
+const AuthedAppSelenaOrderRoute = AuthedAppSelenaOrderRouteImport.update({
+  id: '/selena-order',
+  path: '/selena-order',
+  getParentRoute: () => AuthedAppRoute,
+} as any)
+const AuthedAppSelenaReportRoute = AuthedAppSelenaReportRouteImport.update({
+  id: '/selena-report',
+  path: '/selena-report',
+  getParentRoute: () => AuthedAppRoute,
+} as any)
+const AuthedAppSelenaSourcesRoute = AuthedAppSelenaSourcesRouteImport.update({
+  id: '/selena-sources',
+  path: '/selena-sources',
   getParentRoute: () => AuthedAppRoute,
 } as any)
 const AuthedReportsIndexRoute = AuthedReportsIndexRouteImport.update({
@@ -337,6 +367,11 @@ const ApiV1ReportsReportIdRoute = ApiV1ReportsReportIdRouteImport.update({
 const ApiV1SelenaActionPlanRoute = ApiV1SelenaActionPlanRouteImport.update({
   id: '/api/v1/selena/action-plan',
   path: '/api/v1/selena/action-plan',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiV1SelenaCitationGapsRoute = ApiV1SelenaCitationGapsRouteImport.update({
+  id: '/api/v1/selena/citation-gaps',
+  path: '/api/v1/selena/citation-gaps',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiV1SelenaDashboardRoute = ApiV1SelenaDashboardRouteImport.update({
@@ -486,10 +521,40 @@ const ApiV1SelenaScenariosIndexRoute =
     path: '/api/v1/selena/scenarios/',
     getParentRoute: () => rootRouteImport,
   } as any)
+const ApiV1SelenaPilotCyclesIndexRoute =
+  ApiV1SelenaPilotCyclesIndexRouteImport.update({
+    id: '/api/v1/selena/pilot/cycles/',
+    path: '/api/v1/selena/pilot/cycles/',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiV1SelenaPilotObservationsIndexRoute =
+  ApiV1SelenaPilotObservationsIndexRouteImport.update({
+    id: '/api/v1/selena/pilot/observations/',
+    path: '/api/v1/selena/pilot/observations/',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiV1SelenaReadinessScansScanIdRoute =
   ApiV1SelenaReadinessScansScanIdRouteImport.update({
     id: '/api/v1/selena/readiness/scans/$scanId',
     path: '/api/v1/selena/readiness/scans/$scanId',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiV1SelenaPilotObservationsObservationIdReviewRoute =
+  ApiV1SelenaPilotObservationsObservationIdReviewRouteImport.update({
+    id: '/api/v1/selena/pilot/observations/$observationId/review',
+    path: '/api/v1/selena/pilot/observations/$observationId/review',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiV1SelenaPilotCyclesCycleIdTasksIndexRoute =
+  ApiV1SelenaPilotCyclesCycleIdTasksIndexRouteImport.update({
+    id: '/api/v1/selena/pilot/cycles/$cycleId/tasks/',
+    path: '/api/v1/selena/pilot/cycles/$cycleId/tasks/',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiV1SelenaPilotCyclesCycleIdTasksGenerateRoute =
+  ApiV1SelenaPilotCyclesCycleIdTasksGenerateRouteImport.update({
+    id: '/api/v1/selena/pilot/cycles/$cycleId/tasks/generate',
+    path: '/api/v1/selena/pilot/cycles/$cycleId/tasks/generate',
     getParentRoute: () => rootRouteImport,
   } as any)
 const ApiV1SelenaReadinessScansScanIdFixesFindingIdRoute =
@@ -521,6 +586,10 @@ export interface FileRoutesByFullPath {
   '/app/academy': typeof AuthedAppAcademyRoute
   '/app/new': typeof AuthedAppNewRoute
   '/app/selena': typeof AuthedAppSelenaRoute
+  '/app/selena-admin': typeof AuthedAppSelenaAdminRoute
+  '/app/selena-order': typeof AuthedAppSelenaOrderRoute
+  '/app/selena-report': typeof AuthedAppSelenaReportRoute
+  '/app/selena-sources': typeof AuthedAppSelenaSourcesRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/admin/': typeof AuthedAdminIndexRoute
   '/app/': typeof AuthedAppIndexRoute
@@ -541,6 +610,7 @@ export interface FileRoutesByFullPath {
   '/api/v1/prompts/$promptId': typeof ApiV1PromptsPromptIdRouteWithChildren
   '/api/v1/reports/$reportId': typeof ApiV1ReportsReportIdRoute
   '/api/v1/selena/action-plan': typeof ApiV1SelenaActionPlanRoute
+  '/api/v1/selena/citation-gaps': typeof ApiV1SelenaCitationGapsRoute
   '/api/v1/selena/dashboard': typeof ApiV1SelenaDashboardRoute
   '/api/v1/selena/profiles': typeof ApiV1SelenaProfilesRoute
   '/api/v1/selena/public-scan': typeof ApiV1SelenaPublicScanRoute
@@ -575,7 +645,12 @@ export interface FileRoutesByFullPath {
   '/api/v1/selena/quotes/': typeof ApiV1SelenaQuotesIndexRoute
   '/api/v1/selena/scenarios/': typeof ApiV1SelenaScenariosIndexRoute
   '/api/v1/selena/readiness/scans/$scanId': typeof ApiV1SelenaReadinessScansScanIdRouteWithChildren
+  '/api/v1/selena/pilot/cycles/': typeof ApiV1SelenaPilotCyclesIndexRoute
+  '/api/v1/selena/pilot/observations/': typeof ApiV1SelenaPilotObservationsIndexRoute
+  '/api/v1/selena/pilot/observations/$observationId/review': typeof ApiV1SelenaPilotObservationsObservationIdReviewRoute
+  '/api/v1/selena/pilot/cycles/$cycleId/tasks/generate': typeof ApiV1SelenaPilotCyclesCycleIdTasksGenerateRoute
   '/api/v1/selena/readiness/scans/$scanId/fixes/$findingId': typeof ApiV1SelenaReadinessScansScanIdFixesFindingIdRoute
+  '/api/v1/selena/pilot/cycles/$cycleId/tasks/': typeof ApiV1SelenaPilotCyclesCycleIdTasksIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -595,6 +670,10 @@ export interface FileRoutesByTo {
   '/app/academy': typeof AuthedAppAcademyRoute
   '/app/new': typeof AuthedAppNewRoute
   '/app/selena': typeof AuthedAppSelenaRoute
+  '/app/selena-admin': typeof AuthedAppSelenaAdminRoute
+  '/app/selena-order': typeof AuthedAppSelenaOrderRoute
+  '/app/selena-report': typeof AuthedAppSelenaReportRoute
+  '/app/selena-sources': typeof AuthedAppSelenaSourcesRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/admin': typeof AuthedAdminIndexRoute
   '/app': typeof AuthedAppIndexRoute
@@ -615,6 +694,7 @@ export interface FileRoutesByTo {
   '/api/v1/prompts/$promptId': typeof ApiV1PromptsPromptIdRouteWithChildren
   '/api/v1/reports/$reportId': typeof ApiV1ReportsReportIdRoute
   '/api/v1/selena/action-plan': typeof ApiV1SelenaActionPlanRoute
+  '/api/v1/selena/citation-gaps': typeof ApiV1SelenaCitationGapsRoute
   '/api/v1/selena/dashboard': typeof ApiV1SelenaDashboardRoute
   '/api/v1/selena/profiles': typeof ApiV1SelenaProfilesRoute
   '/api/v1/selena/public-scan': typeof ApiV1SelenaPublicScanRoute
@@ -649,7 +729,12 @@ export interface FileRoutesByTo {
   '/api/v1/selena/quotes': typeof ApiV1SelenaQuotesIndexRoute
   '/api/v1/selena/scenarios': typeof ApiV1SelenaScenariosIndexRoute
   '/api/v1/selena/readiness/scans/$scanId': typeof ApiV1SelenaReadinessScansScanIdRouteWithChildren
+  '/api/v1/selena/pilot/cycles': typeof ApiV1SelenaPilotCyclesIndexRoute
+  '/api/v1/selena/pilot/observations': typeof ApiV1SelenaPilotObservationsIndexRoute
+  '/api/v1/selena/pilot/observations/$observationId/review': typeof ApiV1SelenaPilotObservationsObservationIdReviewRoute
+  '/api/v1/selena/pilot/cycles/$cycleId/tasks/generate': typeof ApiV1SelenaPilotCyclesCycleIdTasksGenerateRoute
   '/api/v1/selena/readiness/scans/$scanId/fixes/$findingId': typeof ApiV1SelenaReadinessScansScanIdFixesFindingIdRoute
+  '/api/v1/selena/pilot/cycles/$cycleId/tasks': typeof ApiV1SelenaPilotCyclesCycleIdTasksIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -675,6 +760,10 @@ export interface FileRoutesById {
   '/_authed/app/academy': typeof AuthedAppAcademyRoute
   '/_authed/app/new': typeof AuthedAppNewRoute
   '/_authed/app/selena': typeof AuthedAppSelenaRoute
+  '/_authed/app/selena-admin': typeof AuthedAppSelenaAdminRoute
+  '/_authed/app/selena-order': typeof AuthedAppSelenaOrderRoute
+  '/_authed/app/selena-report': typeof AuthedAppSelenaReportRoute
+  '/_authed/app/selena-sources': typeof AuthedAppSelenaSourcesRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/_authed/admin/': typeof AuthedAdminIndexRoute
   '/_authed/app/': typeof AuthedAppIndexRoute
@@ -695,6 +784,7 @@ export interface FileRoutesById {
   '/api/v1/prompts/$promptId': typeof ApiV1PromptsPromptIdRouteWithChildren
   '/api/v1/reports/$reportId': typeof ApiV1ReportsReportIdRoute
   '/api/v1/selena/action-plan': typeof ApiV1SelenaActionPlanRoute
+  '/api/v1/selena/citation-gaps': typeof ApiV1SelenaCitationGapsRoute
   '/api/v1/selena/dashboard': typeof ApiV1SelenaDashboardRoute
   '/api/v1/selena/profiles': typeof ApiV1SelenaProfilesRoute
   '/api/v1/selena/public-scan': typeof ApiV1SelenaPublicScanRoute
@@ -729,7 +819,12 @@ export interface FileRoutesById {
   '/api/v1/selena/quotes/': typeof ApiV1SelenaQuotesIndexRoute
   '/api/v1/selena/scenarios/': typeof ApiV1SelenaScenariosIndexRoute
   '/api/v1/selena/readiness/scans/$scanId': typeof ApiV1SelenaReadinessScansScanIdRouteWithChildren
+  '/api/v1/selena/pilot/cycles/': typeof ApiV1SelenaPilotCyclesIndexRoute
+  '/api/v1/selena/pilot/observations/': typeof ApiV1SelenaPilotObservationsIndexRoute
+  '/api/v1/selena/pilot/observations/$observationId/review': typeof ApiV1SelenaPilotObservationsObservationIdReviewRoute
+  '/api/v1/selena/pilot/cycles/$cycleId/tasks/generate': typeof ApiV1SelenaPilotCyclesCycleIdTasksGenerateRoute
   '/api/v1/selena/readiness/scans/$scanId/fixes/$findingId': typeof ApiV1SelenaReadinessScansScanIdFixesFindingIdRoute
+  '/api/v1/selena/pilot/cycles/$cycleId/tasks/': typeof ApiV1SelenaPilotCyclesCycleIdTasksIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -755,6 +850,10 @@ export interface FileRouteTypes {
     | '/app/academy'
     | '/app/new'
     | '/app/selena'
+    | '/app/selena-admin'
+    | '/app/selena-order'
+    | '/app/selena-report'
+    | '/app/selena-sources'
     | '/api/auth/$'
     | '/admin/'
     | '/app/'
@@ -775,6 +874,7 @@ export interface FileRouteTypes {
     | '/api/v1/prompts/$promptId'
     | '/api/v1/reports/$reportId'
     | '/api/v1/selena/action-plan'
+    | '/api/v1/selena/citation-gaps'
     | '/api/v1/selena/dashboard'
     | '/api/v1/selena/profiles'
     | '/api/v1/selena/public-scan'
@@ -809,7 +909,12 @@ export interface FileRouteTypes {
     | '/api/v1/selena/quotes/'
     | '/api/v1/selena/scenarios/'
     | '/api/v1/selena/readiness/scans/$scanId'
+    | '/api/v1/selena/pilot/cycles/'
+    | '/api/v1/selena/pilot/observations/'
+    | '/api/v1/selena/pilot/observations/$observationId/review'
+    | '/api/v1/selena/pilot/cycles/$cycleId/tasks/generate'
     | '/api/v1/selena/readiness/scans/$scanId/fixes/$findingId'
+    | '/api/v1/selena/pilot/cycles/$cycleId/tasks/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -829,6 +934,10 @@ export interface FileRouteTypes {
     | '/app/academy'
     | '/app/new'
     | '/app/selena'
+    | '/app/selena-admin'
+    | '/app/selena-order'
+    | '/app/selena-report'
+    | '/app/selena-sources'
     | '/api/auth/$'
     | '/admin'
     | '/app'
@@ -849,6 +958,7 @@ export interface FileRouteTypes {
     | '/api/v1/prompts/$promptId'
     | '/api/v1/reports/$reportId'
     | '/api/v1/selena/action-plan'
+    | '/api/v1/selena/citation-gaps'
     | '/api/v1/selena/dashboard'
     | '/api/v1/selena/profiles'
     | '/api/v1/selena/public-scan'
@@ -883,7 +993,12 @@ export interface FileRouteTypes {
     | '/api/v1/selena/quotes'
     | '/api/v1/selena/scenarios'
     | '/api/v1/selena/readiness/scans/$scanId'
+    | '/api/v1/selena/pilot/cycles'
+    | '/api/v1/selena/pilot/observations'
+    | '/api/v1/selena/pilot/observations/$observationId/review'
+    | '/api/v1/selena/pilot/cycles/$cycleId/tasks/generate'
     | '/api/v1/selena/readiness/scans/$scanId/fixes/$findingId'
+    | '/api/v1/selena/pilot/cycles/$cycleId/tasks'
   id:
     | '__root__'
     | '/'
@@ -908,6 +1023,10 @@ export interface FileRouteTypes {
     | '/_authed/app/academy'
     | '/_authed/app/new'
     | '/_authed/app/selena'
+    | '/_authed/app/selena-admin'
+    | '/_authed/app/selena-order'
+    | '/_authed/app/selena-report'
+    | '/_authed/app/selena-sources'
     | '/api/auth/$'
     | '/_authed/admin/'
     | '/_authed/app/'
@@ -928,6 +1047,7 @@ export interface FileRouteTypes {
     | '/api/v1/prompts/$promptId'
     | '/api/v1/reports/$reportId'
     | '/api/v1/selena/action-plan'
+    | '/api/v1/selena/citation-gaps'
     | '/api/v1/selena/dashboard'
     | '/api/v1/selena/profiles'
     | '/api/v1/selena/public-scan'
@@ -962,7 +1082,12 @@ export interface FileRouteTypes {
     | '/api/v1/selena/quotes/'
     | '/api/v1/selena/scenarios/'
     | '/api/v1/selena/readiness/scans/$scanId'
+    | '/api/v1/selena/pilot/cycles/'
+    | '/api/v1/selena/pilot/observations/'
+    | '/api/v1/selena/pilot/observations/$observationId/review'
+    | '/api/v1/selena/pilot/cycles/$cycleId/tasks/generate'
     | '/api/v1/selena/readiness/scans/$scanId/fixes/$findingId'
+    | '/api/v1/selena/pilot/cycles/$cycleId/tasks/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -985,6 +1110,7 @@ export interface RootRouteChildren {
   ApiV1PromptsPromptIdRoute: typeof ApiV1PromptsPromptIdRouteWithChildren
   ApiV1ReportsReportIdRoute: typeof ApiV1ReportsReportIdRoute
   ApiV1SelenaActionPlanRoute: typeof ApiV1SelenaActionPlanRoute
+  ApiV1SelenaCitationGapsRoute: typeof ApiV1SelenaCitationGapsRoute
   ApiV1SelenaDashboardRoute: typeof ApiV1SelenaDashboardRoute
   ApiV1SelenaProfilesRoute: typeof ApiV1SelenaProfilesRoute
   ApiV1SelenaPublicScanRoute: typeof ApiV1SelenaPublicScanRoute
@@ -1007,6 +1133,11 @@ export interface RootRouteChildren {
   ApiV1SelenaQuotesIndexRoute: typeof ApiV1SelenaQuotesIndexRoute
   ApiV1SelenaScenariosIndexRoute: typeof ApiV1SelenaScenariosIndexRoute
   ApiV1SelenaReadinessScansScanIdRoute: typeof ApiV1SelenaReadinessScansScanIdRouteWithChildren
+  ApiV1SelenaPilotCyclesIndexRoute: typeof ApiV1SelenaPilotCyclesIndexRoute
+  ApiV1SelenaPilotObservationsIndexRoute: typeof ApiV1SelenaPilotObservationsIndexRoute
+  ApiV1SelenaPilotObservationsObservationIdReviewRoute: typeof ApiV1SelenaPilotObservationsObservationIdReviewRoute
+  ApiV1SelenaPilotCyclesCycleIdTasksGenerateRoute: typeof ApiV1SelenaPilotCyclesCycleIdTasksGenerateRoute
+  ApiV1SelenaPilotCyclesCycleIdTasksIndexRoute: typeof ApiV1SelenaPilotCyclesCycleIdTasksIndexRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -1177,6 +1308,34 @@ declare module '@tanstack/react-router' {
       path: '/selena'
       fullPath: '/app/selena'
       preLoaderRoute: typeof AuthedAppSelenaRouteImport
+      parentRoute: typeof AuthedAppRoute
+    }
+    '/_authed/app/selena-admin': {
+      id: '/_authed/app/selena-admin'
+      path: '/selena-admin'
+      fullPath: '/app/selena-admin'
+      preLoaderRoute: typeof AuthedAppSelenaAdminRouteImport
+      parentRoute: typeof AuthedAppRoute
+    }
+    '/_authed/app/selena-order': {
+      id: '/_authed/app/selena-order'
+      path: '/selena-order'
+      fullPath: '/app/selena-order'
+      preLoaderRoute: typeof AuthedAppSelenaOrderRouteImport
+      parentRoute: typeof AuthedAppRoute
+    }
+    '/_authed/app/selena-report': {
+      id: '/_authed/app/selena-report'
+      path: '/selena-report'
+      fullPath: '/app/selena-report'
+      preLoaderRoute: typeof AuthedAppSelenaReportRouteImport
+      parentRoute: typeof AuthedAppRoute
+    }
+    '/_authed/app/selena-sources': {
+      id: '/_authed/app/selena-sources'
+      path: '/selena-sources'
+      fullPath: '/app/selena-sources'
+      preLoaderRoute: typeof AuthedAppSelenaSourcesRouteImport
       parentRoute: typeof AuthedAppRoute
     }
     '/_authed/reports/': {
@@ -1352,6 +1511,13 @@ declare module '@tanstack/react-router' {
       path: '/api/v1/selena/action-plan'
       fullPath: '/api/v1/selena/action-plan'
       preLoaderRoute: typeof ApiV1SelenaActionPlanRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/v1/selena/citation-gaps': {
+      id: '/api/v1/selena/citation-gaps'
+      path: '/api/v1/selena/citation-gaps'
+      fullPath: '/api/v1/selena/citation-gaps'
+      preLoaderRoute: typeof ApiV1SelenaCitationGapsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/v1/selena/dashboard': {
@@ -1536,11 +1702,46 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiV1SelenaScenariosIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/v1/selena/pilot/cycles/': {
+      id: '/api/v1/selena/pilot/cycles/'
+      path: '/api/v1/selena/pilot/cycles'
+      fullPath: '/api/v1/selena/pilot/cycles/'
+      preLoaderRoute: typeof ApiV1SelenaPilotCyclesIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/v1/selena/pilot/observations/': {
+      id: '/api/v1/selena/pilot/observations/'
+      path: '/api/v1/selena/pilot/observations'
+      fullPath: '/api/v1/selena/pilot/observations/'
+      preLoaderRoute: typeof ApiV1SelenaPilotObservationsIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/v1/selena/readiness/scans/$scanId': {
       id: '/api/v1/selena/readiness/scans/$scanId'
       path: '/api/v1/selena/readiness/scans/$scanId'
       fullPath: '/api/v1/selena/readiness/scans/$scanId'
       preLoaderRoute: typeof ApiV1SelenaReadinessScansScanIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/v1/selena/pilot/observations/$observationId/review': {
+      id: '/api/v1/selena/pilot/observations/$observationId/review'
+      path: '/api/v1/selena/pilot/observations/$observationId/review'
+      fullPath: '/api/v1/selena/pilot/observations/$observationId/review'
+      preLoaderRoute: typeof ApiV1SelenaPilotObservationsObservationIdReviewRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/v1/selena/pilot/cycles/$cycleId/tasks/': {
+      id: '/api/v1/selena/pilot/cycles/$cycleId/tasks/'
+      path: '/api/v1/selena/pilot/cycles/$cycleId/tasks'
+      fullPath: '/api/v1/selena/pilot/cycles/$cycleId/tasks/'
+      preLoaderRoute: typeof ApiV1SelenaPilotCyclesCycleIdTasksIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/v1/selena/pilot/cycles/$cycleId/tasks/generate': {
+      id: '/api/v1/selena/pilot/cycles/$cycleId/tasks/generate'
+      path: '/api/v1/selena/pilot/cycles/$cycleId/tasks/generate'
+      fullPath: '/api/v1/selena/pilot/cycles/$cycleId/tasks/generate'
+      preLoaderRoute: typeof ApiV1SelenaPilotCyclesCycleIdTasksGenerateRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/v1/selena/readiness/scans/$scanId/fixes/$findingId': {
@@ -1623,6 +1824,10 @@ interface AuthedAppRouteChildren {
   AuthedAppAcademyRoute: typeof AuthedAppAcademyRoute
   AuthedAppNewRoute: typeof AuthedAppNewRoute
   AuthedAppSelenaRoute: typeof AuthedAppSelenaRoute
+  AuthedAppSelenaAdminRoute: typeof AuthedAppSelenaAdminRoute
+  AuthedAppSelenaOrderRoute: typeof AuthedAppSelenaOrderRoute
+  AuthedAppSelenaReportRoute: typeof AuthedAppSelenaReportRoute
+  AuthedAppSelenaSourcesRoute: typeof AuthedAppSelenaSourcesRoute
   AuthedAppIndexRoute: typeof AuthedAppIndexRoute
 }
 
@@ -1631,6 +1836,10 @@ const AuthedAppRouteChildren: AuthedAppRouteChildren = {
   AuthedAppAcademyRoute: AuthedAppAcademyRoute,
   AuthedAppNewRoute: AuthedAppNewRoute,
   AuthedAppSelenaRoute: AuthedAppSelenaRoute,
+  AuthedAppSelenaAdminRoute: AuthedAppSelenaAdminRoute,
+  AuthedAppSelenaOrderRoute: AuthedAppSelenaOrderRoute,
+  AuthedAppSelenaReportRoute: AuthedAppSelenaReportRoute,
+  AuthedAppSelenaSourcesRoute: AuthedAppSelenaSourcesRoute,
   AuthedAppIndexRoute: AuthedAppIndexRoute,
 }
 
@@ -1718,6 +1927,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiV1PromptsPromptIdRoute: ApiV1PromptsPromptIdRouteWithChildren,
   ApiV1ReportsReportIdRoute: ApiV1ReportsReportIdRoute,
   ApiV1SelenaActionPlanRoute: ApiV1SelenaActionPlanRoute,
+  ApiV1SelenaCitationGapsRoute: ApiV1SelenaCitationGapsRoute,
   ApiV1SelenaDashboardRoute: ApiV1SelenaDashboardRoute,
   ApiV1SelenaProfilesRoute: ApiV1SelenaProfilesRoute,
   ApiV1SelenaPublicScanRoute: ApiV1SelenaPublicScanRoute,
@@ -1741,6 +1951,15 @@ const rootRouteChildren: RootRouteChildren = {
   ApiV1SelenaScenariosIndexRoute: ApiV1SelenaScenariosIndexRoute,
   ApiV1SelenaReadinessScansScanIdRoute:
     ApiV1SelenaReadinessScansScanIdRouteWithChildren,
+  ApiV1SelenaPilotCyclesIndexRoute: ApiV1SelenaPilotCyclesIndexRoute,
+  ApiV1SelenaPilotObservationsIndexRoute:
+    ApiV1SelenaPilotObservationsIndexRoute,
+  ApiV1SelenaPilotObservationsObservationIdReviewRoute:
+    ApiV1SelenaPilotObservationsObservationIdReviewRoute,
+  ApiV1SelenaPilotCyclesCycleIdTasksGenerateRoute:
+    ApiV1SelenaPilotCyclesCycleIdTasksGenerateRoute,
+  ApiV1SelenaPilotCyclesCycleIdTasksIndexRoute:
+    ApiV1SelenaPilotCyclesCycleIdTasksIndexRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

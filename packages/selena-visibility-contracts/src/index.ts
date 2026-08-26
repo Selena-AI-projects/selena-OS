@@ -118,6 +118,11 @@ export function calculateQuote(input: QuoteCreate, pricing: QuotePricing) {
 		currency: pricing.currency,
 	};
 }
-export * from "./recommendation";
-export * from "./payment";
-export * from "./catalog";
+export * from "./catalog.js";
+export * from "./free-auto-dispatch.js";
+export * from "./local-discovery.js";
+export * from "./measurement-execution.js";
+export * from "./measurement-scope.js";
+export * from "./payment.js";
+export * from "./promo.js";
+export * from "./recommendation.js";

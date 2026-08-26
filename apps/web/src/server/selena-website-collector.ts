@@ -1,26 +1,29 @@
 import { createServerFn } from "@tanstack/react-start";
 import { db } from "@workspace/lib/db/db";
 import { svProjectProfiles, svWebsiteSnapshots } from "@workspace/lib/db/schema";
+import { readStoredGoogleMapsLocation } from "@workspace/lib/google-maps-location";
 import { buildWebsiteActionPlan, collectWebsite } from "@workspace/lib/website-collector";
 import { createRecommendationRepositories } from "@workspace/lib/recommendation-persistence";
 import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 import { resolveSessionAuthContext } from "../lib/selena-auth-context";
 
-const recommendationRepositories = createRecommendationRepositories(db);
+const recommendationRepositories = /* @__PURE__ */ createRecommendationRepositories(db);
 
 export const collectSelenaWebsiteFn = createServerFn({ method: "POST" })
 	.validator(z.object({ projectId: z.string().uuid() }))
 	.handler(async ({ data }) => {
 		const auth = await resolveSessionAuthContext();
 		const [profile] = await db
-			.select({ primaryDomain: svProjectProfiles.primaryDomain })
+			.select({ primaryDomain: svProjectProfiles.primaryDomain, mapsLocation: svProjectProfiles.mapsLocation })
 			.from(svProjectProfiles)
 			.where(and(eq(svProjectProfiles.projectId, data.projectId), eq(svProjectProfiles.organizationId, auth.tenantId)))
 			.limit(1);
 		if (!profile) throw new Error("Website collection requires a confirmed project profile");
 		const collection = await collectWebsite(auth.tenantId, profile.primaryDomain);
-		const actionPlan = buildWebsiteActionPlan(collection);
+		const actionPlan = buildWebsiteActionPlan(collection, {
+			mapsLocation: readStoredGoogleMapsLocation(profile.mapsLocation),
+		});
 		const [stored] = await db
 			.insert(svWebsiteSnapshots)
 			.values({

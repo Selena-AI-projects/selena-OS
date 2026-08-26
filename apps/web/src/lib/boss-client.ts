@@ -1,4 +1,4 @@
-import { PgBoss } from "pg-boss";
+import type { PgBoss } from "pg-boss";
 
 let bossInstance: PgBoss | null = null;
 let bossPromise: Promise<PgBoss> | null = null;
@@ -22,6 +22,10 @@ export async function getBoss(): Promise<PgBoss> {
 	}
 
 	bossPromise = (async () => {
+		// Loaded here rather than at module scope: server-function modules that
+		// enqueue jobs stay in the client graph, and a static edge to pg-boss
+		// shipped the Postgres driver to the browser.
+		const { PgBoss } = await import("pg-boss");
 		const boss = new PgBoss({
 			connectionString,
 			schema: "pgboss",
@@ -49,6 +53,13 @@ export async function getBoss(): Promise<PgBoss> {
 			retryLimit: 1,
 			retryDelay: 10,
 			retryBackoff: false,
+			expireInSeconds: 60 * 15,
+		});
+		// Mirrors the worker's definition. Retries are off because a claimed
+		// permit is spent: a retry could only produce a second provider call for
+		// work that was authorized once.
+		await boss.createQueue("selena-measure", {
+			retryLimit: 0,
 			expireInSeconds: 60 * 15,
 		});
 

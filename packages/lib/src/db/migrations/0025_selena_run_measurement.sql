@@ -1,0 +1,13 @@
+ALTER TABLE "sv_runs" ADD COLUMN IF NOT EXISTS "cost_basis" text;
+ALTER TABLE "sv_runs" ADD COLUMN IF NOT EXISTS "token_input" integer;
+ALTER TABLE "sv_runs" ADD COLUMN IF NOT EXISTS "token_output" integer;
+ALTER TABLE "sv_runs" ADD COLUMN IF NOT EXISTS "system" text;
+ALTER TABLE "sv_runs" ADD COLUMN IF NOT EXISTS "model" text;
+ALTER TABLE "sv_runs" ADD COLUMN IF NOT EXISTS "language" text;
+ALTER TABLE "sv_runs" ADD COLUMN IF NOT EXISTS "region" text;
+ALTER TABLE "sv_runs" ADD COLUMN IF NOT EXISTS "mention" boolean;
+ALTER TABLE "sv_runs" ADD COLUMN IF NOT EXISTS "position" smallint;
+ALTER TABLE "sv_runs" ADD COLUMN IF NOT EXISTS "owned_citation" boolean;
+ALTER TABLE "sv_runs" ADD COLUMN IF NOT EXISTS "citations" jsonb;
+ALTER TABLE "sv_runs" ADD COLUMN IF NOT EXISTS "competitors" jsonb;
+ALTER TABLE "sv_runs" ADD COLUMN IF NOT EXISTS "factual_errors" jsonb;

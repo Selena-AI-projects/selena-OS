@@ -4,6 +4,7 @@ export {
 	type OnboardingCompetitor,
 	type OnboardingPrompt,
 	type OnboardingSuggestion,
+	type QuestionStyle,
 } from "./analyze";
 export { runStructuredCompletionPrompt, runStructuredResearchPrompt } from "./llm";
 export {

@@ -65,6 +65,18 @@ async function main() {
 		retryBackoff: true,
 		expireInSeconds: 60 * 30, // 30 minute timeout
 	});
+	// Never scheduled: a commercial measurement starts from an explicit admin
+	// action. Retries are off because a claimed permit is spent — a retry could
+	// only produce a second provider call for work authorized once.
+	await boss.createQueue("selena-measure", {
+		retryLimit: 0,
+		expireInSeconds: 60 * 15,
+	});
+	await boss.createQueue("selena-answer-retention", {
+		retryLimit: 1,
+		retryDelay: 600,
+		expireInSeconds: 60 * 10,
+	});
 	if (process.env.DEPLOYMENT_MODE === "whitelabel") {
 		await boss.createQueue("sync-auth0-memberships", {
 			retryLimit: 3,
@@ -87,6 +99,11 @@ async function main() {
 		await boss.schedule("sync-auth0-memberships", "*/15 * * * *", { source: "scheduled" }, { tz: "UTC" });
 		console.log("Scheduled Auth0 membership sync (every 15 minutes)");
 	}
+
+	// Scheduled daily either way; the job itself refuses to delete anything
+	// until the owner sets SELENA_ANSWER_RETENTION_ENABLED=true, so the safe
+	// state needs no schedule bookkeeping.
+	await boss.schedule("selena-answer-retention", "30 3 * * *", { source: "scheduled" }, { tz: "UTC" });
 
 	// Register job handlers
 	await registerHandlers(boss);

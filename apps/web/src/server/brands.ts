@@ -24,7 +24,7 @@ import {
 import { defaultPlatformPicks, resolvePromptRunPlan } from "@workspace/lib/run-policy";
 import { and, count, eq, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
-import { listUserOrganizations, requireAuthSession, requireBrandAccess, requireOrgAccess } from "@/lib/auth/helpers";
+import { BRAND_WRITER_ROLES, listUserOrganizations, requireAuthSession, requireBrandAccess, requireBrandRole, requireOrgAccess } from "@/lib/auth/helpers";
 import { evaluateRequireCanCreateBrands, resolveBrandOrganization } from "@/lib/auth/policies";
 import { normalizeBrandUpdate } from "@/lib/brand-settings";
 import { validateWebsiteUrl } from "@/lib/brand-website";
@@ -372,7 +372,7 @@ export const updateBrandFn = createServerFn({ method: "POST" })
 	)
 	.handler(async ({ data }) => {
 		const session = await requireAuthSession();
-		await requireBrandAccess(session.user.id, data.brandId);
+		await requireBrandRole(session.user.id, data.brandId, BRAND_WRITER_ROLES);
 
 		const normalized = normalizeBrandUpdate({
 			name: data.name,
@@ -430,7 +430,7 @@ export const updateCompetitors = createServerFn({ method: "POST" })
 	)
 	.handler(async ({ data }) => {
 		const session = await requireAuthSession();
-		await requireBrandAccess(session.user.id, data.brandId);
+		await requireBrandRole(session.user.id, data.brandId, BRAND_WRITER_ROLES);
 
 		// Validate and clean domains
 		const cleanedCompetitors = data.competitors.map((c) => {
@@ -478,7 +478,7 @@ export const addDomainToBrandFn = createServerFn({ method: "POST" })
 	)
 	.handler(async ({ data }) => {
 		const session = await requireAuthSession();
-		await requireBrandAccess(session.user.id, data.brandId);
+		await requireBrandRole(session.user.id, data.brandId, BRAND_WRITER_ROLES);
 
 		const domain = cleanAndValidateDomain(data.domain);
 		if (!domain) throw new Error(`Invalid domain: ${data.domain}`);
@@ -514,7 +514,7 @@ export const addDomainToCompetitorFn = createServerFn({ method: "POST" })
 	)
 	.handler(async ({ data }) => {
 		const session = await requireAuthSession();
-		await requireBrandAccess(session.user.id, data.brandId);
+		await requireBrandRole(session.user.id, data.brandId, BRAND_WRITER_ROLES);
 
 		const existing = await db.query.competitors.findFirst({
 			where: and(eq(competitors.id, data.competitorId), eq(competitors.brandId, data.brandId)),
@@ -548,7 +548,7 @@ export const createCompetitorFromDomainFn = createServerFn({ method: "POST" })
 	)
 	.handler(async ({ data }) => {
 		const session = await requireAuthSession();
-		await requireBrandAccess(session.user.id, data.brandId);
+		await requireBrandRole(session.user.id, data.brandId, BRAND_WRITER_ROLES);
 
 		const domain = cleanAndValidateDomain(data.domain);
 		if (!domain) throw new Error(`Invalid domain: ${data.domain}`);

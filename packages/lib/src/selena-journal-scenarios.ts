@@ -1,0 +1,384 @@
+/**
+ * The owner's own projects and the questions each is measured with.
+ *
+ * These sets are the same ones the public journal on the marketing site was
+ * built from, carried here so a measurement can run where the product runs
+ * instead of on a CI runner billed by the wall clock. A re-measurement is
+ * comparable with an earlier one only when the questions, the surfaces and the
+ * language are identical, so a change here starts a new series rather than
+ * continuing the old one.
+ *
+ * Ownership is load-bearing. A third-party set may be measured — the answers
+ * are public and the cost is ours — but its result never reaches a public page
+ * without that owner's recorded yes, kept here as `consent`.
+ */
+
+export type JournalScenario = {
+	slug: string;
+	brand: string;
+	site: string;
+	language: string;
+	market: string;
+	ownership: "own" | "third-party";
+	/**
+	 * A third party's permission to publish their result. Absent means no:
+	 * the run still happens, the numbers stay internal.
+	 */
+	consent?: {
+		grantedBy: string;
+		recordedBy: string;
+		/** ISO date. */
+		recordedOn: string;
+		scope: string;
+		/** How the permission reached us, and what evidence exists for it. */
+		source: string;
+	};
+	/** Where the question set came from, published with the result. */
+	basis: "search-console" | "owner-brief" | "category-draft";
+	/** Matched on word boundaries; a hit counts as a mention. */
+	strongAliases: readonly string[];
+	/** Short enough to belong to someone else: flagged for a human, never counted. */
+	weakAliases: readonly string[];
+	questions: readonly string[];
+	/**
+	 * The question set's identity, not the channel's. Several of these read
+	 * `api-view` because that is the run the set was first minted for, and they
+	 * keep that name on purpose: the string is what makes two measurements
+	 * comparable, so renaming it would split one series into two for the sake of
+	 * a label. Which channel a measurement used is recorded per run, in the run
+	 * row's own `channel` and `system_id`, where it cannot be mistaken.
+	 */
+	version: string;
+};
+
+export const journalScenarios: Readonly<Record<string, JournalScenario>> = {
+	bigdragonvillas: {
+		slug: "bigdragonvillas",
+		brand: "Big Dragon Villas Ubud",
+		site: "bigdragonvillasubud.com",
+		language: "en",
+		market: "Убуд, Бали",
+		ownership: "third-party",
+		consent: {
+			grantedBy: "Big Dragon Villas Ubud",
+			recordedBy: "Selena Systems",
+			recordedOn: "2026-08-26",
+			scope:
+				"Публикация результата замера AI-видимости — числа, названные вместо них заведения и источники — в журнале Selena Systems.",
+			source:
+				"Разрешение передано владельцем Selena Systems со слов Big Dragon Villas в ходе совместной работы над их видимостью. Письменного подтверждения от Big Dragon Villas в деле нет.",
+		},
+		basis: "category-draft",
+		strongAliases: ["Big Dragon Villas", "bigdragonvillasubud.com", "Big Dragon Villas Ubud"],
+		weakAliases: ["Big Dragon"],
+		questions: [
+			"Where should I stay in Ubud?",
+			"What are the best villas in Ubud?",
+			"Where can I find a villa with a private pool in Ubud?",
+			"What are good family villas in Ubud?",
+			"Where should a group stay in Ubud?",
+			"What are the best value villas in Ubud?",
+			"Where can I stay in Ubud with rice field views?",
+			"Which villas in Ubud come with a private chef?",
+			"Where should a couple stay in Ubud?",
+			"What are the quiet places to stay in Ubud?",
+			"Where can I stay in Ubud for a month?",
+			"Which villas in Ubud are good for a honeymoon?",
+			"Where can I find villas near the centre of Ubud?",
+			"What accommodation in Ubud suits digital nomads?",
+			"Where should I stay in Ubud with kids?",
+			"What are the best boutique stays in Ubud?",
+			"Which villas in Ubud allow long stays?",
+			"Where can I book a villa in Ubud directly with the owner?",
+			"Where should a first-time visitor to Bali stay?",
+			"Where can I stay in Ubud on a budget?",
+			"Which villas in Ubud have the best reviews?",
+			"Where in Ubud can I host a small wedding?",
+			"What are the peaceful retreats near Ubud?",
+			"Where do people stay when they come to Ubud for yoga?",
+			"Which villa in Ubud should I book for a week?",
+		],
+		version: "bigdragonvillas-api-view-2026-08-25",
+	},
+	chitobistro: {
+		slug: "chitobistro",
+		brand: "Chito Bistro",
+		site: "chitobistro.com",
+		language: "en",
+		market: "Бали",
+		ownership: "third-party",
+		basis: "category-draft",
+		strongAliases: ["Chito Bistro", "chitobistro.com", "Chito"],
+		weakAliases: [],
+		questions: [
+			"What are the best bistros in Bali?",
+			"Where can I find European food in Bali?",
+			"What are the best brunch spots in Bali?",
+			"Which restaurants in Bali have a good wine list?",
+			"Where should I go for a date night dinner in Bali?",
+			"Where can I eat well in Bali away from the beach club scene?",
+			"What are the best small restaurants in Bali?",
+			"Where do locals and long-term expats eat in Bali?",
+			"Which places in Bali serve both good coffee and good food?",
+			"Where can I find a quiet dinner in Bali?",
+			"What are the best new restaurants in Bali?",
+			"Where should I eat in Canggu?",
+			"Where should I eat in Seminyak?",
+			"Where should I eat in Ubud?",
+			"Where should I eat in Uluwatu?",
+			"Which restaurants in Bali work well for a group?",
+			"Where can I find comfort food in Bali?",
+			"Which restaurants in Bali have the best atmosphere?",
+			"Where should I have lunch in Bali?",
+			"Which restaurants in Bali are good for vegetarians?",
+			"Where can I find fresh pasta in Bali?",
+			"Which restaurants in Bali take reservations?",
+			"Where do people go for a special occasion dinner in Bali?",
+			"What are the most recommended places to eat in Bali?",
+			"Which bistro should I try in Bali?",
+		],
+		version: "chitobistro-api-view-2026-08-25",
+	},
+	korafoodhall: {
+		slug: "korafoodhall",
+		brand: "KORA Food Hall",
+		site: "korafoodhall.com",
+		language: "en",
+		market: "Ubud, Bali",
+		ownership: "own",
+		basis: "search-console",
+		strongAliases: ["KORA Food Hall", "korafoodhall.com", "korafoodhall"],
+		weakAliases: ["KORA"],
+		questions: [
+			"Where should I eat in Ubud, Bali?",
+			"What is the best food hall in Ubud?",
+			"Which restaurants in Ubud are good for families?",
+			"Where can I eat with kids in Ubud?",
+			"Where should I go for dinner in Ubud, Bali?",
+			"Where can I host a private event in Ubud?",
+			"What are the private event venues in Ubud, Bali?",
+			"Where can I have a birthday party in Ubud?",
+			"Where can a large group have dinner together in Ubud?",
+			"What is the best casual dining in Ubud?",
+			"Is there a food court in Ubud, Bali?",
+			"Where can I eat near the centre of Ubud?",
+			"What are the affordable restaurants in Ubud?",
+			"Are there restaurants in Ubud with a playground?",
+			"Where can a group with different diets eat together in Ubud?",
+			"Where in Ubud can vegetarians and meat eaters eat in the same place?",
+			"Where is the best brunch in Ubud?",
+			"Which restaurants in Ubud have live music?",
+			"Where do expats eat in Ubud?",
+			"What is the best food hall in Bali?",
+			"Where can I organise a corporate event in Ubud?",
+			"Where can I hold a wedding reception in Ubud?",
+			"What are the new restaurants in Ubud worth trying?",
+			"Where can I eat late at night in Ubud?",
+			"What should I not miss when eating in Ubud?",
+		],
+		version: "korafoodhall-api-view-2026-08-25",
+	},
+	otherbali: {
+		slug: "otherbali",
+		brand: "otherbali.com",
+		site: "otherbali.com",
+		language: "en",
+		market: "Бали, Индонезия",
+		ownership: "own",
+		basis: "search-console",
+		strongAliases: ["otherbali.com", "Other Bali", "otherbali"],
+		weakAliases: [],
+		questions: [
+			"What is the best guide to Bali for first-time visitors?",
+			"Where can I find honest restaurant reviews for Bali?",
+			"Which website lists the best places to eat in Canggu?",
+			"Where should I look for things to do in Uluwatu?",
+			"What are the best pilates and yoga studios in Uluwatu?",
+			"Where can I find a list of beach clubs in Bali?",
+			"Which blogs cover new restaurant openings in Bali?",
+			"How do I find good cafes in Seminyak?",
+			"What is the best website for Bali travel tips?",
+			"Where can I read about hidden places in Bali?",
+			"Which guide covers wellness and fitness in Bali?",
+			"Where do I find recommendations for Ubud restaurants?",
+			"What websites review Bali hotels honestly?",
+			"Where can I find a Bali itinerary for one week?",
+			"Which sites help expats find services in Bali?",
+			"Where can I find out about Bali surf spots for beginners?",
+			"What is a good source for Bali nightlife recommendations?",
+			"Where can I find family-friendly things to do in Bali?",
+			"Which website covers Bali beaches with practical detail?",
+			"Where do people find recommendations for Bali day trips?",
+			"What is the best resource for moving to Bali?",
+			"Where can I find reviews of coworking spaces in Bali?",
+			"Which guides cover Bali off the tourist track?",
+			"Where can I find seasonal advice about visiting Bali?",
+			"What should I read before a first trip to Bali?",
+		],
+		version: "otherbali-api-view-2026-08-25",
+	},
+	petid: {
+		slug: "petid",
+		brand: "PetID.care",
+		site: "petid.care",
+		language: "ru",
+		market: "Россия",
+		ownership: "own",
+		basis: "search-console",
+		strongAliases: ["PetID.care", "petid.care", "PetID"],
+		weakAliases: ["PetID", "ПетАйДи"],
+		questions: [
+			"Как найти хорошую ветклинику рядом?",
+			"Что делать, если потерялась собака?",
+			"Как оформить ветеринарный паспорт для собаки?",
+			"Зачем чипировать питомца и как это делают?",
+			"Как проверить, чипирован ли найденный кот?",
+			"Где хранить документы и прививки питомца?",
+			"Какие сервисы помогают найти потерявшегося питомца?",
+			"Как вывезти собаку за границу: какие документы нужны?",
+			"Как выбрать ветеринара для кошки?",
+			"Есть ли приложения для учёта прививок питомца?",
+			"Что нужно сделать сразу после того, как завели щенка?",
+			"Как узнать владельца по номеру чипа?",
+			"Какие бывают электронные паспорта для животных?",
+			"Где посмотреть график прививок для собаки?",
+			"Как найти передержку для собаки?",
+			"Что делать, если питомец заболел ночью?",
+			"Как оформить документы для перевозки кошки самолётом?",
+			"Какие сервисы для владельцев животных есть в России?",
+			"Как выбрать зоогостиницу?",
+			"Где вести медицинскую карту питомца онлайн?",
+			"Как найти грумера для собаки?",
+			"Что делать, если нашёл чужого питомца на улице?",
+			"Как поставить питомца на учёт?",
+			"Какие есть базы данных чипированных животных?",
+			"Как подготовить питомца к переезду в другую страну?",
+		],
+		version: "petid-api-view-2026-08-25",
+	},
+	remhaos: {
+		slug: "remhaos",
+		brand: "remhaos.com",
+		site: "remhaos.com",
+		language: "ru",
+		market: "Россия",
+		ownership: "own",
+		basis: "owner-brief",
+		strongAliases: ["remhaos.com", "RemHaos", "remhaos", "Рем Хаус", "РемХаус"],
+		weakAliases: [],
+		questions: [
+			"Как контролировать ремонт квартиры, если я не строитель?",
+			"Какие программы помогают вести ремонт?",
+			"Как дизайнеру интерьера вести несколько проектов одновременно?",
+			"Где хранить все документы и чертежи по ремонту в одном месте?",
+			"Как согласовывать изменения между дизайнером и прорабом?",
+			"Что делать, если дизайнер и строители говорят разное?",
+			"Как отслеживать смету по ремонту, чтобы она не росла незаметно?",
+			"Какие сервисы есть для дизайн-студий интерьера?",
+			"Как вести технический надзор за ремонтом удалённо?",
+			"Как контролировать ремонт, если я живу в другом городе?",
+			"Чем заменить таблицы Excel при управлении ремонтом?",
+			"Как организовать работу архитектора, дизайнера и прораба на одном объекте?",
+			"Какие CRM подходят для студии дизайна интерьера?",
+			"Как вести график работ по ремонту?",
+			"Где вести спецификацию материалов по проекту?",
+			"Как принимать работы у строительной бригады?",
+			"Какие приложения помогают следить за ходом стройки?",
+			"Как не потерять изменения в проекте ремонта?",
+			"Как показывать клиенту прогресс ремонта?",
+			"Какие есть сервисы управления ремонтом под ключ?",
+			"Как маленькой дизайн-студии выстроить процессы?",
+			"Как считать закупку материалов на объект?",
+			"Что использовать вместо переписки в мессенджерах при ремонте?",
+			"Как вести несколько объектов ремонта одновременно?",
+			"Как контролировать сроки ремонта?",
+		],
+		version: "remhaos-ru-api-view-2026-08-25",
+	},
+	selenasystems: {
+		slug: "selenasystems",
+		brand: "Selena Systems",
+		site: "selenasystems.com",
+		language: "en",
+		market: "Австралия и Новая Зеландия, США",
+		ownership: "own",
+		basis: "owner-brief",
+		strongAliases: ["Selena Systems", "selenasystems.com", "selenasystems"],
+		weakAliases: ["Selena"],
+		questions: [
+			"How do I find out whether ChatGPT mentions my business?",
+			"How can I check if AI assistants recommend my company?",
+			"What tools track brand mentions in AI answers?",
+			"How do I measure AI visibility for a small business?",
+			"What is answer engine optimisation?",
+			"Who helps businesses show up in ChatGPT answers?",
+			"How do I get my business recommended by Perplexity?",
+			"Is there a service that audits how AI describes my brand?",
+			"How do I know if my competitors appear in AI answers and I do not?",
+			"What should a small business do about AI search?",
+			"How do I prepare my website so AI systems can read it?",
+			"Who offers AI visibility audits for service businesses?",
+			"What is the difference between SEO and AI visibility?",
+			"How do I track whether Gemini recommends my business?",
+			"Can I measure how often AI mentions my brand each month?",
+			"What agencies specialise in AI search visibility?",
+			"How much does an AI visibility report cost?",
+			"How do I find out which sources AI cites about my industry?",
+			"Is there a free check for how AI sees my website?",
+			"What does it mean when AI does not mention my business at all?",
+			"Who can help a restaurant get into AI recommendations?",
+			"How do I improve how ChatGPT describes my company?",
+			"What is AI visibility monitoring?",
+			"How do I audit my brand's presence across AI assistants?",
+			"Which companies help with AI answer optimisation?",
+		],
+		version: "selenasystems-api-view-2026-08-25",
+	},
+	villaops: {
+		slug: "villaops",
+		brand: "VillaOps",
+		site: "villaops.selenasystems.com",
+		language: "en",
+		market: "Бали, Индонезия",
+		ownership: "own",
+		basis: "category-draft",
+		strongAliases: ["VillaOps", "villaops.selenasystems.com", "Villa Ops"],
+		weakAliases: [],
+		questions: [
+			"Who manages villa rentals in Bali?",
+			"How do I find a property manager for my villa in Bali?",
+			"What does villa management in Bali cost?",
+			"How do I run a villa rental business in Ubud?",
+			"What software do villa owners in Bali use to manage bookings?",
+			"How do I handle guest communication for a villa rental?",
+			"Who takes care of housekeeping and maintenance for Bali villas?",
+			"How do I set up operations for a new villa in Bali?",
+			"What is the best way to manage staff at a Bali villa?",
+			"How do I automate guest check-in for a villa?",
+			"Which companies offer villa operations services in Indonesia?",
+			"How do I keep a villa fully booked in low season?",
+			"What systems do boutique hotels in Bali use for operations?",
+			"How do I manage multiple villas at once?",
+			"Who helps foreign owners run property in Bali?",
+			"What should be in a villa operations manual?",
+			"How do I handle guest complaints at a villa rental?",
+			"What are the standard operating procedures for villa housekeeping?",
+			"How do I track expenses for a villa rental in Bali?",
+			"Who provides concierge services for villa guests in Bali?",
+			"How do I onboard new staff at a villa?",
+			"What tools help with short-term rental operations in Indonesia?",
+			"How do villa managers in Bali handle maintenance requests?",
+			"What does a villa operations company actually do?",
+			"How can AI help run a villa rental business?",
+		],
+		version: "villaops-api-view-2026-08-25",
+	},
+};
+
+export const journalScenarioSlugs = Object.keys(journalScenarios);
+
+export function journalScenario(slug: string): JournalScenario {
+	const scenario = journalScenarios[slug];
+	if (!scenario) throw new Error(`SELENA_UNKNOWN_JOURNAL_PROJECT: ${slug}`);
+	return scenario;
+}

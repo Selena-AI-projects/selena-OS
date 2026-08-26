@@ -3,7 +3,7 @@
  */
 import { getRequestHeaders } from "@tanstack/react-start/server";
 import { db } from "@workspace/lib/db/db";
-import { brands, member, organization } from "@workspace/lib/db/schema";
+import { brands, member, organization, prompts } from "@workspace/lib/db/schema";
 import { and, eq } from "drizzle-orm";
 import { getDeployment } from "@/lib/config/server";
 import { auth } from "./server";
@@ -23,6 +23,12 @@ export async function requireAuthSession() {
 
 export function isAdmin(session: SessionLike): boolean {
 	return session.user.role === "admin";
+}
+
+export async function requireAdmin() {
+	const session = await requireAuthSession();
+	if (!isAdmin(session)) throw new Error("Unauthorized: Admin access required");
+	return session;
 }
 
 export function hasReportAccess(session: SessionLike): boolean {
@@ -89,6 +95,35 @@ export async function requireBrandOrganization(
 		.limit(1);
 	if (!row) throw new Error("Forbidden: No access to this brand");
 	return row;
+}
+
+/**
+ * DS-P1-10: mutations state the roles they accept. Built on the same single
+ * query as requireBrandOrganization, so the role check costs nothing extra.
+ * Reads keep requireBrandAccess.
+ */
+export async function requireBrandRole(userId: string, brandId: string, allowed: string[]): Promise<void> {
+	const { role } = await requireBrandOrganization(userId, brandId);
+	if (!allowed.includes(role)) throw new Error("Forbidden: insufficient role for this action");
+}
+
+/** Every role that may change data; a viewer reads. */
+export const BRAND_WRITER_ROLES = ["owner", "admin", "member"];
+
+/**
+ * DS-P1-28: the one scoped prompt read. Joins prompt → brand → membership so
+ * authorization happens inside the query, not after it; "no such prompt" and
+ * "not yours" are deliberately the same undefined.
+ */
+export async function promptForUser(userId: string, promptId: string) {
+	const [row] = await db
+		.select({ prompt: prompts })
+		.from(prompts)
+		.innerJoin(brands, eq(prompts.brandId, brands.id))
+		.innerJoin(member, and(eq(member.organizationId, brands.organizationId), eq(member.userId, userId)))
+		.where(eq(prompts.id, promptId))
+		.limit(1);
+	return row?.prompt;
 }
 
 /**

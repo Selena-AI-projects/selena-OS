@@ -162,12 +162,31 @@ export function validateGrounding(plan: ActionPlan, evidence: EvidenceItem[]): s
 	const tenantEvidence = evidence.filter((item) => item.tenantId === plan.tenantId);
 	const ids = new Set(tenantEvidence.map((item) => item.id));
 	const manifest = new Set(plan.findings.flatMap((finding) => finding.evidenceIds));
-	const errors = plan.recommendations.flatMap((item) => [
-		...item.evidenceIds.filter((id) => !ids.has(id)).map((id) => `${item.id}:UNKNOWN_EVIDENCE:${id}`),
-		...item.evidenceIds
-			.filter((id) => !manifest.has(id))
-			.map((id) => `${item.id}:EVIDENCE_NOT_IN_FINDING_MANIFEST:${id}`),
-	]);
+	// Addendum §8: nothing actionable exists without the evidence it rests on.
+	// An empty list would pass every id check by having no ids to fail, so it
+	// is refused by name rather than by omission.
+	const grounded = (item: { id: string; evidenceIds: string[] }) =>
+		item.evidenceIds.length === 0
+			? [`${item.id}:NO_EVIDENCE`]
+			: [
+					...item.evidenceIds.filter((id) => !ids.has(id)).map((id) => `${item.id}:UNKNOWN_EVIDENCE:${id}`),
+					...item.evidenceIds
+						.filter((id) => !manifest.has(id))
+						.map((id) => `${item.id}:EVIDENCE_NOT_IN_FINDING_MANIFEST:${id}`),
+				];
+	const errors = [
+		// A finding defines the manifest, so it is only checked against evidence
+		// that was actually supplied.
+		...plan.findings.flatMap((finding) =>
+			finding.evidenceIds.length === 0
+				? [`${finding.id}:NO_EVIDENCE`]
+				: finding.evidenceIds.filter((id) => !ids.has(id)).map((id) => `${finding.id}:UNKNOWN_EVIDENCE:${id}`),
+		),
+		...plan.recommendations.flatMap(grounded),
+		// A task is what somebody actually does, so it needs the same footing as
+		// the recommendation it came from.
+		...plan.tasks.flatMap(grounded),
+	];
 	if (evidence.some((item) => item.tenantId !== plan.tenantId)) errors.push("TENANT_ISOLATION_BLOCKED");
 	return errors;
 }

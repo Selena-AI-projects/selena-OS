@@ -7,7 +7,7 @@
  */
 
 import { IconBrandGoogle } from "@tabler/icons-react";
-import { createFileRoute, Link, useNavigate, useRouteContext } from "@tanstack/react-router";
+import { createFileRoute, Link, redirect, useNavigate, useRouteContext } from "@tanstack/react-router";
 import type { ClientConfig } from "@workspace/config/types";
 import { authClient } from "@workspace/lib/auth/client";
 import { Alert, AlertDescription } from "@workspace/ui/components/alert";
@@ -24,13 +24,17 @@ export const Route = createFileRoute("/auth/register")({
 	validateSearch: z.object({
 		returnTo: z.string().optional(),
 	}),
+	// A render-time window.location redirect has no window during SSR: the
+	// server render throws and the client recovers with a flash of the page.
+	beforeLoad: ({ context }) => {
+		if (!context.clientConfig?.canRegister) throw redirect({ to: "/auth/login" });
+	},
 	component: RegisterPage,
 });
 
 function RegisterPage() {
 	const { returnTo } = Route.useSearch();
 	const context = useRouteContext({ strict: false }) as { clientConfig?: ClientConfig };
-	const canRegister = context.clientConfig?.canRegister ?? false;
 	const hasUsers = context.clientConfig?.hasUsers ?? false;
 	const isCloud = context.clientConfig?.mode === "cloud";
 	const navigate = useNavigate();
@@ -41,11 +45,6 @@ function RegisterPage() {
 	const [loading, setLoading] = useState(false);
 	const [pendingVerification, setPendingVerification] = useState(false);
 	const [resending, setResending] = useState(false);
-
-	if (!canRegister) {
-		window.location.href = "/auth/login";
-		return null;
-	}
 
 	async function handleSubmit(e: React.FormEvent) {
 		e.preventDefault();

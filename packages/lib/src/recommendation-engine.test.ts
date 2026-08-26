@@ -48,6 +48,29 @@ describe("recommendation engine Phase 0-1", () => {
 		expect(validateGrounding(altered, evidence).some((error) => error.includes("UNKNOWN_EVIDENCE"))).toBe(true);
 	});
 
+	it("refuses a recommendation or a task carrying no evidence at all", () => {
+		const evidence = parseEvidenceCsv(csv, "tenant-a", "snapshot-usha-20260814");
+		const manifest = buildManifest("tenant-a", "usha-240", evidence);
+		const plan = buildActionPlan("tenant-a", manifest, evidence);
+		const withoutRecommendationEvidence = {
+			...plan,
+			recommendations: plan.recommendations.map((item) => ({ ...item, evidenceIds: [] })),
+		};
+		expect(
+			validateGrounding(withoutRecommendationEvidence, evidence).some((error) => error.endsWith(":NO_EVIDENCE")),
+		).toBe(true);
+		const withoutTaskEvidence = { ...plan, tasks: plan.tasks.map((item) => ({ ...item, evidenceIds: [] })) };
+		expect(validateGrounding(withoutTaskEvidence, evidence).some((error) => error.endsWith(":NO_EVIDENCE"))).toBe(true);
+	});
+
+	it("holds a task to the same evidence its recommendation had to satisfy", () => {
+		const evidence = parseEvidenceCsv(csv, "tenant-a", "snapshot-usha-20260814");
+		const manifest = buildManifest("tenant-a", "usha-240", evidence);
+		const plan = buildActionPlan("tenant-a", manifest, evidence);
+		const altered = { ...plan, tasks: plan.tasks.map((item) => ({ ...item, evidenceIds: ["unknown-run"] })) };
+		expect(validateGrounding(altered, evidence).some((error) => error.includes("UNKNOWN_EVIDENCE"))).toBe(true);
+	});
+
 	it("merges AI and website plans only within one tenant", () => {
 		const evidence = parseEvidenceCsv(csv, "tenant-a", "snapshot-usha-20260814");
 		const plan = buildActionPlan("tenant-a", buildManifest("tenant-a", "usha-240", evidence), evidence);

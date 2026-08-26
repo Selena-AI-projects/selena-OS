@@ -22,20 +22,10 @@ import {
 import { desc, eq, sql } from "drizzle-orm";
 import { Client } from "pg";
 import { z } from "zod";
-import { isAdmin, requireAuthSession } from "@/lib/auth/helpers";
+import { requireAdmin } from "@/lib/auth/helpers";
 import { getDeployment } from "@/lib/config/server";
 import { sendImmediatePromptJob } from "@/lib/job-scheduler";
 import { getAdminActiveBrandsOverTime, getAdminBrandRunStats, getAdminRunsOverTime } from "@/lib/postgres-read";
-
-// ============================================================================
-// Admin guard helper
-// ============================================================================
-
-async function requireAdmin() {
-	const session = await requireAuthSession();
-	if (!isAdmin(session)) throw new Error("Unauthorized: Admin access required");
-	return session;
-}
 
 // ============================================================================
 // Postgres client helper for pg-boss queries

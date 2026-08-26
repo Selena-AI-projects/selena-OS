@@ -1,0 +1,1587 @@
+/**
+ * /app/selena-report — the customer-facing grader report, one screen for both
+ * paid plans: the plan only decides which sections have data. Layout follows
+ * docs/selena-visibility/REPORT_DESIGN_SPEC.md and the approved mockup; every
+ * empty group renders UNKNOWN, never zero, and no composite score exists.
+ */
+import { Link, createFileRoute } from "@tanstack/react-router";
+import { Button } from "@workspace/ui/components/button";
+import { Fragment, useEffect, useState } from "react";
+import { z } from "zod";
+import type { GraderChannel } from "@workspace/lib/selena-grader-report";
+import { getSelenaWorkspaceFn } from "../../../server/selena-client";
+import { type CycleCompareResult, getSelenaCycleCompareFn } from "../../../server/selena-cycle-compare";
+import { PRIORITY_LABELS, ruleExample, ruleFixTask, ruleHow, ruleSteps, ruleTitle } from "@/lib/selena-rule-help";
+import { type GraderReportView, getSelenaGraderReportFn } from "../../../server/selena-grader-report";
+import { getSelenaRunDetailFn } from "../../../server/selena-run-explorer";
+
+export const Route = createFileRoute("/_authed/app/selena-report")({
+	validateSearch: z.object({ project: z.string().uuid().optional() }),
+	loader: () => getSelenaWorkspaceFn(),
+	component: SelenaReportPage,
+});
+
+type ReportLocale = "en" | "ru";
+type ReportModel = NonNullable<GraderReportView["report"]>;
+type AnswerStateMap = Record<string, { loading: boolean; text: string | null }>;
+type ReportSectionId =
+	| "overview"
+	| "visibility"
+	| "share-of-voice"
+	| "query-fan-out"
+	| "ai-answers"
+	| "citations"
+	| "competitors"
+	| "commercial-queries"
+	| "prompt-library"
+	| "ai-systems"
+	| "opportunities"
+	| "recommendations"
+	| "action-plan"
+	| "evidence-ledger"
+	| "brand-profile"
+	| "markets"
+	| "data-sources"
+	| "team";
+type QuestionSystemColumn = {
+	key: string;
+	systemId: string;
+	channel: GraderChannel;
+	captureModes: string[];
+};
+
+const REPORT_SECTION_TARGETS: Record<ReportSectionId, string> = {
+	overview: "overview",
+	visibility: "visibility",
+	"share-of-voice": "share-of-voice",
+	"query-fan-out": "query-fan-out",
+	"ai-answers": "ai-answers",
+	citations: "citations",
+	competitors: "share-of-voice",
+	"commercial-queries": "prompt-library",
+	"prompt-library": "prompt-library",
+	"ai-systems": "visibility",
+	opportunities: "opportunities",
+	recommendations: "recommendations",
+	"action-plan": "recommendations",
+	"evidence-ledger": "evidence-ledger",
+	"brand-profile": "brand-profile",
+	markets: "brand-profile",
+	"data-sources": "citations",
+	team: "brand-profile",
+};
+
+const REPORT_SECTION_IDS = new Set<ReportSectionId>(Object.keys(REPORT_SECTION_TARGETS) as ReportSectionId[]);
+
+function isReportSectionId(value: string | null): value is ReportSectionId {
+	return value !== null && REPORT_SECTION_IDS.has(value as ReportSectionId);
+}
+
+function tr(locale: ReportLocale, english: string, russian: string): string {
+	return locale === "ru" ? russian : english;
+}
+
+/** Null never becomes a number: an empty group is stated as UNKNOWN. */
+function pct(locale: ReportLocale, value: number | null): string {
+	return value === null ? tr(locale, "UNKNOWN", "НЕИЗВЕСТНО") : `${Math.round(value * 100)}%`;
+}
+
+const SYSTEM_LABELS: Record<string, string> = {
+	"anthropic/claude-haiku-4.5": "Claude",
+	"deepseek/deepseek-v3.2": "DeepSeek",
+	"qwen/qwen3.5-9b": "Qwen",
+	"mistralai/mistral-small-2603": "Mistral",
+	"x-ai/grok-4.5": "Grok",
+};
+
+/**
+ * The method line under each system, printed from how the answers were
+ * ACTUALLY captured — the sold channel never overrides the observed capture
+ * mode, so the page cannot claim a visitor's eyes for an API capture.
+ */
+function captureLabel(locale: ReportLocale, channel: "VISITOR" | "API", captureModes: string[]): string {
+	const live = captureModes.includes("live_search");
+	const api = captureModes.includes("training_data");
+	if (channel === "API" || (api && !live))
+		return tr(locale, "captured over the API · model knowledge", "снято через API · знание модели");
+	if (live && !api) return tr(locale, "captured as a live visitor", "снято глазами живого посетителя");
+	if (live && api) return tr(locale, "mixed capture: live and API", "смешанная съёмка: живой поиск и API");
+	return tr(locale, "capture method not recorded", "способ съёмки не записан");
+}
+
+function systemLabel(locale: ReportLocale, systemId: string): string {
+	if (systemId === "unattributed") return tr(locale, "System not recorded", "Система не записана");
+	return SYSTEM_LABELS[systemId] ?? systemId;
+}
+
+function systemKey(system: { channel: GraderChannel; systemId: string }): string {
+	return `${system.channel}:${system.systemId}`;
+}
+
+function compareQuestionSystemColumn(left: QuestionSystemColumn, right: QuestionSystemColumn): number {
+	return left.channel === right.channel
+		? left.systemId.localeCompare(right.systemId)
+		: left.channel === "VISITOR"
+			? -1
+			: 1;
+}
+
+function questionSystemColumns(report: ReportModel): QuestionSystemColumn[] {
+	const columns = new Map<string, QuestionSystemColumn>();
+	for (const system of report.systems)
+		columns.set(systemKey(system), {
+			key: systemKey(system),
+			systemId: system.systemId,
+			channel: system.channel,
+			captureModes: system.captureModes,
+		});
+	for (const question of report.questions)
+		for (const system of question.systems)
+			if (!columns.has(systemKey(system)))
+				columns.set(systemKey(system), {
+					key: systemKey(system),
+					systemId: system.systemId,
+					channel: system.channel,
+					captureModes: system.captureModes,
+				});
+	return [...columns.values()].sort(compareQuestionSystemColumn);
+}
+
+function questionCellLabel(
+	locale: ReportLocale,
+	result: ReportModel["questions"][number]["systems"][number] | undefined,
+): string {
+	if (!result) return tr(locale, "not asked", "не спрашивали");
+	if (result.answersAnalyzed === 0) return tr(locale, "UNKNOWN", "НЕИЗВЕСТНО");
+	if (result.brandMentioned > 0)
+		return tr(
+			locale,
+			`${result.brandMentioned} of ${result.answersAnalyzed}`,
+			`${result.brandMentioned} из ${result.answersAnalyzed}`,
+		);
+	return tr(locale, `0 of ${result.answersAnalyzed}`, `0 из ${result.answersAnalyzed}`);
+}
+
+function questionCellClass(result: ReportModel["questions"][number]["systems"][number] | undefined): string {
+	if (!result || result.answersAnalyzed === 0) return "border-[#e6ddd1] bg-[#f7f2ea] text-[#6e6258]";
+	if (result.brandMentioned > 0) return "border-[#bedbc8] bg-[#edf7ef] text-[#285f3e]";
+	return "border-[#ead1c4] bg-[#fff7f1] text-[#8f5c34]";
+}
+
+function runButtonClass(mentioned: boolean | null): string {
+	if (mentioned === true) return "border-[#bedbc8] bg-[#edf7ef] text-[#285f3e]";
+	if (mentioned === false) return "border-[#ead1c4] bg-[#fff7f1] text-[#8f5c34]";
+	return "border-[#e6ddd1] bg-[#f7f2ea] text-[#6e6258]";
+}
+
+function AIAnswersTable({
+	report,
+	locale,
+	answers,
+	onOpenAnswer,
+}: {
+	report: ReportModel;
+	locale: ReportLocale;
+	answers: AnswerStateMap;
+	onOpenAnswer: (runId: string) => void;
+}) {
+	const columns = questionSystemColumns(report);
+	if (report.questions.length === 0)
+		return (
+			<p className="mt-4 text-sm text-[#6e6258]">
+				{tr(locale, "UNKNOWN — no approved question text is attached to this cycle.", "НЕИЗВЕСТНО — к этому циклу не привязан текст утверждённых вопросов.")}
+			</p>
+		);
+	return (
+		<div className="mt-4 overflow-x-auto">
+			<table className="w-full min-w-[920px] border-collapse text-sm">
+				<thead>
+					<tr className="border-b border-[#e6ddd1] text-left text-xs font-semibold uppercase tracking-wide text-[#6e6258]">
+						<th className="w-[22rem] py-3 pr-4">{tr(locale, "Question", "Вопрос")}</th>
+						<th className="w-28 py-3 pr-4">{tr(locale, "Type", "Тип")}</th>
+						{columns.map((system) => (
+							<th key={system.key} className="min-w-40 py-3 pr-4 align-bottom">
+								<span className="block normal-case tracking-normal text-[#181614]">
+									{systemLabel(locale, system.systemId)}
+								</span>
+								<span className="block normal-case tracking-normal">
+									{system.channel === "VISITOR" ? "Visitor View" : "API View"}
+								</span>
+							</th>
+						))}
+					</tr>
+				</thead>
+				<tbody>
+					{report.questions.map((question) => {
+						const results = new Map(question.systems.map((system) => [systemKey(system), system]));
+						const openedRuns = question.systems.flatMap((system) =>
+							system.runs
+								.filter((run) => answers[run.runId])
+								.map((run) => ({
+									run,
+									system,
+									answer: answers[run.runId],
+								})),
+						);
+						return (
+							<Fragment key={question.scenarioId}>
+								<tr className="border-b border-[#e6ddd1] align-top">
+									<td className="py-3 pr-4">
+										<p className="font-medium leading-6 text-[#181614]">{question.text}</p>
+										<p className="mt-1 text-xs uppercase tracking-wide text-[#6e6258]">{question.language}</p>
+									</td>
+									<td className="py-3 pr-4 text-xs text-[#6e6258]">
+										{question.branded
+											? tr(locale, "names the brand", "с названием бренда")
+											: tr(locale, "category", "категорийный")}
+									</td>
+									{columns.map((column) => {
+										const result = results.get(column.key);
+										return (
+											<td key={column.key} className="py-3 pr-4">
+												<span
+													className={`inline-flex min-h-8 items-center rounded-full border px-3 py-1 text-xs font-semibold tabular-nums ${questionCellClass(result)}`}
+												>
+													{questionCellLabel(locale, result)}
+												</span>
+												{result && result.runs.length > 0 && (
+													<div className="mt-2 flex flex-wrap gap-1.5 print:hidden">
+														{result.runs.map((run, index) => (
+															<button
+																key={run.runId}
+																type="button"
+																className={`min-h-8 rounded-full border px-2.5 text-[0.7rem] font-semibold ${runButtonClass(run.brandMentioned)}`}
+																onClick={() => onOpenAnswer(run.runId)}
+																title={tr(locale, "Open answer text", "Открыть текст ответа")}
+															>
+																{index + 1}
+															</button>
+														))}
+													</div>
+												)}
+											</td>
+										);
+									})}
+								</tr>
+								{openedRuns.length > 0 && (
+									<tr className="border-b border-[#e6ddd1]">
+										<td colSpan={columns.length + 2} className="bg-[#fbf7ef] px-4 py-3">
+											<div className="grid gap-3">
+												{openedRuns.map(({ run, system, answer }) => (
+													<div key={run.runId} className="rounded-lg border border-[#e6ddd1] bg-[#fffdf8] p-3">
+														<p className="text-xs font-semibold uppercase tracking-wide text-[#6e6258]">
+															{systemLabel(locale, system.systemId)} ·{" "}
+															{system.channel === "VISITOR" ? "Visitor View" : "API View"} ·{" "}
+															{run.brandMentioned === null
+																? tr(locale, "UNKNOWN", "НЕИЗВЕСТНО")
+																: run.brandMentioned
+																	? tr(locale, "brand named", "бренд назван")
+																	: tr(locale, "brand not named", "бренд не назван")}
+														</p>
+														<p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-[#3d362e]">
+															{answer.loading ? tr(locale, "Loading…", "Загружаем…") : answer.text}
+														</p>
+													</div>
+												))}
+											</div>
+										</td>
+									</tr>
+								)}
+							</Fragment>
+						);
+					})}
+				</tbody>
+			</table>
+		</div>
+	);
+}
+
+const SIGNAL_LABELS: Record<string, [string, string]> = {
+	title: ["Page title", "Заголовок страницы (title)"],
+	"meta-description": ["Meta description", "Описание страницы (meta description)"],
+	"meta-robots": ["Robots policy", "Политика для роботов (meta robots)"],
+	canonical: ["Canonical URL", "Каноническая ссылка"],
+	hreflang: ["Language alternates", "Языковые версии (hreflang)"],
+	headings: ["H1–H3 heading structure", "Структура заголовков H1–H3"],
+	"visible-text": ["Crawlable text about the offer", "Читаемый текст об услугах"],
+	"internal-links": ["Internal links between pages", "Внутренние ссылки между страницами"],
+	"json-ld": ["Structured data (JSON-LD)", "Структурированная разметка (JSON-LD)"],
+	microdata: ["Microdata", "Микроразметка"],
+	contacts: ["Public contacts", "Контакты на сайте"],
+	services: ["Services, menu and location in text", "Описание услуг/меню/локации текстом"],
+	images: ["Image alt text", "Alt-подписи к изображениям"],
+	robots: ["robots.txt", "Файл robots.txt"],
+};
+
+const PLAN_LABELS: Record<string, string> = {
+	"visitor-local": "Snapshot · $49",
+	"full-ai-landscape": "Landscape · $79",
+	"expert-verified": "Expert Verified · $399",
+};
+
+/** Validated against the light surface (CVD-checked); "others" is a labeled neutral. */
+const DONUT_COLORS = ["#b25c1f", "#0a8a66", "#d99a00", "#3d6fbf"];
+const DONUT_OTHER = "#cdc3b4";
+
+function Ring({ fraction, label, caption }: { fraction: number | null; label: string; caption: string }) {
+	const circumference = 2 * Math.PI * 54;
+	const filled = fraction === null ? 0 : Math.max(0, Math.min(1, fraction)) * circumference;
+	return (
+		<div className="flex items-center gap-3">
+			<svg width="72" height="72" viewBox="0 0 120 120" role="img" aria-label={`${label} — ${caption}`}>
+				<circle cx="60" cy="60" r="54" fill="none" stroke="#ece4d7" strokeWidth="11" />
+				{filled > 0 && (
+					<circle
+						cx="60"
+						cy="60"
+						r="54"
+						fill="none"
+						stroke="#b25c1f"
+						strokeWidth="11"
+						strokeLinecap="round"
+						strokeDasharray={`${filled} ${circumference}`}
+						transform="rotate(-90 60 60)"
+					/>
+				)}
+			</svg>
+			<div>
+				<div className="text-xl font-semibold tabular-nums text-[#181614]">{label}</div>
+				<div className="text-xs text-[#6e6258]">{caption}</div>
+			</div>
+		</div>
+	);
+}
+
+function SectionCard({ children, id }: { children: React.ReactNode; id?: string }) {
+	return (
+		<section id={id ? `report-section-${id}` : undefined} className="selena-section scroll-mt-6">
+			{children}
+		</section>
+	);
+}
+
+function SectionTitle({ title, lead }: { title: string; lead?: string }) {
+	return (
+		<div>
+			<h2 className="selena-heading text-2xl">{title}</h2>
+			{lead && <p className="mt-2 max-w-2xl text-sm leading-6 text-[#6e6258]">{lead}</p>}
+		</div>
+	);
+}
+
+function railValue(locale: ReportLocale, value: number | null, fallback: string): string {
+	return value === null ? fallback : new Intl.NumberFormat(locale === "ru" ? "ru-RU" : "en-US").format(value);
+}
+
+function ReportContextRail({
+	view,
+	report,
+	locale,
+	activeSection,
+	onSelect,
+}: {
+	view: GraderReportView | null;
+	report: ReportModel | null;
+	locale: ReportLocale;
+	activeSection: ReportSectionId;
+	onSelect: (section: ReportSectionId) => void;
+}) {
+	const noMeasurement = tr(locale, "no measurement", "нет замера");
+	const notSetUp = tr(locale, "not set up", "не настроено");
+	const unknown = tr(locale, "UNKNOWN", "НЕИЗВЕСТНО");
+	const brand = view?.inputs?.brandName || view?.project.name || tr(locale, "No brand selected", "Бренд не выбран");
+	const market = [view?.project.country, view?.project.region].filter(Boolean).join(" · ") || unknown;
+	const questionsCount = report?.questions.length ?? null;
+	const systemsCount = report?.systems.length ?? null;
+	const competitorsCount =
+		report?.roster.filter((entry) => !entry.isBrand).length ?? view?.inputs?.competitorsConfigured ?? null;
+	const groups: {
+		title: string;
+		items: { id: ReportSectionId; label: string; value: string }[];
+	}[] = [
+		{
+			title: tr(locale, "Measurement", "Замер"),
+			items: [
+				{ id: "overview", label: tr(locale, "Overview", "Обзор"), value: view?.cycle ? view.cycle.status : noMeasurement },
+				{ id: "visibility", label: tr(locale, "Visibility", "Видимость"), value: railValue(locale, systemsCount, noMeasurement) },
+				{
+					id: "share-of-voice",
+					label: tr(locale, "Share of Voice", "Доля голоса"),
+					value: report && report.methodology.answersAnalyzed > 0 ? tr(locale, "measured", "измерено") : noMeasurement,
+				},
+				{ id: "query-fan-out", label: tr(locale, "Query Fan-Out", "Разворачивание запроса"), value: unknown },
+				{ id: "ai-answers", label: tr(locale, "AI Answers", "AI-ответы"), value: railValue(locale, questionsCount, noMeasurement) },
+				{ id: "citations", label: tr(locale, "Citations", "Источники"), value: railValue(locale, report?.overall.citationGap.length ?? null, noMeasurement) },
+			],
+		},
+		{
+			title: tr(locale, "Market context", "Контекст рынка"),
+			items: [
+				{ id: "competitors", label: tr(locale, "Competitors", "Конкуренты"), value: railValue(locale, competitorsCount, notSetUp) },
+				{ id: "commercial-queries", label: tr(locale, "Commercial Queries", "Коммерческие вопросы"), value: railValue(locale, questionsCount, notSetUp) },
+				{ id: "prompt-library", label: tr(locale, "Prompt Library", "Библиотека вопросов"), value: railValue(locale, questionsCount, notSetUp) },
+				{ id: "ai-systems", label: tr(locale, "AI Systems", "AI-системы"), value: railValue(locale, systemsCount, noMeasurement) },
+			],
+		},
+		{
+			title: tr(locale, "Improvement", "Улучшение"),
+			items: [
+				{ id: "opportunities", label: tr(locale, "Opportunities", "Возможности"), value: railValue(locale, report?.gaps.length ?? null, noMeasurement) },
+				{ id: "recommendations", label: tr(locale, "Recommendations", "Рекомендации"), value: railValue(locale, report?.recommendations.length ?? view?.freeAudit?.actions.length ?? null, notSetUp) },
+				{ id: "action-plan", label: tr(locale, "Action Plan", "План действий"), value: railValue(locale, view?.freeAudit?.actions.length ?? report?.recommendations.length ?? null, notSetUp) },
+				{ id: "evidence-ledger", label: tr(locale, "Evidence Ledger", "Журнал доказательств"), value: railValue(locale, report?.methodology.answersAnalyzed ?? null, noMeasurement) },
+			],
+		},
+		{
+			title: tr(locale, "Settings", "Настройки"),
+			items: [
+				{ id: "brand-profile", label: tr(locale, "Brand Profile", "Профиль бренда"), value: view?.inputs ? tr(locale, "set", "задан") : notSetUp },
+				{ id: "markets", label: tr(locale, "Markets & Languages", "Рынки и языки"), value: market },
+				{ id: "data-sources", label: tr(locale, "Data Sources", "Источники данных"), value: report ? tr(locale, "from runs", "из прогонов") : notSetUp },
+				{ id: "team", label: tr(locale, "Team & Access", "Команда и доступ"), value: tr(locale, "session", "сессия") },
+			],
+		},
+	];
+	const body = (
+		<div className="rounded-2xl border border-[#e6ddd1] bg-[#fffdf8] p-4 shadow-[0_16px_38px_-32px_rgba(24,22,20,0.42)]">
+			<div>
+				<p className="text-[0.68rem] font-bold uppercase tracking-[0.18em] text-[#8f5c34]">Selena Systems</p>
+				<label className="mt-3 block text-xs font-semibold text-[#6e6258]" htmlFor="report-product">
+					{tr(locale, "Product", "Продукт")}
+				</label>
+				<select
+					id="report-product"
+					className="mt-1 min-h-11 w-full rounded-lg border border-[#d9cfc2] bg-[#fffdf8] px-3 text-sm font-semibold text-[#181614]"
+					defaultValue="ai-visibility"
+				>
+					<option value="ai-visibility">AI Visibility</option>
+				</select>
+			</div>
+			<div className="mt-5 border-t border-[#e6ddd1] pt-4">
+				<p className="text-[0.68rem] font-bold uppercase tracking-[0.18em] text-[#6e6258]">
+					{tr(locale, "Current brand", "Текущий бренд")}
+				</p>
+				<p className="mt-2 font-semibold text-[#181614]">{brand}</p>
+				<p className="mt-1 break-words text-xs text-[#6e6258]">{view?.inputs?.primaryDomain || tr(locale, "website not set", "сайт не задан")}</p>
+				<p className="mt-1 text-xs text-[#6e6258]">{market}</p>
+			</div>
+			<nav className="mt-5 grid gap-5" aria-label={tr(locale, "Report sections", "Разделы отчёта")}>
+				{groups.map((group) => (
+					<div key={group.title}>
+						<p className="text-[0.68rem] font-bold uppercase tracking-[0.18em] text-[#6e6258]">{group.title}</p>
+						<div className="mt-2 grid gap-1">
+							{group.items.map((item) => (
+								<button
+									key={item.id}
+									type="button"
+									data-selected={activeSection === item.id || undefined}
+									className="flex min-h-10 items-center justify-between gap-3 rounded-lg px-2.5 py-2 text-left text-sm text-[#3d362e] hover:bg-[#f5eee2] data-[selected]:bg-[#181614] data-[selected]:text-[#fffdf8]"
+									onClick={() => onSelect(item.id)}
+								>
+									<span>{item.label}</span>
+									<span className="shrink-0 text-xs opacity-75">{item.value}</span>
+								</button>
+							))}
+						</div>
+					</div>
+				))}
+			</nav>
+		</div>
+	);
+	return (
+		<aside className="lg:sticky lg:top-5 lg:self-start">
+			<details className="lg:hidden">
+				<summary className="min-h-11 cursor-pointer rounded-xl border border-[#e6ddd1] bg-[#fffdf8] px-4 py-3 text-sm font-semibold text-[#181614]">
+					{tr(locale, "Dashboard context", "Контекст дашборда")}
+				</summary>
+				<div className="mt-3">{body}</div>
+			</details>
+			<div className="hidden lg:block">{body}</div>
+		</aside>
+	);
+}
+
+function SelenaReportPage() {
+	const { projects } = Route.useLoaderData();
+	const search = Route.useSearch();
+	const [locale, setLocale] = useState<ReportLocale>("en");
+	const projectId = search.project ?? projects[0]?.project.id ?? "";
+	const [view, setView] = useState<GraderReportView | null>(null);
+	const [compare, setCompare] = useState<CycleCompareResult | null>(null);
+	const [failed, setFailed] = useState(false);
+	const [answers, setAnswers] = useState<Record<string, { loading: boolean; text: string | null }>>({});
+	const [activeSection, setActiveSection] = useState<ReportSectionId>("overview");
+
+	useEffect(() => {
+		const saved = window.localStorage.getItem("selena-workspace-locale");
+		setLocale(saved === "ru" || saved === "en" ? saved : navigator.language.startsWith("ru") ? "ru" : "en");
+		const savedSection = window.localStorage.getItem("selena-report-section");
+		if (isReportSectionId(savedSection)) setActiveSection(savedSection);
+	}, []);
+
+	useEffect(() => {
+		if (!projectId) return;
+		let cancelled = false;
+		setView(null);
+		setFailed(false);
+		getSelenaGraderReportFn({ data: { projectId } })
+			.then((data) => {
+				if (!cancelled) setView(data);
+			})
+			.catch(() => {
+				if (!cancelled) setFailed(true);
+			});
+		setCompare(null);
+		getSelenaCycleCompareFn({ data: { projectId } })
+			.then((data) => {
+				if (!cancelled) setCompare(data);
+			})
+			.catch(() => {
+				if (!cancelled) setCompare(null);
+			});
+		return () => {
+			cancelled = true;
+		};
+	}, [projectId]);
+
+	const openAnswer = async (runId: string) => {
+		if (answers[runId]) {
+			setAnswers((current) => {
+				const next = { ...current };
+				delete next[runId];
+				return next;
+			});
+			return;
+		}
+		setAnswers((current) => ({ ...current, [runId]: { loading: true, text: null } }));
+		try {
+			const detail = await getSelenaRunDetailFn({ data: { runId } });
+			const text =
+				detail.answer.state === "present"
+					? detail.answer.text
+					: detail.answer.state === "deleted"
+						? tr(locale, "The answer text passed its retention window and was deleted; the findings above remain.", "Текст ответа удалён по сроку хранения; извлечённые факты сохранены.")
+						: tr(locale, "No answer text was stored for this run.", "Текст ответа для этого прогона не сохранялся.");
+			// Hidden while loading stays hidden: only an entry still on screen updates.
+			setAnswers((current) => (current[runId] ? { ...current, [runId]: { loading: false, text } } : current));
+		} catch {
+			setAnswers((current) =>
+				current[runId]
+					? { ...current, [runId]: { loading: false, text: tr(locale, "Could not load the answer.", "Не удалось загрузить ответ.") } }
+					: current,
+			);
+		}
+	};
+
+	const selectReportSection = (section: ReportSectionId) => {
+		setActiveSection(section);
+		window.localStorage.setItem("selena-report-section", section);
+		const target = document.getElementById(`report-section-${REPORT_SECTION_TARGETS[section]}`);
+		if (!target) return;
+		const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+		target.scrollIntoView({ block: "start", behavior: prefersReducedMotion ? "auto" : "smooth" });
+	};
+
+	const report = view?.report ?? null;
+	const visitorSystems = report?.systems.filter((system) => system.channel === "VISITOR") ?? [];
+	const apiSystems = report?.systems.filter((system) => system.channel === "API") ?? [];
+	const rosterTotal = report?.roster.reduce((total, entry) => total + entry.answersMentioned, 0) ?? 0;
+	const planLabel = view?.planId ? (PLAN_LABELS[view.planId] ?? view.planId) : null;
+
+	return (
+		<div className="selena-app min-h-screen bg-[#f7f2ea] pb-16 text-[#181614]">
+			<header className="bg-[#221f1b] text-[#f2e9df] print:hidden">
+				<div className="mx-auto flex max-w-5xl items-center justify-between gap-4 px-5 py-3">
+					<Link to="/app/selena" className="text-sm underline underline-offset-4">
+						← {tr(locale, "Back to cabinet", "Назад в кабинет")}
+					</Link>
+					<Button type="button" className="bg-[#8f5c34] text-[#fff7ee] hover:bg-[#7c4e2b]" onClick={() => window.print()}>
+						{tr(locale, "Download report (PDF)", "Скачать отчёт (PDF)")}
+					</Button>
+				</div>
+			</header>
+
+			<section className="relative overflow-hidden bg-[#221f1b] text-[#f2e9df]">
+				<div className="pointer-events-none absolute -top-24 -right-16 h-72 w-72 rounded-full border border-[#b9825b59]" />
+				<div className="mx-auto max-w-5xl px-5 pb-12 pt-10">
+					<p className="text-xs font-bold uppercase tracking-[0.18em] text-[#b9825b]">
+						{view && !view.planId && view.freeAudit
+							? tr(locale, "Free website check · $0", "Бесплатная проверка сайта · $0")
+							: tr(locale, "AI visibility report", "Отчёт о видимости в AI")}
+						{planLabel ? ` · ${planLabel}` : ""}
+					</p>
+					<h1 className="selena-heading mt-3 text-4xl text-[#faf5ec]">{view?.inputs?.brandName || view?.project.name || "…"}</h1>
+					<p className="mt-3 max-w-2xl text-sm text-[#cfc4b6]">
+						{[view?.project.region, view?.project.country].filter(Boolean).join(", ")}
+					</p>
+					<div className="mt-4 flex flex-wrap gap-2 text-xs">
+						{view?.cycle && (
+							<span className="rounded-full border border-[#b9825b66] px-3 py-1.5 tabular-nums">
+								{tr(
+									locale,
+									`${view.cycle.completedRuns} of ${view.cycle.expectedRuns} answers checked`,
+									`проверено ответов: ${view.cycle.completedRuns} из ${view.cycle.expectedRuns}`,
+								)}
+							</span>
+						)}
+						{report && (
+							<span className="rounded-full border border-[#b9825b66] px-3 py-1.5 tabular-nums">
+								{tr(
+									locale,
+									`${report.methodology.questions} question(s) you approved`,
+									`вопросов, утверждённых вами: ${report.methodology.questions}`,
+								)}
+							</span>
+						)}
+					{view?.monthUsage && (
+							<span className="rounded-full border border-[#b9825b66] px-3 py-1.5 tabular-nums">
+								{tr(
+									locale,
+									`${view.monthUsage.used} of ${view.monthUsage.allowance} answers used this month`,
+									`использовано ответов в этом месяце: ${view.monthUsage.used} из ${view.monthUsage.allowance}`,
+								)}
+							</span>
+						)}
+						{view?.measuredAt && (
+							<span className="rounded-full border border-[#b9825b66] px-3 py-1.5">
+								{tr(locale, "Measured", "Замер")}: {new Date(view.measuredAt).toLocaleDateString(locale === "ru" ? "ru-RU" : "en-US")}
+							</span>
+						)}
+					</div>
+				</div>
+			</section>
+
+			<main className="mx-auto mt-7 grid max-w-7xl gap-6 px-5 lg:grid-cols-[18rem_minmax(0,1fr)]">
+				<ReportContextRail
+					view={view}
+					report={report}
+					locale={locale}
+					activeSection={activeSection}
+					onSelect={selectReportSection}
+				/>
+				<div className="flex min-w-0 flex-col gap-6">
+				{failed && (
+					<SectionCard>
+						<p className="text-sm text-[#9a5f14]">{tr(locale, "Could not load the report.", "Не удалось загрузить отчёт.")}</p>
+					</SectionCard>
+				)}
+				{!failed && view === null && projectId && (
+					<SectionCard>
+						<p className="text-sm text-[#6e6258]">{tr(locale, "Loading the report…", "Загружаем отчёт…")}</p>
+					</SectionCard>
+				)}
+				{!projectId && (
+					<SectionCard>
+						<SectionTitle title={tr(locale, "No projects yet", "Проектов ещё нет")} />
+						<p className="mt-3 text-sm text-[#6e6258]">
+							{tr(locale, "Create a project in the cabinet — the report lives here once it exists.", "Создайте проект в кабинете — отчёт появится здесь, как только он будет.")}
+						</p>
+						<Link to="/app/selena" className="mt-4 inline-block print:hidden">
+							<Button type="button">{tr(locale, "Open the cabinet", "Открыть кабинет")}</Button>
+						</Link>
+					</SectionCard>
+				)}
+
+				{view?.inputs && (
+					<SectionCard id="brand-profile">
+						<SectionTitle
+							title={tr(locale, "What you provided", "Что вы ввели")}
+							lead={tr(
+								locale,
+								"Three fields are enough to start. Instagram and a Google Maps link are optional and help the check find exactly your business.",
+								"Для запуска хватает трёх полей. Instagram и ссылка на Google Maps — по желанию: с ними проверка точнее находит именно ваше заведение.",
+							)}
+						/>
+						<div className="mt-4 grid gap-3 sm:grid-cols-3">
+							<div className="rounded-xl border border-[#e6ddd1] bg-[#fffdf8] px-4 py-2.5">
+								<p className="text-[0.68rem] font-bold uppercase tracking-wider text-[#6e6258]">{tr(locale, "Name", "Название")}</p>
+								<p className="mt-0.5 font-semibold">{view.inputs.brandName}</p>
+							</div>
+							<div className="rounded-xl border border-[#e6ddd1] bg-[#fffdf8] px-4 py-2.5">
+								<p className="text-[0.68rem] font-bold uppercase tracking-wider text-[#6e6258]">{tr(locale, "Website", "Сайт")}</p>
+								<p className="mt-0.5 font-semibold">{view.inputs.primaryDomain}</p>
+							</div>
+							<div className="rounded-xl border border-[#e6ddd1] bg-[#fffdf8] px-4 py-2.5">
+								<p className="text-[0.68rem] font-bold uppercase tracking-wider text-[#6e6258]">{tr(locale, "Location", "Локация")}</p>
+								<p className="mt-0.5 font-semibold">{[view.project.region, view.project.country].filter(Boolean).join(", ") || "—"}</p>
+							</div>
+						</div>
+						{view.inputs.publicProfiles.length > 0 && (
+							<div className="mt-3 flex flex-wrap gap-2">
+								{view.inputs.publicProfiles.map((url) => (
+									<span key={url} className="rounded-full border border-[#cdbdac] bg-[#fffdf8] px-3.5 py-1.5 text-xs text-[#3d362e]">
+										✓ {url}
+									</span>
+								))}
+							</div>
+						)}
+					</SectionCard>
+				)}
+
+				{view && !report && !failed && (
+					view.freeAudit ? (
+							<>
+								<SectionCard id="overview">
+									<SectionTitle
+										title={tr(locale, "How this was checked — free", "Как проверялось — бесплатно")}
+										lead={tr(
+											locale,
+											"The free check reads your website the way AI crawlers read it — and prepares the site for a measurement. AI systems are not queried here: that is the paid measurement, and we say so plainly.",
+											"Бесплатная проверка читает ваш сайт так, как его читают AI-краулеры, — и готовит сайт к замеру. AI-системы здесь не опрашиваются: это платный замер, и мы говорим об этом прямо.",
+										)}
+									/>
+									<div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+										{[
+											["1", tr(locale, "website read in full", "сайт прочитан целиком")],
+											[String(view.freeAudit.checks.length), tr(locale, "checks performed", "проверок выполнено")],
+											["0", tr(locale, "AI answers — that is the paid measurement", "AI-ответов — это платный замер")],
+											["$0", tr(locale, "and no card required", "и без карты")],
+										].map(([value, caption]) => (
+											<div key={caption} className="rounded-xl border border-[#e6ddd1] bg-[#fffdf8] px-4 py-3">
+												<p className="selena-heading text-2xl tabular-nums">{value}</p>
+												<p className="text-xs text-[#6e6258]">{caption}</p>
+											</div>
+										))}
+									</div>
+									<p className="mt-3 text-xs text-[#6e6258]">
+										{tr(locale, "Checked", "Проверено")}: {view.freeAudit.websiteUrl} ·{" "}
+										{new Date(view.freeAudit.capturedAt).toLocaleDateString(locale === "ru" ? "ru-RU" : "en-US")}
+									</p>
+								</SectionCard>
+
+								<SectionCard id="data-sources">
+									{(() => {
+										// The technical readiness score, like the agent-readiness graders:
+										// a severity-weighted share of passing checks. It scores the SITE's
+										// technical readiness — it is not an AI-visibility score.
+										const weights: Record<string, number> = { HIGH: 3, MEDIUM: 2, LOW: 1 };
+										const scored = view.freeAudit.checks.filter((check) => !check.unknown);
+										const total = scored.reduce((sum, check) => sum + (weights[check.severity] ?? 1), 0);
+										const earned = scored
+											.filter((check) => check.ok)
+											.reduce((sum, check) => sum + (weights[check.severity] ?? 1), 0);
+										const score = total === 0 ? null : Math.round((earned / total) * 100);
+										const okCount = view.freeAudit.checks.filter((check) => check.ok).length;
+										const failCount = view.freeAudit.checks.filter((check) => !check.ok && !check.unknown).length;
+										const unknownCount = view.freeAudit.checks.filter((check) => check.unknown).length;
+										return (
+											<div className="flex flex-wrap items-start justify-between gap-5">
+												<SectionTitle
+													title={tr(locale, "Is the site ready for AI", "Готовность сайта к AI")}
+													lead={tr(
+														locale,
+														"What AI systems can understand about you from the site. The score is the site's technical readiness — it is not AI visibility.",
+														"Что AI-системы смогут понять о вас по сайту. Балл — техническая готовность сайта, это не видимость в AI.",
+													)}
+												/>
+												<div className="flex items-center gap-5">
+													<Ring
+														fraction={score === null ? null : score / 100}
+														label={score === null ? tr(locale, "UNKNOWN", "НЕИЗВЕСТНО") : `${score}/100`}
+														caption={tr(locale, "technical readiness", "техническая готовность")}
+													/>
+													<div className="text-xs text-[#6e6258]">
+														<p className="font-semibold text-[#2e6b46] tabular-nums">✓ {okCount} {tr(locale, "in place", "на месте")}</p>
+														<p className="mt-1 font-semibold text-[#9a5f14] tabular-nums">✗ {failCount} {tr(locale, "missing", "отсутствует")}</p>
+														{unknownCount > 0 && (
+															<p className="mt-1 tabular-nums">◐ {unknownCount} {tr(locale, "not verifiable — excluded from the score", "не проверено — в балл не входит")}</p>
+														)}
+													</div>
+												</div>
+											</div>
+										);
+									})()}
+									<div className="mt-4">
+										{view.freeAudit.checks.map((check) => (
+											<div key={check.ruleId} className="flex items-baseline gap-3 border-t border-[#e6ddd1] py-2.5 text-sm first:border-t-0">
+												<span
+													className={
+														check.ok
+															? "w-5 shrink-0 font-bold text-[#2e6b46]"
+															: check.unknown
+																? "w-5 shrink-0 font-bold text-[#8f5c34]"
+																: "w-5 shrink-0 font-bold text-[#9a5f14]"
+													}
+												>
+													{check.ok ? "✓" : check.unknown ? "◐" : "✗"}
+												</span>
+												<span className="flex-1 font-medium">
+													{SIGNAL_LABELS[check.subject]
+														? tr(locale, SIGNAL_LABELS[check.subject][0], SIGNAL_LABELS[check.subject][1])
+														: ruleTitle(locale, check.ruleId, check.subject)}
+													<span className="ml-2 align-middle text-[0.62rem] font-semibold uppercase text-[#b0a294]">{check.ruleId}</span>
+												</span>
+												<span className="shrink-0 text-xs text-[#6e6258]">
+													{check.ok
+														? tr(locale, "in place", "на месте")
+														: check.unknown
+															? tr(locale, "could not verify", "не удалось проверить")
+															: tr(locale, "missing", "отсутствует")}
+												</span>
+											</div>
+										))}
+									</div>
+									<p className="mt-4 max-w-3xl text-xs italic text-[#6e6258]">
+										{tr(
+											locale,
+											"The score is transparent: critical checks weigh ×3, medium ×2, light ×1; unverifiable ones are excluded. It measures the site's technical readiness to be cited — AI visibility itself is measured only by the paid measurement.",
+											"Балл прозрачный: критичные проверки весят ×3, средние ×2, лёгкие ×1; непроверяемые в балл не входят. Он измеряет техническую готовность сайта к цитированию — саму видимость в AI измеряет только платный замер.",
+										)}
+									</p>
+								</SectionCard>
+
+								{view.freeAudit.actions.length > 0 && (
+									<SectionCard id="recommendations">
+										<SectionTitle
+											title={tr(locale, "Website action plan", "План улучшения сайта")}
+											lead={tr(
+												locale,
+												"The first actions, in priority order — each derived from an observation above.",
+												"Первые действия в порядке приоритета — каждое выведено из наблюдения выше.",
+											)}
+										/>
+										<div className="mt-4 grid gap-3">
+											{view.freeAudit.actions.map((action, index) => {
+												const title = ruleTitle(locale, action.ruleId, action.title);
+												const how = ruleHow(locale, action.ruleId, action.action);
+												const priority = PRIORITY_LABELS[action.priority];
+												return (
+													<div key={`${action.ruleId}-${action.title}`} className="flex items-start gap-3.5 rounded-xl border border-[#e6ddd1] bg-[#fffdf8] p-4 text-sm">
+														<span className="selena-heading flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#efe3d7] text-[#8f5c34]">
+															{index + 1}
+														</span>
+														<div className="min-w-0 flex-1">
+															<div className="flex flex-wrap items-baseline gap-2">
+																<p className="font-semibold">{title}</p>
+																{priority && (
+																	<span className="rounded-full bg-[#efe3d7] px-2 py-0.5 text-[0.65rem] font-bold uppercase tracking-wide text-[#8f5c34]">
+																		{tr(locale, priority[0], priority[1])}
+																	</span>
+																)}
+																{action.ruleId && (
+																	<span className="text-[0.62rem] font-semibold uppercase text-[#b0a294]">{action.ruleId}</span>
+																)}
+															</div>
+															<p className="mt-1 text-[#3d362e]">{how}</p>
+														<details className="mt-2 print:hidden">
+																<summary className="cursor-pointer text-xs font-semibold text-[#8f5c34] underline underline-offset-4 [&::-webkit-details-marker]:hidden">
+																	{tr(locale, "How to fix →", "Как исправить →")}
+																</summary>
+																<div className="mt-2 rounded-lg border border-[#e6ddd1] bg-[#fbf7ef] p-3">
+																	{ruleSteps(locale, action.ruleId).length > 0 ? (
+																		<ol className="list-decimal space-y-1 pl-4 text-xs leading-5 text-[#3d362e]">
+																			{ruleSteps(locale, action.ruleId).map((step) => (
+																				<li key={step}>{step}</li>
+																			))}
+																		</ol>
+																	) : (
+																		<p className="text-xs leading-5 text-[#3d362e]">{how}</p>
+																	)}
+																	{ruleExample(locale, action.ruleId) && (
+																		<p className="mt-2 rounded border border-[#e6ddd1] bg-[#fffdf8] px-2.5 py-1.5 font-mono text-[0.68rem] leading-4 text-[#3d362e]">
+																			{tr(locale, "Done right: ", "Как правильно: ")}
+																			{ruleExample(locale, action.ruleId)}
+																		</p>
+																	)}
+																	<button
+																		type="button"
+																		className="mt-2 rounded-full border border-[#cdbdac] bg-[#fffdf8] px-3.5 py-1.5 text-xs font-semibold text-[#8f5c34]"
+																		onClick={(event) => {
+																			void navigator.clipboard.writeText(
+																				ruleFixTask(locale, action.ruleId, view.freeAudit?.websiteUrl ?? "", title, how),
+																			);
+																			const target = event.currentTarget;
+																			target.textContent = tr(locale, "Copied", "Скопировано");
+																		}}
+																	>
+																		{tr(locale, "Copy a task for an AI developer", "Скопировать задание для AI-разработчика")}
+																	</button>
+																</div>
+															</details>
+														</div>
+													</div>
+												);
+											})}
+										</div>
+									</SectionCard>
+								)}
+
+								<SectionCard id="visibility">
+									<SectionTitle
+										title={tr(locale, "What a measurement unlocks", "Что откроется после замера")}
+										lead={tr(
+											locale,
+											"These sections exist in the paid report and fill only with real AI answers — the free check does not guess them.",
+											"Эти разделы существуют в платном отчёте и наполняются только реальными ответами AI-систем — бесплатная проверка их не угадывает.",
+										)}
+									/>
+									<div className="mt-4 grid gap-2.5">
+										{[
+											[
+												tr(locale, "How AI systems see you", "Как вас видят AI-системы"),
+												tr(locale, "whether ChatGPT, Gemini and Perplexity name you — known only after a measurement.", "упомянуты ли вы в ответах ChatGPT, Gemini, Perplexity: станет известно после замера."),
+											],
+											[
+												tr(locale, "Who occupies the answers", "Кто занимает ответы"),
+												tr(locale, "share of voice: you against your competitors, by name.", "доля голоса: вы против ваших конкурентов по именам."),
+											],
+											[
+												tr(locale, "Where you are absent and competitors are not", "Где вас нет, а конкуренты есть"),
+												tr(locale, "which questions show them, and which sources the answer cites.", "по каким вопросам показывают их и на какие источники ссылается ответ."),
+											],
+											[
+												tr(locale, "Where AI takes its data from", "Откуда AI берёт данные"),
+												tr(locale, "sources and the citation gap (“cited without you”).", "источники и citation gap («цитируется без вас»)."),
+											],
+											[
+												tr(locale, "Measurement-backed recommendations", "Рекомендации из замера"),
+												tr(locale, "what to do, tied to specific numbers.", "что делать, с привязкой к конкретным цифрам."),
+											],
+										].map(([heading, body]) => (
+											<div key={heading} className="rounded-xl border border-dashed border-[#cdbdac] bg-[#fbf7ef] px-4 py-3 text-sm text-[#6e6258]">
+												<b className="text-[#3d362e]">{heading}</b> — {body}
+											</div>
+										))}
+									</div>
+									<Link to="/app/selena-order" search={{ project: projectId, plan: "snapshot" }} className="mt-5 inline-block print:hidden">
+										<Button type="button">{tr(locale, "Order Snapshot · $49", "Заказать Snapshot · $49")}</Button>
+									</Link>
+								</SectionCard>
+							</>
+						) : (
+							<SectionCard id="overview">
+								<SectionTitle title={tr(locale, "No checks yet", "Проверок ещё не было")} />
+								<p className="mt-3 text-sm text-[#6e6258]">
+									{tr(
+										locale,
+										"Run the free website review in the cabinet first — its results appear here, and a paid measurement deepens them.",
+										"Сначала запустите бесплатную проверку сайта в кабинете — её результаты появятся здесь, а платный замер их углубит.",
+									)}
+								</p>
+								<Link to="/app/selena" className="mt-4 inline-block print:hidden">
+									<Button type="button">{tr(locale, "Open the cabinet", "Открыть кабинет")}</Button>
+								</Link>
+							</SectionCard>
+						)
+				)}
+
+				{report && (
+					<>
+						{report.methodology.answersExpected === 0 ? (
+							<SectionCard id="overview">
+								<SectionTitle title={tr(locale, "How this was measured", "Как проверялось")} />
+								<p className="mt-3 text-sm text-[#6e6258]">
+									{tr(
+										locale,
+										"The measurement is ordered but its runs have not been created yet — the methodology appears with the first answers.",
+										"Замер заказан, но прогоны ещё не созданы — методика появится с первыми ответами.",
+									)}
+								</p>
+							</SectionCard>
+						) : (
+						<SectionCard id="overview">
+							<SectionTitle
+								title={tr(locale, "How this was measured", "Как проверялось")}
+								lead={tr(
+									locale,
+									"Printed from the actual measurement configuration: how many questions, how many repeats, and which method asked each question.",
+									"Печатается из фактической конфигурации замера: сколько вопросов, сколько повторов и каким способом задан каждый вопрос.",
+								)}
+							/>
+							<div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+								{[
+									[String(report.methodology.questions), tr(locale, "questions · approved by you", "вопросов · утверждены вами")],
+									[
+										String(report.methodology.visitorSystems + report.methodology.apiSystems),
+										report.methodology.apiSystems > 0
+											? tr(
+													locale,
+													`AI systems: ${report.methodology.visitorSystems} Visitor + ${report.methodology.apiSystems} API`,
+													`AI-систем: ${report.methodology.visitorSystems} Visitor + ${report.methodology.apiSystems} API`,
+												)
+											: tr(locale, "AI systems · Visitor View", "AI-систем · Visitor View"),
+									],
+									[
+										report.methodology.repeats === null ? tr(locale, "UNKNOWN", "НЕИЗВЕСТНО") : `×${report.methodology.repeats}`,
+										tr(locale, "repeat(s) per question per system", "повторов на вопрос в системе"),
+									],
+									[
+										String(report.methodology.answersExpected),
+										tr(locale, "answers in this cycle", "ответов в этом замере"),
+									],
+								].map(([value, caption]) => (
+									<div key={caption} className="rounded-xl border border-[#e6ddd1] bg-[#fffdf8] px-4 py-3">
+										<p className="selena-heading text-2xl tabular-nums">{value}</p>
+										<p className="text-xs text-[#6e6258]">{caption}</p>
+									</div>
+								))}
+							</div>
+							<div className="mt-4 grid gap-3">
+								<div className="flex items-start gap-3 rounded-xl border border-[#e6ddd1] bg-[#fffdf8] p-4 text-sm">
+									<span className="shrink-0 rounded-full bg-[#efe3d7] px-3 py-1 text-[0.7rem] font-bold tracking-wide text-[#8f5c34]">VISITOR VIEW</span>
+									<p>
+										{tr(
+											locale,
+											"Through a live visitor's eyes: the question is asked in the user-facing service, the way a real customer sees it.",
+											"Глазами живого посетителя: вопрос задаётся в пользовательском сервисе — так, как его видит реальный клиент.",
+										)}
+									</p>
+								</div>
+								<div className="flex items-start gap-3 rounded-xl border border-[#e6ddd1] bg-[#fffdf8] p-4 text-sm">
+									<span className="shrink-0 rounded-full bg-[#e8e4dc] px-3 py-1 text-[0.7rem] font-bold tracking-wide text-[#6e6258]">API VIEW</span>
+									<p>
+										{tr(
+											locale,
+											"The model's own knowledge: the question goes straight to the model over the API — no web search, no hints.",
+											"Внутреннее знание модели: вопрос задаётся модели напрямую через API — без веб-поиска и без подсказок.",
+										)}
+									</p>
+								</div>
+							</div>
+							{report.methodology.answersMissing > 0 && (
+								<p className="mt-3 text-xs text-[#9a5f14]">
+									{tr(
+										locale,
+										`${report.methodology.answersMissing} run(s) have no analyzable answer yet (queued or failed); they are counted as missing, not as zeros.`,
+										`Прогонов без разобранного ответа: ${report.methodology.answersMissing} (в очереди или с ошибкой) — они считаются отсутствующими, а не нулями.`,
+									)}
+								</p>
+							)}
+						</SectionCard>
+						)}
+
+						{[
+							{ list: visitorSystems, title: tr(locale, "How AI systems see you — Visitor View", "Как вас видят AI-системы — Visitor View") },
+							{ list: apiSystems, title: tr(locale, "What models know on their own — API View", "Внутреннее знание моделей — API View") },
+						]
+							.filter((group) => group.list.length > 0)
+							.map((group, index) => (
+								<SectionCard key={group.title} id={index === 0 ? "visibility" : undefined}>
+									<SectionTitle
+										title={group.title}
+										lead={tr(
+											locale,
+											"Brand-name questions and category questions are counted separately and never merged into one score.",
+											"Вопросы с названием бренда и вопросы про категорию считаются раздельно и никогда не сводятся в один балл.",
+										)}
+									/>
+									<div className="mt-4 overflow-x-auto">
+										<table className="w-full min-w-[680px] border-collapse text-sm">
+											<thead>
+												<tr>
+													<th className="w-44 pb-3 text-left text-xs font-semibold text-[#6e6258]" aria-label={tr(locale, "Metric", "Метрика")} />
+													{group.list.map((system) => (
+														<th key={system.systemId} className="pb-3 pr-4 text-left align-top">
+															<span className="selena-heading text-lg">{systemLabel(locale, system.systemId)}</span>
+															<span className="block text-[0.7rem] font-medium text-[#6e6258]">
+																{system.channel === "VISITOR" ? "Visitor View" : "API View"} ·{" "}
+																{captureLabel(locale, system.channel, system.captureModes)}
+															</span>
+														</th>
+													))}
+												</tr>
+											</thead>
+											<tbody>
+												<tr className="border-t border-[#e6ddd1]">
+													<td className="py-3 pr-3 text-xs font-semibold text-[#6e6258]">{tr(locale, "Brand mentioned", "Бренд упомянут")}</td>
+													{group.list.map((system) => (
+														<td key={system.systemId} className="py-3 pr-4">
+															<Ring
+																fraction={system.answersAnalyzed === 0 ? null : system.brandMentioned / system.answersAnalyzed}
+																label={
+																	system.answersAnalyzed === 0
+																		? tr(locale, "UNKNOWN", "НЕИЗВЕСТНО")
+																		: tr(locale, `${system.brandMentioned} of ${system.answersAnalyzed}`, `${system.brandMentioned} из ${system.answersAnalyzed}`)
+																}
+															caption={
+																	system.answersAnalyzed === 0
+																		? tr(locale, "no analyzed answers yet", "разобранных ответов пока нет")
+																		: tr(locale, "answers name you — all questions together, split below", "ответов называют вас — все вопросы вместе, разбивка ниже")
+																}
+															/>
+														</td>
+													))}
+												</tr>
+												<tr className="border-t border-[#e6ddd1]">
+													<td className="py-3 pr-3 text-xs font-semibold text-[#6e6258]">
+														{tr(locale, "Category questions (no brand name)", "Вопросы про категорию (без названия бренда)")}
+													</td>
+													{group.list.map((system) => (
+														<td key={system.systemId} className="py-3 pr-4 tabular-nums">
+															{system.category.answers === 0
+																? tr(locale, "UNKNOWN", "НЕИЗВЕСТНО")
+																: tr(locale, `${system.category.mentioned} of ${system.category.answers}`, `${system.category.mentioned} из ${system.category.answers}`)}
+														</td>
+													))}
+												</tr>
+												<tr className="border-t border-[#e6ddd1]">
+													<td className="py-3 pr-3 text-xs font-semibold text-[#6e6258]">{tr(locale, "Questions naming the brand", "Вопросы с названием бренда")}</td>
+													{group.list.map((system) => (
+														<td key={system.systemId} className="py-3 pr-4 tabular-nums">
+															{system.branded.answers === 0
+																? tr(locale, "UNKNOWN", "НЕИЗВЕСТНО")
+																: tr(locale, `${system.branded.mentioned} of ${system.branded.answers}`, `${system.branded.mentioned} из ${system.branded.answers}`)}
+														</td>
+													))}
+												</tr>
+												<tr className="border-t border-[#e6ddd1]">
+													<td className="py-3 pr-3 text-xs font-semibold text-[#6e6258]">{tr(locale, "Share of voice", "Доля голоса")}</td>
+													{group.list.map((system) => (
+														<td key={system.systemId} className="py-3 pr-4 font-semibold tabular-nums">
+															{pct(locale, system.shareOfVoice)}
+														</td>
+													))}
+												</tr>
+												<tr className="border-t border-[#e6ddd1]">
+													<td className="py-3 pr-3 text-xs font-semibold text-[#6e6258]">{tr(locale, "Average position in the list", "Средняя позиция в списке")}</td>
+													{group.list.map((system) => (
+														<td key={system.systemId} className="py-3 pr-4 font-semibold tabular-nums">
+															{system.averageOrder === null ? tr(locale, "UNKNOWN", "НЕИЗВЕСТНО") : system.averageOrder.toFixed(1)}
+														</td>
+													))}
+												</tr>
+											</tbody>
+										</table>
+									</div>
+								</SectionCard>
+							))}
+
+						<SectionCard id="ai-answers">
+							<SectionTitle
+								title={tr(locale, "AI answers by question", "AI-ответы по вопросам")}
+								lead={tr(
+									locale,
+									"One approved question per row. Each system cell shows whether the brand was named in that system's measured answers; numbered chips open the exact answer text behind the cell.",
+									"Один утверждённый вопрос в строке. В каждой ячейке системы видно, назван ли бренд в её ответах; цифры открывают конкретные тексты ответов.",
+								)}
+							/>
+							<AIAnswersTable report={report} locale={locale} answers={answers} onOpenAnswer={openAnswer} />
+							<p className="mt-3 max-w-3xl text-xs italic text-[#6e6258]">
+								{tr(
+									locale,
+									"UNKNOWN means the run has no analyzable answer yet or the retained text was not available; it is never counted as a miss.",
+									"НЕИЗВЕСТНО означает, что у прогона пока нет разобранного ответа или сохранённый текст недоступен; это никогда не считается промахом.",
+								)}
+							</p>
+						</SectionCard>
+
+						<SectionCard id="query-fan-out">
+							<SectionTitle
+								title={tr(locale, "Query fan-out", "Разворачивание запроса")}
+								lead={tr(
+									locale,
+									"When an AI surface expands one approved question into supporting searches, this section shows those subqueries from retained evidence.",
+									"Когда AI-сервис разворачивает утверждённый вопрос в дополнительные поисковые запросы, этот раздел показывает эти подзапросы из сохранённых доказательств.",
+								)}
+							/>
+							<p className="mt-4 text-sm font-semibold text-[#9a5f14]">
+								{tr(
+									locale,
+									"UNKNOWN — this cycle retains questions, systems, answers, citations and sources, but no query fan-out payload was stored for these runs.",
+									"НЕИЗВЕСТНО — в этом цикле сохранены вопросы, системы, ответы, цитаты и источники, но payload разворачивания запросов для этих прогонов не сохранён.",
+								)}
+							</p>
+						</SectionCard>
+
+						<SectionCard id="share-of-voice">
+							<SectionTitle
+								title={tr(locale, "Who occupies the answers", "Кто занимает ответы")}
+								lead={tr(
+									locale,
+									"How often each tracked business appeared in the analyzed answers — you plus every competitor from your profile. Observed from the answers, not a market rating.",
+									"Как часто каждое отслеживаемое заведение звучало в разобранных ответах — вы плюс все конкуренты из вашего профиля. Это наблюдение из ответов, а не рейтинг рынка.",
+								)}
+							/>
+							{rosterTotal === 0 ? (
+								<p className="mt-4 text-sm font-semibold text-[#9a5f14]">
+									{report.methodology.answersAnalyzed === 0
+										? tr(
+												locale,
+												"UNKNOWN — no analyzed answers yet, so there is nothing to count.",
+												"НЕИЗВЕСТНО — разобранных ответов пока нет, считать нечего.",
+											)
+										: tr(
+												locale,
+												"Observed: none of the tracked businesses were named in the analyzed answers. That is a finding, not a missing value.",
+												"Наблюдение: ни одно из отслеживаемых заведений не названо в разобранных ответах. Это факт замера, а не отсутствие данных.",
+											)}
+								</p>
+							) : (
+								<div className="mt-5 flex flex-wrap items-center gap-8">
+									<svg width="190" height="190" viewBox="0 0 200 200" role="img" aria-label={tr(locale, "Share of appearances among tracked businesses", "Доля попаданий среди отслеживаемых заведений")}>
+										<g transform="rotate(-90 100 100)">
+											{(() => {
+												const circumference = 2 * Math.PI * 80;
+											const top = report.roster.slice(0, 4);
+												const rest = report.roster.slice(4).reduce((total, entry) => total + entry.answersMentioned, 0);
+												const segments = [
+													...top.map((entry, index) => ({
+														key: entry.name,
+														value: entry.answersMentioned,
+														color: entry.isBrand ? DONUT_COLORS[0] : DONUT_COLORS[Math.min(index, DONUT_COLORS.length - 1)],
+													})),
+													{ key: "other", value: rest, color: DONUT_OTHER },
+												].filter((segment) => segment.value > 0);
+												let offset = 0;
+												return segments.map((segment) => {
+													const length = (segment.value / rosterTotal) * circumference;
+													const element = (
+														<circle
+															key={segment.key}
+															cx="100"
+															cy="100"
+															r="80"
+															fill="none"
+															stroke={segment.color}
+															strokeWidth="26"
+															strokeDasharray={`${Math.max(length - 2, 0.5)} ${circumference}`}
+															strokeDashoffset={-offset}
+														/>
+													);
+													offset += length;
+													return element;
+												});
+											})()}
+										</g>
+										<text x="100" y="94" textAnchor="middle" fontSize="24" fontWeight="650" fill="#181614">
+											{pct(locale, report.roster[0] ? report.roster[0].answersMentioned / rosterTotal : null)}
+										</text>
+										<text x="100" y="114" textAnchor="middle" fontSize="11" fill="#6e6258">
+											{tr(locale, "your brand", "ваш бренд")}
+										</text>
+									</svg>
+									<div className="min-w-60 flex-1">
+										<div className="grid grid-cols-[1fr_auto_auto] gap-x-5 gap-y-0 text-[0.7rem] font-bold uppercase tracking-wider text-[#6e6258]">
+											<span>{tr(locale, "Business", "Заведение")}</span>
+											<span>{tr(locale, "Named in answers", "Назван в ответах")}</span>
+											<span>{tr(locale, "Avg. position", "Средняя позиция")}</span>
+										</div>
+										{report.roster.map((entry, index) => (
+											<div key={entry.name} className="grid grid-cols-[1fr_auto_auto] items-baseline gap-x-5 border-t border-[#e6ddd1] py-2 text-sm first:border-t-0">
+												<span className={entry.isBrand ? "font-bold text-[#8f5c34]" : "font-medium"}>
+												<span
+														className="mr-2 inline-block h-2.5 w-2.5 rounded-sm align-baseline"
+														style={{
+															background: entry.isBrand
+																? DONUT_COLORS[0]
+																: index < 4
+																	? DONUT_COLORS[Math.min(index, DONUT_COLORS.length - 1)]
+																	: DONUT_OTHER,
+														}}
+													/>
+													{entry.name}
+													{entry.isBrand ? ` — ${tr(locale, "you", "вы")}` : ""}
+												</span>
+												<span className="tabular-nums">
+													{tr(locale, `${entry.answersMentioned} of ${report.methodology.answersAnalyzed}`, `${entry.answersMentioned} из ${report.methodology.answersAnalyzed}`)}
+												</span>
+												<span className="tabular-nums">
+													{entry.averageOrder === null ? (
+														<span className="font-semibold text-[#9a5f14]">{tr(locale, "UNKNOWN", "НЕИЗВЕСТНО")}</span>
+													) : (
+														entry.averageOrder.toFixed(1)
+													)}
+												</span>
+											</div>
+										))}
+									</div>
+								</div>
+							)}
+						</SectionCard>
+
+						<SectionCard id="opportunities">
+							<SectionTitle
+								title={tr(locale, "Where you are absent and competitors are not", "Где вас нет, а конкуренты есть")}
+								lead={tr(
+									locale,
+									"Answers that named a competitor and not you — with the sources each answer leaned on. Every row opens into the full answer text.",
+									"Ответы, где назван конкурент, а вы — нет, и на какие источники ответ ссылался. Каждая строка открывается до полного текста ответа.",
+								)}
+							/>
+							{report.gaps.length === 0 ? (
+								<p className="mt-4 text-sm text-[#6e6258]">
+									{report.methodology.answersAnalyzed === 0
+										? tr(locale, "UNKNOWN — no analyzed answers yet.", "НЕИЗВЕСТНО — разобранных ответов пока нет.")
+										: tr(locale, "No such answers: wherever a competitor was named, you were named too.", "Таких ответов нет: везде, где назван конкурент, названы и вы.")}
+								</p>
+							) : (
+								<div className="mt-4 flex flex-col">
+									{report.gaps.map((gap) => (
+										<div key={gap.runId} className="border-t border-[#e6ddd1] py-3 first:border-t-0">
+											<div className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1 text-sm">
+												<div className="min-w-56 flex-1">
+													<p className="font-medium">{gap.scenarioText || tr(locale, "(question text unavailable)", "(текст вопроса недоступен)")}</p>
+													<p className="text-xs text-[#6e6258]">
+														{systemLabel(locale, gap.systemId)} · {gap.channel === "VISITOR" ? "Visitor View" : "API View"} ·{" "}
+														<span className="rounded-full bg-[#f6e7d8] px-2 py-0.5 font-bold text-[#9a5f14]">{tr(locale, "you are not named", "вы не названы")}</span>
+													</p>
+												</div>
+												<div className="text-sm">
+													<p>{gap.competitorsShown.join(", ")}</p>
+													<p className="text-xs text-[#6e6258]">
+														{gap.citedDomains.length > 0 ? gap.citedDomains.join(" · ") : tr(locale, "no sources cited", "источники не указаны")}
+													</p>
+												</div>
+												<button
+													type="button"
+													className="text-sm text-[#8f5c34] underline underline-offset-4 print:hidden"
+													onClick={() => void openAnswer(gap.runId)}
+												>
+													{answers[gap.runId] ? tr(locale, "Hide answer", "Скрыть ответ") : tr(locale, "Open answer →", "Открыть ответ →")}
+												</button>
+											</div>
+											{answers[gap.runId] && (
+												<div className="mt-2 rounded-xl border border-[#e6ddd1] bg-[#fffdf8] p-4 text-sm leading-6 whitespace-pre-wrap">
+													{answers[gap.runId].loading ? tr(locale, "Loading…", "Загружаем…") : answers[gap.runId].text}
+												</div>
+											)}
+										</div>
+									))}
+								</div>
+							)}
+						</SectionCard>
+
+						<SectionCard id="citations">
+							<SectionTitle
+								title={tr(locale, "Where AI takes its data from", "Откуда AI берёт данные")}
+								lead={tr(
+									locale,
+									"Sources the answers cited. “Without you” counts answers that cited the source, named a competitor, and did not name you — an observed fact, not a promised mechanism.",
+									"Источники, которые ответы цитировали. «Без вас» — ответы, где источник процитирован, конкурент назван, а вы — нет. Это наблюдаемый факт, а не обещанный механизм.",
+								)}
+							/>
+							{report.overall.citationGap.length === 0 ? (
+								<p className="mt-4 text-sm text-[#6e6258]">
+									{report.methodology.answersAnalyzed === 0
+										? tr(locale, "UNKNOWN — no analyzed answers yet.", "НЕИЗВЕСТНО — разобранных ответов пока нет.")
+										: tr(locale, "The analyzed answers cited no sources.", "В разобранных ответах источники не встречались.")}
+								</p>
+							) : (
+								<div className="mt-4">
+									{report.overall.citationGap.slice(0, 8).map((entry) => (
+										<div key={entry.domain} className="grid grid-cols-[1fr_auto] items-baseline gap-x-5 border-t border-[#e6ddd1] py-2.5 text-sm first:border-t-0">
+											<span className="font-semibold">
+												{entry.domain}
+												{entry.ownedByBrand && <span className="ml-2 text-xs font-bold text-[#2e6b46]">{tr(locale, "your site", "ваш сайт")}</span>}
+											</span>
+											<span className="tabular-nums text-[#3d362e]">
+												{tr(locale, `cited ${entry.timesCited}×`, `цитируется ${entry.timesCited}`)}
+												{entry.timesCitedWithoutBrand > 0 && (
+													<span className="font-semibold text-[#8f5c34]">
+														{" "}
+														· {tr(locale, `without you ${entry.timesCitedWithoutBrand}×`, `без вас ${entry.timesCitedWithoutBrand}`)}
+													</span>
+												)}
+											</span>
+										</div>
+									))}
+								</div>
+							)}
+						</SectionCard>
+
+						{report.recommendations.length > 0 && (
+							<SectionCard id="recommendations">
+								<div className="flex flex-wrap items-start justify-between gap-3">
+									<SectionTitle
+										title={tr(locale, "What to do next", "Что делать дальше")}
+										lead={tr(
+											locale,
+											"Each recommendation is derived from a specific observation in this report and shows its “why”.",
+											"Каждая рекомендация выведена из конкретного наблюдения этого отчёта и показывает своё «почему».",
+										)}
+									/>
+									<span className="rounded-full bg-[#e9f2ea] px-3 py-1.5 text-xs font-semibold text-[#2e6b46]">
+										{tr(locale, "included in your plan", "входит в ваш тариф")}
+									</span>
+								</div>
+								<div className="mt-4 grid gap-3">
+									{report.recommendations.map((rec, index) => {
+										const body =
+											rec.kind === "SOURCE_PRESENCE"
+												? {
+														action: tr(locale, `Strengthen your presence on ${rec.domain}.`, `Усильте присутствие на ${rec.domain}.`),
+														why: tr(
+															locale,
+															`Cited in ${rec.timesCited} answer(s), ${rec.timesCitedWithoutBrand} of them without you.`,
+															`Процитирован в ${rec.timesCited} ответах, из них без вас — ${rec.timesCitedWithoutBrand}.`,
+														),
+													}
+												: rec.kind === "CATEGORY_CONTENT"
+													? {
+															action: tr(
+																locale,
+																`Create pages answering the category questions, e.g.: ${rec.exampleQuestions.join("; ")}.`,
+																`Сделайте на сайте страницы под категорийные вопросы, например: ${rec.exampleQuestions.join("; ")}.`,
+															),
+															why: tr(
+																locale,
+																`You are absent in ${rec.missedAnswers} of ${rec.categoryAnswers} category answers.`,
+																`Вы не названы в ${rec.missedAnswers} из ${rec.categoryAnswers} категорийных ответов.`,
+															),
+														}
+													: {
+															action: tr(locale, `Make your own site (${rec.domain}) worth citing.`, `Сделайте свой сайт (${rec.domain}) источником, который цитируют.`),
+															why: tr(
+																locale,
+																`Your site is cited ${rec.timesCited}×, while ${rec.topExternalDomain} is cited ${rec.topExternalCited}×.`,
+																`Ваш сайт процитирован ${rec.timesCited} раз, а ${rec.topExternalDomain} — ${rec.topExternalCited}.`,
+															),
+														};
+										return (
+											<div key={`${rec.kind}-${index === 0 ? "a" : index}`} className="flex items-start gap-3.5 rounded-xl border border-[#e6ddd1] bg-[#fffdf8] p-4 text-sm">
+												<span className="selena-heading flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#efe3d7] text-[#8f5c34]">{index + 1}</span>
+												<div>
+													<p className="font-semibold">{body.action}</p>
+													<p className="mt-1 text-xs text-[#6e6258]">
+														{tr(locale, "Why", "Почему")}: {body.why}
+													</p>
+												</div>
+											</div>
+										);
+									})}
+								</div>
+								<p className="mt-4 max-w-3xl text-xs italic text-[#6e6258]">
+									{tr(
+										locale,
+										"Recommendations come from this measurement's facts. Acting on them does not guarantee appearing in answers — AI systems change on their own; a repeat measurement shows what moved.",
+										"Рекомендации — из фактов этого замера. Их выполнение не гарантирует попадание в ответы: AI-системы меняются сами. Повторный замер покажет, что изменилось.",
+									)}
+								</p>
+							</SectionCard>
+						)}
+
+						<SectionCard id="prompt-library">
+							<SectionTitle
+								title={tr(locale, "The questions we asked", "Вопросы, которые мы задали")}
+								lead={tr(
+									locale,
+									"Every question below was approved by you before the measurement ran — nothing is asked without your check mark.",
+									"Каждый вопрос ниже вы утвердили до запуска замера — без вашей галочки ничего не спрашивается.",
+								)}
+							/>
+							<div className="mt-4">
+								{report.questions.map((question) => (
+									<div key={question.scenarioId} className="flex items-baseline gap-3 border-t border-[#e6ddd1] py-2.5 text-sm first:border-t-0">
+										<span className="w-8 shrink-0 text-[0.68rem] font-bold uppercase text-[#6e6258]">{question.language}</span>
+										<span className="flex-1">{question.text}</span>
+										<span className="shrink-0 text-xs text-[#6e6258]">
+											{question.branded ? tr(locale, "names the brand", "с названием бренда") : tr(locale, "category question", "про категорию")}
+										</span>
+									</div>
+								))}
+							</div>
+						</SectionCard>
+
+						<SectionCard id="evidence-ledger">
+							<SectionTitle title={tr(locale, "Why these numbers can be trusted", "Почему этим цифрам можно верить")} />
+							<div className="mt-4 grid gap-3 sm:grid-cols-2">
+								{[
+									[
+										tr(locale, "Every number opens into an answer", "Каждая цифра открывается до ответа"),
+										tr(locale, "“Open answer” shows the full text the AI system gave. Nothing is paraphrased.", "«Открыть ответ» показывает полный текст, который дала AI-система. Ничего не пересказано."),
+									],
+									[
+										tr(locale, "Empty means UNKNOWN", "Пусто — значит НЕИЗВЕСТНО"),
+										tr(locale, "Where there is no data we say UNKNOWN instead of drawing a zero or a percent.", "Там, где данных нет, мы пишем НЕИЗВЕСТНО, а не рисуем ноль или процент."),
+									],
+									[
+										tr(locale, "No composite score", "Никакого «общего балла»"),
+										tr(locale, "One score hides the point: you can be absent from category answers with perfect branded ones. Groups stay separate.", "Один балл прячет главное: вас может не быть в категорийных ответах при идеальных брендовых. Группы показываются раздельно."),
+									],
+									[
+										tr(locale, "You approve the questions", "Вопросы утверждаете вы"),
+										tr(locale, "The measurement asks only questions you saw and approved.", "Замер задаёт только те вопросы, которые вы видели и одобрили."),
+									],
+								].map(([heading, body]) => (
+									<div key={heading} className="rounded-xl border border-[#e6ddd1] bg-[#fffdf8] p-4 text-sm">
+										<p className="font-semibold">{heading}</p>
+										<p className="mt-1 text-[#3d362e]">{body}</p>
+									</div>
+								))}
+							</div>
+							<p className="mt-4 max-w-3xl text-xs italic text-[#6e6258]">
+								{tr(
+									locale,
+									"Answers are retained for 13 months so a year-over-year comparison stays possible. Changes in AI answers are never guaranteed and depend on the systems themselves.",
+									"Ответы хранятся 13 месяцев — чтобы через год сравнить «год к году». Изменения в ответах AI не гарантируются и зависят от самих систем.",
+								)}
+							</p>
+						</SectionCard>
+
+						<SectionCard>
+							<SectionTitle
+								title={tr(locale, "Cycle-to-cycle dynamics", "Динамика по циклам")}
+								lead={tr(
+									locale,
+									"What changed between the two most recent measurements — observations, never causes.",
+									"Что изменилось между двумя последними замерами — наблюдения, никогда не причины.",
+								)}
+							/>
+							{!compare?.comparable ? (
+								<p className="mt-4 text-sm font-semibold text-[#9a5f14]">
+									{tr(
+										locale,
+										"UNKNOWN — there is nothing to compare after the first measurement; dynamics appear from the second cycle.",
+										"НЕИЗВЕСТНО — после первого замера сравнивать не с чем; динамика появится со второго цикла.",
+									)}
+								</p>
+							) : (
+								<div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+									{[
+										["MENTION_APPEARED", tr(locale, "answers where you appeared", "ответов, где вы появились")],
+										["MENTION_DISAPPEARED", tr(locale, "answers where you disappeared", "ответов, где вы исчезли")],
+										["POSITION_SHIFTED", tr(locale, "position shifts", "сдвигов позиции")],
+										["SOURCE_APPEARED", tr(locale, "new sources", "новых источников")],
+									].map(([type, caption]) => (
+										<div key={type} className="rounded-xl border border-[#e6ddd1] bg-[#fffdf8] px-4 py-3">
+											<p className="selena-heading text-2xl tabular-nums">{compare.report.changes.filter((change) => change.type === type).length}</p>
+											<p className="text-xs text-[#6e6258]">{caption}</p>
+										</div>
+									))}
+								</div>
+							)}
+						</SectionCard>
+
+						<section className="relative overflow-hidden rounded-2xl bg-[#221f1b] p-8 text-[#f2e9df] print:hidden">
+							<div className="pointer-events-none absolute -right-20 -bottom-24 h-64 w-64 rounded-full border border-[#b9825b4d]" />
+							{view?.planId === "visitor-local" ? (
+								<>
+									<h2 className="selena-heading text-2xl text-[#faf5ec]">{tr(locale, "This report is a starting point", "Этот отчёт — отправная точка")}</h2>
+									<p className="mt-2 max-w-2xl text-sm text-[#cfc4b6]">
+										{tr(
+											locale,
+											"Landscape ($79) adds five model-knowledge systems — Claude, DeepSeek, Qwen, Mistral, Grok — and cycle-to-cycle dynamics.",
+											"Landscape ($79) добавляет 5 систем внутреннего знания — Claude, DeepSeek, Qwen, Mistral, Grok — и динамику от цикла к циклу.",
+										)}
+									</p>
+									<Link to="/app/selena-order" search={{ project: projectId, plan: "landscape" }} className="mt-5 inline-block">
+										<Button type="button" className="bg-[#8f5c34] text-[#fff7ee] hover:bg-[#7c4e2b]">
+											{tr(locale, "Move to Landscape · $79", "Перейти на Landscape · $79")}
+										</Button>
+									</Link>
+								</>
+							) : (
+								<>
+									<h2 className="selena-heading text-2xl text-[#faf5ec]">{tr(locale, "Need stability and a human eye?", "Нужна устойчивость и взгляд человека?")}</h2>
+									<p className="mt-2 max-w-2xl text-sm text-[#cfc4b6]">
+										{tr(
+											locale,
+											"Expert Verified ($399) repeats the whole measurement ×5 for stability, and a human verifies the recommendations. Ask us through the order page.",
+											"Expert Verified ($399) повторяет весь замер ×5 для устойчивости, а рекомендации проверяет человек. Запросите через страницу заказа.",
+										)}
+									</p>
+									<Link to="/app/selena-order" search={{ project: projectId }} className="mt-5 inline-block">
+										<Button type="button" className="bg-[#8f5c34] text-[#fff7ee] hover:bg-[#7c4e2b]">
+											{tr(locale, "Open the order page", "Открыть страницу заказа")}
+										</Button>
+									</Link>
+								</>
+							)}
+						</section>
+					</>
+				)}
+				</div>
+			</main>
+		</div>
+	);
+}

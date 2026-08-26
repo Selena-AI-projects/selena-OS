@@ -1,10 +1,287 @@
 # Selena AI Visibility — owner operating guide
 
+## Deployment mode
+
+Selena deployments must run `DEPLOYMENT_MODE=local` (the Dockerfile default,
+also recorded in the operational runbook). The upstream `cloud` mode enables
+Stripe billing and a plan picker with the upstream product's own plans and
+prices, which do not match the published Selena catalog — never switch a
+customer-facing Selena deployment to `cloud` mode.
+
+## Spend guards before approving runs
+
+Two environment variables decide whether the admin queue will let an order be
+approved. Both are deliberate stops, not formalities.
+
+`SCHEDULE_MAINTENANCE_ENABLED` must stay `false` on any deployment that runs
+commercial orders. Unset means enabled, so the safe state is the explicit one.
+While recurring maintenance is on, a commercial order cannot be approved: the
+background scheduler and an order-scoped dispatch would both drive provider
+calls for the same work, which doubles spend and breaks cardinality.
+
+`SELENA_PROVIDER_BUDGET_USD` is the ceiling for a single order's worst-case
+cost, not a wallet balance — no provider balance is ever read. Its job is to
+catch a scope typo before the first paid call: an order that suddenly costs ten
+times the usual amount cannot be approved. A starting value of `25` leaves
+roughly a fourfold margin over the current per-order estimates while still
+stopping an order-of-magnitude mistake. Re-tune it against the first real
+provider invoice.
+
+Neither variable replaces a hard spend limit configured in the provider
+accounts themselves. Set those too: they are the only guard that survives a
+failure outside this application.
+
+## Turning measurement on
+
+Execution ships inert and stays inert until two separate decisions are made.
+
+`SELENA_MEASUREMENT_ENABLED=false` is the safe state, and unset means off. While
+it is not exactly `true`, the measurement worker records nothing, reads nothing
+and calls no adapter — a permit that is queued by mistake is simply dropped.
+
+`SELENA_MEASUREMENT_ADAPTER=noop` selects which adapter executes a permit. Only
+adapters that hold no credentials and perform no provider call — `noop`,
+`stub` — can be selected this way. Naming a live provider adapter is refused
+even after it is registered in the worker: turning on real spend is a code
+change the owner makes deliberately, alongside supplying credentials, and can
+never be the side effect of setting one variable. Until then the noop adapter
+records every run as `INVALID`, so an accidental run cannot produce something
+that reads like a real measurement.
+
+`SELENA_EMERGENCY_STOP=true` blocks execution at the point a provider would be
+contacted, including for runs that are already claimed. It is the one stop for
+every paid path, not only measurement: the onboarding research call refuses
+under it too, because a stop that halts runs while a button keeps calling a
+vendor is not a stop.
+
+`SELENA_SUGGEST_LLM` decides whether the onboarding "suggest competitors and
+questions" button may spend. Unset is off, and so is any value other than
+`free_budget` — the button is free to the customer and is a real LLM round trip
+on a live key, so switching it on is a deliberate act with a name attached.
+While it is off the server function refuses with `SUGGEST_LLM_NOT_BUDGETED`
+before anything is queued, and a job that was already queued refuses in the
+worker.
+
+That class is a gate, not a meter: nothing counts the calls or the dollars, so
+the limit that actually holds is the spend cap on the provider account.
+
+`SELENA_PROMO_CODES` is a comma-separated list of codes that let a plan request
+through free of charge while there is no online checkout — `AUGUST2026,FRIENDS`
+accepts either, matched case-insensitively. Unset means no code works and every
+request says the payment will be arranged by hand. A code marks the request
+free; on its own it starts nothing, because a request is a lead and the paid
+order is still built on the desk.
+
+`SELENA_FREE_AUTO_DISPATCH_ENABLED=true` is what changes that, and only for a
+request a promo code already made free: the customer's own questions from their
+own confirmed profile are approved, ordered and queued in one step, and they see
+"the measurement has already started" instead of a promise to get back to them.
+A paid request is untouched by this and still goes through the desk.
+
+Switch it on only once a Visitor View measurement has actually completed by
+hand. Before that the automation would hand the first customer an automated
+failure, which is worse than the wait it removes.
+
+Two caps bound it: `SELENA_FREE_AUTO_DISPATCH_MAX_PER_DAY` (default 3, counted
+across every account, because a leaked code is used from fresh ones) and
+`SELENA_FREE_AUTO_DISPATCH_MAX_PER_PROJECT_PER_DAY` (default 1). A value that
+does not parse falls back to the default rather than to no limit, and `0` means
+never. A request that hits a cap, or whose measurement fails to start, stays in
+the operator inbox as `AUTO_FAILED` or unchanged with the reason in the audit
+log — the lead is written before any of this runs and is never lost to it.
+
+Measurement jobs are never scheduled. A run starts from an explicit action on a
+specific permit, and a claimed permit is spent: it cannot be retried into a
+second provider call.
+
+### Rehearsing a cycle without spending anything
+
+`pnpm -C packages/lib rehearse:selena-stub-cycle` runs a whole cycle against a
+local Postgres with no provider behind it: it seeds a project, plans permits the
+way an approved order does, executes every one of them, and then checks that the
+runs, the mention rows and the cost-ledger rows landed together before printing
+the §12 metrics computed over them. It deletes everything it created.
+
+Nothing it writes can be mistaken for a measurement — the model is `stub`, every
+charge is zero, and the answers are synthesized from the permit itself. Run it
+after any change to extraction, storage or the metrics, and read the numbers as
+a proof that the chain is wired, never as evidence about a brand.
+
+The stub adapter is deliberately registered nowhere, so
+`SELENA_MEASUREMENT_ADAPTER=stub` in a deployment fails with
+`SELENA_ADAPTER_NOT_REGISTERED`: a rehearsal is something you run on purpose
+against a scratch database, not a state a live system can drift into.
+
+### Wiring the OpenRouter adapter for API View
+
+The API View measurement adapter is written and tested, but it is registered
+nowhere and cannot be selected — turning it on is these five steps, in this
+order, and none of them is an environment variable on its own.
+
+1. **Put a hard spend cap on the OpenRouter account itself.** It is the only
+   limit that still holds if this application misbehaves.
+2. **Supply credentials to the worker**: `OPENROUTER_API_KEY`, plus the model
+   the run is sold as — use one of the catalog's API View model ids
+   (`apiModelIds` in the contracts package), because a run measures the model
+   the customer bought.
+3. **Give the adapter its two per-permit reads.** A permit carries ids, not the
+   question and not the brand, and the adapter holds no database access on
+   purpose. `createSelenaMeasurementResolvers(db)` in
+   `packages/lib/src/selena-extraction-context.ts` returns both:
+   `resolveScenarioText` and `resolveExtractionContext`. Without the second one
+   the run is still stored and still billed, but with no mention, position or
+   citation extracted from it — the answer reference is kept, so extraction can
+   be re-run later, but no ledger metric moves until it is passed in.
+4. **Register the adapter** in `apps/worker/src/jobs/selena-measure.ts`:
+
+   ```ts
+   import { createOpenRouterAdapter } from "@workspace/lib/adapters/openrouter";
+   import { createSelenaMeasurementResolvers } from "@workspace/lib/selena-extraction-context";
+
+   const resolvers = createSelenaMeasurementResolvers(db);
+
+   const ADAPTERS: MeasurementAdapterRegistry = {
+     noop: createNoopMeasurementAdapter(),
+     openrouter: createOpenRouterAdapter({
+       apiKey: process.env.OPENROUTER_API_KEY ?? "",
+       model: "anthropic/claude-haiku-4.5",
+       fetchImpl: fetch,
+       system: "chatgpt_api",
+       resolveScenarioText: resolvers.resolveScenarioText,
+       resolveExtractionContext: resolvers.resolveExtractionContext,
+     }),
+   };
+   ```
+
+   `system` must be the sold system id the permits were planned with. Evidence
+   attributed to any other system is dropped from the ledger rather than stored
+   under a name the customer did not buy.
+
+5. **Widen the allowlist**, which is the actual owner gate:
+   `assertAdapterAllowed` in
+   `packages/selena-visibility-contracts/src/measurement-execution.ts` accepts
+   only names listed in `inertMeasurementAdapters`, so `openrouter` has to be
+   added there — and the list renamed to what it has then become, an
+   owner-approved list rather than an inert one — together with the test that
+   pins the gate shut. Registering the adapter without this edit changes
+   nothing: the run is refused with `SELENA_LIVE_ADAPTER_REQUIRES_OWNER_GO`.
+
+Only after all five does `SELENA_MEASUREMENT_ADAPTER=openrouter` with
+`SELENA_MEASUREMENT_ENABLED=true` start spending.
+
+What the adapter does and does not do, so the first invoice holds no surprises:
+
+- One permit is one request. Requests are sent at `temperature: 0`, because two
+  runs of the same scenario have to differ for reasons that are about the AI
+  answer, not about sampling.
+- Web search is never enabled and no search plugin is sent: API View is the
+  model's own knowledge, which is what the catalog sells it as.
+- The run row stores a reference to the answer — OpenRouter's generation id, or
+  a digest when the response carries none. Storing the answer text alongside it
+  is an owner decision taken deliberately (see `docs/selena-visibility/CABINET_MODEL.md`,
+  section 4a): competitor and citation analysis reads the answer, and the owner
+  chose retained text over extract-at-execution so metrics can be recomputed
+  without re-measuring. Retained text is tenant-scoped like every other run
+  field, holds the answer body only — never a provider error body, which can
+  echo the API key — and carries a retention window the owner sets.
+- `costUsd` is the cost OpenRouter reported for that call when it reports one,
+  and the coarse local per-run estimate otherwise; `costBasis` says which of the
+  two it was. Neither is a billed fact — reconcile against the provider invoice.
+- A provider HTTP error is recorded as `PROVIDER_HTTP_<code>` and a transport
+  failure as `TRANSPORT_ERROR`, with nothing quoted from the provider: error
+  bodies and request errors can echo the API key back, and run rows are read by
+  more people than hold the credential.
+
+### Wiring the Bright Data adapters for Visitor View
+
+Visitor View is what the local plan sells: what a person actually sees on
+ChatGPT, Gemini and Perplexity. One adapter instance measures one surface, and
+the account supplies one collector per surface, so the worker holds three of
+them — `brightdata-chatgpt`, `brightdata-gemini`, `brightdata-perplexity`.
+
+`BRIGHTDATA_API_TOKEN` on the worker is the only account-specific value. The
+collector ids are defaults in the code because a dataset id names a public
+collector rather than a secret; `SELENA_BRIGHTDATA_DATASET_CHATGPT` and its two
+siblings override one if a collector is ever replaced, and
+`SELENA_BRIGHTDATA_ENDPOINT` overrides the API address.
+
+`SELENA_MEASUREMENT_ADAPTER=brightdata` is the name to set — a **family**, not
+an adapter. One plan sells three surfaces, and a single adapter name would send
+all three to one of them: the customer would pay for a Gemini answer measured on
+ChatGPT, which the executor then refuses as evidence for a system the permit did
+not authorize. The family routes per permit instead, from the surface that
+permit authorizes. `SELENA_MEASUREMENT_ADAPTER=auto` does the same across both
+channels — visitor surfaces to Bright Data, API models to OpenRouter — which is
+what the full landscape plan needs, and it requires both credentials.
+
+Naming one adapter directly (`brightdata-chatgpt`) is for a scope that sells
+that one surface. Do not use it to "start small" on a three-surface order: a
+plain name is not routing, so the Gemini and Perplexity permits are spent on the
+ChatGPT collector, and the guard then refuses their answers as evidence for a
+system the permit did not authorize. Paid, and no numbers. Set the family.
+
+Every member of a family passes the same owner gate, and the whole family is
+checked before a permit is claimed — a family missing one registered adapter is
+refused while the permit is still unspent, not after it has been paid for.
+
+### Measuring the owner's own projects on Railway
+
+`pnpm -C apps/worker measure:journal` runs the owner's own projects
+through the product's own chain — configuration lock, order, run permits, the
+executor, the evidence ledger — from a command instead of the order desk. The
+result lands in the same tables a paid measurement writes to, so the report
+screens read it like any other.
+
+It exists to get off a CI runner. A runner is billed by the wall clock and
+spends nearly all of it idle waiting on a collector: one full pass bought about
+ninety cents of answers and cost six dollars of machine time. Railway is already
+running and already paid for.
+
+It is not a scheduler. One invocation measures the projects named in one
+variable, and it refuses to start without a spend ceiling it checks before the
+first request:
+
+| Variable | What it does |
+|---|---|
+| `SELENA_JOURNAL_TENANT` | The organization the projects and evidence belong to |
+| `SELENA_JOURNAL_PROJECTS` | Comma-separated slugs, or `all` |
+| `SELENA_JOURNAL_MAX_COST_USD` | Refuses to run if the plan would exceed it |
+
+It also needs what any live measurement needs: `DATABASE_URL`,
+`BRIGHTDATA_API_TOKEN`, `SELENA_MEASUREMENT_ENABLED=true` and a
+`SELENA_MEASUREMENT_ADAPTER` that reaches a Visitor View collector.
+
+On Railway it runs as its own service. The Dockerfile picks its stage from the
+service name — `web`, `worker`, `migrate` and now `measure` — so a service named
+anything else fails to build, and a service named `measure` is the job. It runs
+once and exits; a second run of the same question set on the same day costs
+nothing and says so, because a platform that restarts what exits must not be
+able to turn a job into a spending loop. `SELENA_JOURNAL_FORCE=1` repeats it on
+purpose.
+
+The question sets live in `packages/lib/src/selena-journal-scenarios.ts` and are
+versioned: the version is the prompt family's identity, so changing a question
+starts a new series rather than adding rows to the old one. Several versions
+read `api-view` because that is the run the set was first minted for; the name
+identifies the questions, not the channel, and which channel a measurement used
+is on each run row. Renaming them would split one series in two to fix a label.
+
+To run it on a schedule rather than by hand, give the `measure` service a cron
+schedule in its Railway settings. A month apart is the useful spacing for a
+visibility series, and the same-day guard means a schedule that fires twice
+cannot measure twice. A third-party set
+may be measured — the answers are public and the cost is ours — but its result
+does not reach a public page without that owner's recorded yes, and the script
+says so as it runs.
+
 ## Before accepting a paid order
 
 - Set package prices in the admin pricing configuration.
 - Until real prices and payment activation are supplied, keep checkout in
   `REQUEST_QUOTE` or payment test mode.
+- Payment endpoints refuse to record a payment until `SELENA_PAYMENTS_ENABLED`
+  is explicitly set to `true`; a recorded test payment moves the order to
+  `PAID_REVIEW_REQUIRED`, never directly to `APPROVED`.
 - Confirm brand, domain, region, languages, scenarios and expected cardinality.
 - Review the configuration lock, quote expiry, budget and provider status.
 

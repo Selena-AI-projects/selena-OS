@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 export const SELENA_CATALOG_VERSION = "selena-catalog-rc6-v1" as const;
-export const SELENA_SELLER_LEGAL_ENTITY = "PT Izi Jiza Bali" as const;
+export const SELENA_SELLER_LEGAL_ENTITY = "Selena Systems LLC" as const;
 export const SELENA_CHECKOUT_METADATA = {
 	sellerLegalEntity: SELENA_SELLER_LEGAL_ENTITY,
 	sellerStatus: "temporary_owner_approved_pending_kyc",
@@ -35,6 +35,8 @@ export type SelenaPlan = {
 	systems: readonly string[];
 	languageLimit: number;
 	scenarioLimit: number | null;
+	/** Questions accepted in a single measurement; null = negotiated scope. */
+	questionLimitPerMeasurement: number | null;
 	repeatCount: number | null;
 	includedFeatures: readonly string[];
 	excludedFeatures: readonly string[];
@@ -59,6 +61,7 @@ export const SELENA_CATALOG: Readonly<Record<SelenaPlanId, SelenaPlan>> = {
 		systems: [...visitorSurfaces],
 		languageLimit: 1,
 		scenarioLimit: 100,
+		questionLimitPerMeasurement: 25,
 		repeatCount: 1,
 		includedFeatures: [
 			"1 organization",
@@ -99,6 +102,7 @@ export const SELENA_CATALOG: Readonly<Record<SelenaPlanId, SelenaPlan>> = {
 		systems: [...visitorSurfaces, ...apiModelIds],
 		languageLimit: 2,
 		scenarioLimit: 100,
+		questionLimitPerMeasurement: 25,
 		repeatCount: 1,
 		includedFeatures: [
 			"all 8 systems",
@@ -126,11 +130,13 @@ export const SELENA_CATALOG: Readonly<Record<SelenaPlanId, SelenaPlan>> = {
 		channelScope: ["VISITOR_VIEW", "API_VIEW"],
 		systems: [...visitorSurfaces, ...apiModelIds],
 		languageLimit: 2,
-		scenarioLimit: 20,
+		scenarioLimit: 50,
+		questionLimitPerMeasurement: 25,
 		repeatCount: 5,
 		includedFeatures: [
-			"10 prompt families",
-			"800 planned answers",
+			"25 questions across up to 2 languages",
+			"2000 planned answers",
+			"deep review of the top 10 priorities",
 			"Evidence Ledger",
 			"PDF/XLSX/CSV",
 			"Recommendation Engine",
@@ -156,6 +162,7 @@ export const SELENA_CATALOG: Readonly<Record<SelenaPlanId, SelenaPlan>> = {
 		systems: [...visitorSurfaces, ...apiModelIds],
 		languageLimit: 0,
 		scenarioLimit: null,
+		questionLimitPerMeasurement: null,
 		repeatCount: null,
 		includedFeatures: [
 			"Expert Verified baseline",
@@ -204,6 +211,18 @@ export type CatalogScope = z.infer<typeof planCatalogSchema>;
 
 export function plannedAnswers(scope: Pick<CatalogScope, "languageScenarios" | "systems" | "repeats">): number {
 	return scope.languageScenarios * scope.systems.length * scope.repeats;
+}
+
+/**
+ * The plan's monthly answer allowance — the number the pricing page quotes
+ * (100 scenarios × 3 systems = 300, and so on). Null when the plan sets no
+ * scenario or repeat bound (Growth), meaning the allowance is negotiated,
+ * not computed.
+ */
+export function monthlyAnswerAllowance(planId: SelenaPlanId): number | null {
+	const plan = SELENA_CATALOG[planId];
+	if (plan.scenarioLimit === null || plan.repeatCount === null) return null;
+	return plan.scenarioLimit * plan.systems.length * plan.repeatCount;
 }
 
 export function getPlan(planId: SelenaPlanId): SelenaPlan {
