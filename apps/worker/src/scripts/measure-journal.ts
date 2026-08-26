@@ -250,7 +250,11 @@ async function measure(slug: string): Promise<void> {
 
 	console.log(`\n${scenario.brand} — ${rows.length} questions × ${systems.length} surfaces (~$${cost.toFixed(4)})`);
 	if (scenario.ownership === "third-party") {
-		console.log("  third-party: measurable, but not publishable without that owner's recorded yes");
+		console.log(
+			scenario.consent
+				? `  third-party: publishable — ${scenario.consent.grantedBy} agreed on ${scenario.consent.recordedOn}`
+				: "  third-party: measurable, but not publishable without that owner's recorded yes",
+		);
 	}
 
 	const profile = await repositories.profiles.get(ctx, project.id);
