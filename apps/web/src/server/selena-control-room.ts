@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { randomUUID } from "node:crypto";
-import { db } from "@workspace/lib/db/db";
+import { selenaWebDb as db } from "@workspace/lib/db/db";
+import { isSelenaStagingMvp } from "@workspace/lib/db/provisioning";
 import {
 	brands,
 	scrApprovals,
@@ -35,6 +36,30 @@ type AuditDatabase = Pick<ControlRoomDatabase, "execute" | "insert" | "select">;
 const uuidSchema = z.string().uuid();
 const brandSchema = z.object({ brandId: z.string().min(1).max(120) });
 const policyVersionSchema = z.string().trim().min(1).max(120);
+const STAGING_DEMO_BRAND_ID = "selena";
+const STAGING_DEMO_ORGANIZATION_ID = "default";
+const STAGING_DEMO_ACCOUNT_REF = "Postiz local dry run";
+const STAGING_DEMO_CONTENT_TITLE = "Selena Systems LinkedIn Page dry run";
+
+function isLocalLinkedInDryRunAccount(account: {
+	platform: string;
+	providerAccountRef: string;
+	providerIntegrationId: string | null;
+	status: string;
+	allowlisted: boolean;
+}): boolean {
+	return (
+		account.platform === "linkedin_page_dry_run" &&
+		account.providerAccountRef === STAGING_DEMO_ACCOUNT_REF &&
+		account.providerIntegrationId === null &&
+		account.status === "DRY_RUN" &&
+		account.allowlisted === false
+	);
+}
+
+function isSelenaStagingDemo(context: AuthContext, brandId: string): boolean {
+	return isSelenaStagingMvp() && context.tenantId === STAGING_DEMO_ORGANIZATION_ID && brandId === STAGING_DEMO_BRAND_ID;
+}
 
 function assertWritable(context: AuthContext): void {
 	if (!canWrite(context)) throw new Error("Forbidden: editor, publisher, or owner access required");
@@ -346,6 +371,7 @@ export const getControlRoomWorkspaceFn = createServerFn({ method: "GET" })
 
 			return {
 				role: context.role,
+				stagingMvp: isSelenaStagingDemo(context, data.brandId),
 				content,
 				versions,
 				assets,
@@ -369,6 +395,121 @@ export const getControlRoomWorkspaceFn = createServerFn({ method: "GET" })
 					createdAt: version.createdAt,
 				})),
 			};
+		});
+	});
+
+export const bootstrapStagingControlRoomFn = createServerFn({ method: "POST" })
+	.validator(brandSchema)
+	.handler(async ({ data }) => {
+		const context = await resolveSessionAuthContext();
+		assertHumanReviewer(context);
+		if (!isSelenaStagingDemo(context, data.brandId)) {
+			throw new Error("The local LinkedIn dry run is available only in the Selena staging workspace");
+		}
+
+		const now = new Date();
+		const evidenceExpiresAt = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+		const evidence = [
+			{
+				source: "Selena staging fixture",
+				purpose: "LinkedIn Page dry run",
+				verifiedAt: now.toISOString(),
+				expiresAt: evidenceExpiresAt.toISOString(),
+			},
+		];
+		const disclosure = { noPublish: true, stagingFixture: true };
+		const body =
+			"Selena Systems is preparing a controlled LinkedIn Page workflow. This staging item validates human approval and release intent handling only.";
+		const ctaUrl = "https://selenasystems.com";
+		const policyVersion = "selena-staging-dry-run/v1";
+		const contentHash = contentVersionHash({ body, ctaUrl, claims: [], evidence, disclosure, policyVersion });
+
+		return withControlRoomTransaction(context, data.brandId, async (tx) => {
+			let [account] = await tx
+				.select()
+				.from(scrChannelAccounts)
+				.where(
+					and(
+						eq(scrChannelAccounts.organizationId, context.tenantId),
+						eq(scrChannelAccounts.brandId, data.brandId),
+						eq(scrChannelAccounts.platform, "linkedin_page_dry_run"),
+						eq(scrChannelAccounts.providerAccountRef, STAGING_DEMO_ACCOUNT_REF),
+					),
+				)
+				.limit(1);
+			if (!account) {
+				[account] = await tx
+					.insert(scrChannelAccounts)
+					.values({
+						organizationId: context.tenantId,
+						brandId: data.brandId,
+						platform: "linkedin_page_dry_run",
+						providerAccountRef: STAGING_DEMO_ACCOUNT_REF,
+						status: "DRY_RUN",
+						allowlisted: false,
+						createdBy: context.actorId,
+					})
+					.returning();
+				await appendAudit(tx, {
+					context,
+					brandId: data.brandId,
+					action: "staging.linkedin_dry_run_prepared",
+					aggregateType: "channel_account",
+					aggregateId: account.id,
+					metadata: { platform: account.platform, noPublish: true },
+				});
+			}
+
+			let [content] = await tx
+				.select()
+				.from(scrContentItems)
+				.where(
+					and(
+						eq(scrContentItems.organizationId, context.tenantId),
+						eq(scrContentItems.brandId, data.brandId),
+						eq(scrContentItems.title, STAGING_DEMO_CONTENT_TITLE),
+					),
+				)
+				.limit(1);
+			if (!content) {
+				[content] = await tx
+					.insert(scrContentItems)
+					.values({
+						organizationId: context.tenantId,
+						brandId: data.brandId,
+						title: STAGING_DEMO_CONTENT_TITLE,
+						createdBy: context.actorId,
+					})
+					.returning();
+				const [version] = await tx
+					.insert(scrContentVersions)
+					.values({
+						organizationId: context.tenantId,
+						brandId: data.brandId,
+						contentId: content.id,
+						version: 1,
+						body,
+						ctaUrl,
+						claims: [],
+						evidence,
+						disclosure,
+						policyVersion,
+						contentHash,
+						evidenceExpiresAt,
+						createdBy: context.actorId,
+					})
+					.returning();
+				await appendAudit(tx, {
+					context,
+					brandId: data.brandId,
+					action: "staging.demo_content_created",
+					aggregateType: "content_version",
+					aggregateId: version.id,
+					metadata: { noPublish: true, contentHash: version.contentHash },
+				});
+			}
+
+			return { accountId: account.id, contentId: content.id };
 		});
 	});
 
@@ -577,21 +718,25 @@ export const approveContentVersionFn = createServerFn({ method: "POST" })
 				)
 				.orderBy(desc(scrContentVersions.version))
 				.limit(1);
-			if (latestVersion?.id !== version.id) throw new Error("A newer content version invalidates this approval request");
-			if (!account.allowlisted || account.status !== "ACTIVE")
+			if (latestVersion?.id !== version.id)
+				throw new Error("A newer content version invalidates this approval request");
+			if (!isLocalLinkedInDryRunAccount(account) && (!account.allowlisted || account.status !== "ACTIVE"))
 				throw new Error("Target account is not allowlisted for release");
-			if (assets.length !== 1 || assets[0]?.scanStatus !== "PASSED") {
-				throw new Error("Approval requires one malware-scanned asset with PASSED status");
+			if (assets.length > 1 || (assets.length === 1 && assets[0]?.scanStatus !== "PASSED")) {
+				throw new Error("Approval requires every attached asset to have PASSED malware scanning");
 			}
 			if (!Array.isArray(version.evidence) || version.evidence.length === 0 || !version.evidenceExpiresAt)
 				throw new Error("Approval requires verified evidence with an expiry");
 			if (version.evidenceExpiresAt <= now) throw new Error("Evidence has expired");
-			if (assets.some((asset) => !asset.rightsExpiresAt)) throw new Error("Approval requires verified asset rights");
-			if (assets.some((asset) => asset.rightsExpiresAt && asset.rightsExpiresAt <= now))
-				throw new Error("Asset rights have expired");
-			if (assets.some((asset) => !asset.consentExpiresAt)) throw new Error("Approval requires verified asset consent");
-			if (assets.some((asset) => asset.consentExpiresAt && asset.consentExpiresAt <= now))
-				throw new Error("Asset consent has expired");
+			if (assets.length > 0) {
+				if (assets.some((asset) => !asset.rightsExpiresAt)) throw new Error("Approval requires verified asset rights");
+				if (assets.some((asset) => asset.rightsExpiresAt && asset.rightsExpiresAt <= now))
+					throw new Error("Asset rights have expired");
+				if (assets.some((asset) => !asset.consentExpiresAt))
+					throw new Error("Approval requires verified asset consent");
+				if (assets.some((asset) => asset.consentExpiresAt && asset.consentExpiresAt <= now))
+					throw new Error("Asset consent has expired");
+			}
 			const calculatedContentHash = contentVersionHash({
 				body: version.body,
 				ctaUrl: version.ctaUrl,
@@ -775,7 +920,11 @@ export const queueReleaseIntentFn = createServerFn({ method: "POST" })
 					.orderBy(desc(scrApprovals.createdAt))
 					.limit(1),
 				tx
-					.select({ scope: scrKillSwitches.scope, brandId: scrKillSwitches.brandId, channelAccountId: scrKillSwitches.channelAccountId })
+					.select({
+						scope: scrKillSwitches.scope,
+						brandId: scrKillSwitches.brandId,
+						channelAccountId: scrKillSwitches.channelAccountId,
+					})
 					.from(scrKillSwitches)
 					.where(and(eq(scrKillSwitches.organizationId, context.tenantId), eq(scrKillSwitches.active, true))),
 			]);
@@ -795,7 +944,8 @@ export const queueReleaseIntentFn = createServerFn({ method: "POST" })
 				.orderBy(desc(scrContentVersions.version))
 				.limit(1);
 			if (latestVersion?.id !== version.id) throw new Error("A newer content version invalidates this release intent");
-			if (!account.allowlisted || account.status !== "ACTIVE") throw new Error("Target account is not allowlisted for release");
+			if (!isLocalLinkedInDryRunAccount(account) && (!account.allowlisted || account.status !== "ACTIVE"))
+				throw new Error("Target account is not allowlisted for release");
 			if (
 				activeKillSwitches.some(
 					(killSwitch) =>
@@ -806,24 +956,30 @@ export const queueReleaseIntentFn = createServerFn({ method: "POST" })
 			) {
 				throw new Error("An active kill switch blocks this release");
 			}
-			if (!Array.isArray(version.evidence) || version.evidence.length === 0 || !version.evidenceExpiresAt || version.evidenceExpiresAt <= now) {
+			if (
+				!Array.isArray(version.evidence) ||
+				version.evidence.length === 0 ||
+				!version.evidenceExpiresAt ||
+				version.evidenceExpiresAt <= now
+			) {
 				throw new Error("Fresh verified evidence is required to queue a release");
 			}
 			if (
-				assets.length !== 1 ||
-				assets.some(
-					(asset) =>
-						asset.scanStatus !== "PASSED" ||
-						!asset.objectVersionId ||
-						!asset.scanProviderEventRef ||
-						!asset.verifiedAt ||
-						!asset.rightsExpiresAt ||
-						asset.rightsExpiresAt <= now ||
-						!asset.consentExpiresAt ||
-						asset.consentExpiresAt <= now,
-					)
+				assets.length > 1 ||
+				(assets.length === 1 &&
+					assets.some(
+						(asset) =>
+							asset.scanStatus !== "PASSED" ||
+							!asset.objectVersionId ||
+							!asset.scanProviderEventRef ||
+							!asset.verifiedAt ||
+							!asset.rightsExpiresAt ||
+							asset.rightsExpiresAt <= now ||
+							!asset.consentExpiresAt ||
+							asset.consentExpiresAt <= now,
+					))
 			) {
-				throw new Error("Release requires one verified, scanned asset with fresh rights and consent");
+				throw new Error("Release requires every attached asset to be verified, scanned, and current");
 			}
 			const currentContentHash = contentVersionHash({
 				body: version.body,

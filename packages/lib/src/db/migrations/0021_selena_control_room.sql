@@ -745,6 +745,16 @@ CREATE POLICY channel_accounts_web_select ON selena_registry.channel_accounts
   USING (selena_registry.can_access_brand(organization_id, brand_id, ARRAY['web']));
 CREATE POLICY channel_accounts_web_delete_denied ON selena_registry.channel_accounts
   FOR DELETE TO selena_web_runtime USING (false);
+CREATE POLICY channel_accounts_web_insert_dry_run ON selena_registry.channel_accounts
+  FOR INSERT TO selena_web_runtime
+  WITH CHECK (
+    platform = 'linkedin_page_dry_run'
+    AND provider_account_ref = 'Postiz local dry run'
+    AND provider_integration_id IS NULL
+    AND status = 'DRY_RUN'
+    AND allowlisted = false
+    AND selena_registry.can_write_brand(organization_id, brand_id, ARRAY['web'])
+  );
 CREATE POLICY channel_accounts_gateway_select ON selena_registry.channel_accounts
   FOR SELECT TO selena_gateway_runtime
   USING (selena_registry.can_access_brand(organization_id, brand_id, ARRAY['gateway']));
@@ -1055,7 +1065,7 @@ GRANT USAGE ON SCHEMA selena_audit TO selena_web_runtime, selena_gateway_runtime
 GRANT USAGE ON SCHEMA selena_ingest_raw TO selena_ingestion_runtime;
 GRANT USAGE ON SCHEMA selena_performance TO selena_ingestion_runtime, selena_analytics_runtime;
 
-GRANT SELECT ON selena_registry.channel_accounts TO selena_web_runtime;
+GRANT SELECT, INSERT ON selena_registry.channel_accounts TO selena_web_runtime;
 GRANT SELECT, INSERT, UPDATE ON selena_registry.content_items TO selena_web_runtime;
 GRANT SELECT, INSERT ON selena_registry.content_versions TO selena_web_runtime;
 GRANT SELECT, INSERT ON selena_registry.content_assets TO selena_web_runtime;

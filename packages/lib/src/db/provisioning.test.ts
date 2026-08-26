@@ -1,5 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { slugify } from "./provisioning";
+import { isSelenaStagingMvp, slugify } from "./provisioning";
+
+describe("isSelenaStagingMvp", () => {
+	it("enables the staging bootstrap only for the explicit true value", () => {
+		expect(isSelenaStagingMvp({ SELENA_STAGING_MVP: "true" })).toBe(true);
+		expect(isSelenaStagingMvp({ SELENA_STAGING_MVP: "TRUE" })).toBe(false);
+		expect(isSelenaStagingMvp({ SELENA_STAGING_MVP: "false" })).toBe(false);
+		expect(isSelenaStagingMvp({})).toBe(false);
+	});
+});
 
 describe("slugify", () => {
 	it("lowercases", () => {

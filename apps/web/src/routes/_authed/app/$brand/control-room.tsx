@@ -1,12 +1,6 @@
 import { type FormEvent, useEffect, useState, useTransition } from "react";
 import { createFileRoute, useRouter } from "@tanstack/react-router";
-import {
-	IconAlertTriangle,
-	IconFileText,
-	IconLockCheck,
-	IconPlus,
-	IconRefresh,
-} from "@tabler/icons-react";
+import { IconAlertTriangle, IconFileText, IconLockCheck, IconPlus, IconRefresh } from "@tabler/icons-react";
 import { Badge } from "@workspace/ui/components/badge";
 import { Button } from "@workspace/ui/components/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@workspace/ui/components/card";
@@ -17,6 +11,7 @@ import { Textarea } from "@workspace/ui/components/textarea";
 import { buildTitle, getAppName, getBrandName } from "@/lib/route-head";
 import {
 	approveContentVersionFn,
+	bootstrapStagingControlRoomFn,
 	createContentVersionFn,
 	createControlRoomContentFn,
 	getControlRoomWorkspaceFn,
@@ -96,13 +91,30 @@ function ControlRoomPage() {
 	const [revisionBody, setRevisionBody] = useState("");
 	const [revisionCta, setRevisionCta] = useState("");
 	const [revisionPolicy, setRevisionPolicy] = useState("selena-brand-pack/v1");
+	const [stagingBootstrapStarted, setStagingBootstrapStarted] = useState(false);
 
 	useEffect(() => {
 		setApprovalVersionId((value) => value || data.versions[0]?.id || "");
 		setRevisionContentId((value) => value || data.content[0]?.id || "");
 		setApprovalAccountId((value) => value || data.accounts[0]?.id || "");
-		setReleaseApprovalId((value) => value || data.approvals.find((approval) => approval.decision === "APPROVED")?.id || "");
+		setReleaseApprovalId(
+			(value) => value || data.approvals.find((approval) => approval.decision === "APPROVED")?.id || "",
+		);
 	}, [data.accounts, data.approvals, data.content, data.versions]);
+
+	useEffect(() => {
+		if (!data.stagingMvp || stagingBootstrapStarted) return;
+		setStagingBootstrapStarted(true);
+		startTransition(async () => {
+			try {
+				await bootstrapStagingControlRoomFn({ data: { brandId } });
+				await router.invalidate();
+				setNotice("Selena staging dry run is ready. No external connection was created.");
+			} catch (error) {
+				setNotice(error instanceof Error ? error.message : "Unable to prepare the staging dry run");
+			}
+		});
+	}, [brandId, data.stagingMvp, router, stagingBootstrapStarted]);
 
 	function run(action: () => Promise<unknown>, successMessage: string) {
 		startTransition(async () => {
@@ -340,11 +352,22 @@ function ControlRoomPage() {
 					<div className="grid gap-5 xl:grid-cols-2">
 						<Card className="rounded-md shadow-none">
 							<CardHeader>
-								<CardTitle className="text-base">LinkedIn connection</CardTitle>
+								<CardTitle className="text-base">LinkedIn Page via Postiz</CardTitle>
 							</CardHeader>
 							<CardContent>
-								<p className="text-sm text-muted-foreground">
-									No account can be allowlisted until the isolated Postiz contract is verified by the Release Gateway.
+								<div className="flex flex-wrap items-center gap-2">
+									<StatusBadge
+										value={
+											data.accounts.some((account) => account.platform === "linkedin_page_dry_run")
+												? "READY"
+												: "PENDING"
+										}
+									/>
+									<Badge variant="outline">No-publish dry run</Badge>
+								</div>
+								<p className="mt-3 text-sm text-muted-foreground">
+									The staging target creates an internal release intent only. It has no Postiz token, integration ID, or
+									LinkedIn Page access.
 								</p>
 							</CardContent>
 						</Card>
@@ -354,7 +377,8 @@ function ControlRoomPage() {
 							</CardHeader>
 							<CardContent>
 								<p className="text-sm text-muted-foreground">
-									Private Storage, byte hashing, and malware scanning are not connected. Manual asset metadata is disabled.
+									The staging sample is text-only. Media stays blocked until private Storage and malware scanning are
+									connected.
 								</p>
 							</CardContent>
 						</Card>
@@ -498,44 +522,46 @@ function ControlRoomPage() {
 					</Card>
 				</TabsContent>
 
-					<TabsContent value="releases" className="space-y-5">
-						<div className="grid gap-5 xl:grid-cols-[1fr_1fr_auto]">
-							<Card className="rounded-md shadow-none">
-								<CardHeader>
-									<CardTitle className="text-base">Release queue</CardTitle>
-								</CardHeader>
-								<CardContent>
-									<form className="flex flex-wrap gap-2" onSubmit={submitReleaseIntent}>
-										<select
-											required
-											className="border-input h-9 min-w-0 flex-1 rounded-md border bg-transparent px-3 text-sm"
-											value={releaseApprovalId}
-											onChange={(event) => setReleaseApprovalId(event.target.value)}
-										>
-											<option value="" disabled>
-												Approved version
-											</option>
-											{data.approvals
-												.filter((approval) => approval.decision === "APPROVED")
-												.map((approval) => (
-													<option value={approval.id} key={approval.id}>
-														{shortHash(approval.contentHash)}
-													</option>
-												))}
-										</select>
-										<Button disabled={pending || !releaseApprovalId} type="submit">
-											Queue
-										</Button>
-									</form>
-								</CardContent>
-							</Card>
-							<Card className="rounded-md shadow-none">
+				<TabsContent value="releases" className="space-y-5">
+					<div className="grid gap-5 xl:grid-cols-[1fr_1fr_auto]">
+						<Card className="rounded-md shadow-none">
+							<CardHeader>
+								<CardTitle className="text-base">Release queue</CardTitle>
+							</CardHeader>
+							<CardContent>
+								<form className="flex flex-wrap gap-2" onSubmit={submitReleaseIntent}>
+									<select
+										required
+										className="border-input h-9 min-w-0 flex-1 rounded-md border bg-transparent px-3 text-sm"
+										value={releaseApprovalId}
+										onChange={(event) => setReleaseApprovalId(event.target.value)}
+									>
+										<option value="" disabled>
+											Approved version
+										</option>
+										{data.approvals
+											.filter((approval) => approval.decision === "APPROVED")
+											.map((approval) => (
+												<option value={approval.id} key={approval.id}>
+													{shortHash(approval.contentHash)}
+												</option>
+											))}
+									</select>
+									<Button disabled={pending || !releaseApprovalId} type="submit">
+										{data.stagingMvp ? "Queue dry run" : "Queue"}
+									</Button>
+								</form>
+							</CardContent>
+						</Card>
+						<Card className="rounded-md shadow-none">
 							<CardHeader>
 								<CardTitle className="text-base">Release Gateway</CardTitle>
 							</CardHeader>
 							<CardContent>
 								<p className="text-sm text-muted-foreground">
-									No manifest can be signed or dispatched until the separate Gateway is deployed.
+									{data.stagingMvp
+										? "This staging path stops at a local outbox record. It cannot sign, dispatch, or publish."
+										: "No manifest can be signed or dispatched until the separate Gateway is deployed."}
 								</p>
 							</CardContent>
 						</Card>
@@ -561,47 +587,47 @@ function ControlRoomPage() {
 									Stop brand
 								</Button>
 							</CardContent>
-							</Card>
-						</div>
-						<Card className="rounded-md shadow-none">
-							<CardHeader>
-								<CardTitle className="text-base">Release intents</CardTitle>
-							</CardHeader>
-							<CardContent>
-								<Table>
-									<TableHeader>
-										<TableRow>
-											<TableHead>Status</TableHead>
-											<TableHead>Platform</TableHead>
-											<TableHead>Outbox</TableHead>
-											<TableHead>Created</TableHead>
-										</TableRow>
-									</TableHeader>
-									<TableBody>
-										{data.releaseIntents.length === 0 ? (
-											<EmptyRows columns={4} label="No release intents" />
-										) : (
-											data.releaseIntents.map((intent) => {
-												const outbox = data.outboxEvents.find((event) => event.releaseIntentId === intent.id);
-												return (
-													<TableRow key={intent.id}>
-														<TableCell>
-															<StatusBadge value={intent.status} />
-														</TableCell>
-														<TableCell>{intent.platform}</TableCell>
-														<TableCell>
-															<StatusBadge value={outbox?.status ?? null} />
-														</TableCell>
-														<TableCell>{formatDate(intent.createdAt)}</TableCell>
-													</TableRow>
-												);
-											})
-										)}
-									</TableBody>
-								</Table>
-							</CardContent>
 						</Card>
-						<Card className="rounded-md shadow-none">
+					</div>
+					<Card className="rounded-md shadow-none">
+						<CardHeader>
+							<CardTitle className="text-base">Release intents</CardTitle>
+						</CardHeader>
+						<CardContent>
+							<Table>
+								<TableHeader>
+									<TableRow>
+										<TableHead>Status</TableHead>
+										<TableHead>Platform</TableHead>
+										<TableHead>Outbox</TableHead>
+										<TableHead>Created</TableHead>
+									</TableRow>
+								</TableHeader>
+								<TableBody>
+									{data.releaseIntents.length === 0 ? (
+										<EmptyRows columns={4} label="No release intents" />
+									) : (
+										data.releaseIntents.map((intent) => {
+											const outbox = data.outboxEvents.find((event) => event.releaseIntentId === intent.id);
+											return (
+												<TableRow key={intent.id}>
+													<TableCell>
+														<StatusBadge value={intent.status} />
+													</TableCell>
+													<TableCell>{intent.platform}</TableCell>
+													<TableCell>
+														<StatusBadge value={outbox?.status ?? null} />
+													</TableCell>
+													<TableCell>{formatDate(intent.createdAt)}</TableCell>
+												</TableRow>
+											);
+										})
+									)}
+								</TableBody>
+							</Table>
+						</CardContent>
+					</Card>
+					<Card className="rounded-md shadow-none">
 						<CardHeader>
 							<CardTitle className="text-base">Gateway manifests</CardTitle>
 						</CardHeader>

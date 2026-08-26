@@ -50,6 +50,16 @@ const LOCAL_ORG = {
 	slug: "default",
 } as const;
 
+const SELENA_STAGING_ORG = {
+	id: "default",
+	name: "Selena Systems",
+	slug: "selena-systems",
+} as const;
+
+export function isSelenaStagingMvp(env: Record<string, string | undefined> = process.env): boolean {
+	return env.SELENA_STAGING_MVP === "true";
+}
+
 /**
  * Create the organization + admin membership for a freshly-created
  * local-mode user. Called from the better-auth `user.create.after`
@@ -57,22 +67,36 @@ const LOCAL_ORG = {
  * rights.
  */
 export async function provisionLocalOrg(input: { userId: string }): Promise<{ orgId: string }> {
-	await db.insert(organization).values({
-		id: LOCAL_ORG.id,
-		name: LOCAL_ORG.name,
-		slug: LOCAL_ORG.slug,
-		createdAt: new Date(),
+	const localOrg = isSelenaStagingMvp() ? SELENA_STAGING_ORG : LOCAL_ORG;
+	await db.transaction(async (tx) => {
+		await tx.insert(organization).values({
+			id: localOrg.id,
+			name: localOrg.name,
+			slug: localOrg.slug,
+			createdAt: new Date(),
+		});
+
+		await tx.insert(member).values({
+			id: crypto.randomUUID(),
+			organizationId: localOrg.id,
+			userId: input.userId,
+			role: "admin",
+			createdAt: new Date(),
+		});
+
+		if (isSelenaStagingMvp()) {
+			await tx.insert(brands).values({
+				id: "selena",
+				organizationId: localOrg.id,
+				name: "Selena Systems",
+				website: "https://selenasystems.com",
+				enabled: false,
+				onboarded: true,
+			});
+		}
 	});
 
-	await db.insert(member).values({
-		id: crypto.randomUUID(),
-		organizationId: LOCAL_ORG.id,
-		userId: input.userId,
-		role: "admin",
-		createdAt: new Date(),
-	});
-
-	return { orgId: LOCAL_ORG.id };
+	return { orgId: localOrg.id };
 }
 
 /**

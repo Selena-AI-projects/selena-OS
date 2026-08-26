@@ -51,6 +51,19 @@ export const ENV_REGISTRY: EnvVarSpec[] = [
 		description: "PostgreSQL connection string.",
 	},
 	{
+		name: "SELENA_WEB_DATABASE_URL",
+		scope: "server",
+		requiredBy: "optional",
+		credential: true,
+		description: "Restricted PostgreSQL connection used only by Selena Control Room server functions.",
+	},
+	{
+		name: "SELENA_STAGING_MVP",
+		scope: "server",
+		requiredBy: "optional",
+		description: "Enables the isolated Selena staging bootstrap and local no-publish LinkedIn dry run.",
+	},
+	{
 		name: "APP_URL",
 		scope: "server",
 		requiredBy: ["cloud"],
