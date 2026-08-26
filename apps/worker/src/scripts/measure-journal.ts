@@ -20,23 +20,22 @@
  *   SELENA_MEASUREMENT_ENABLED=true SELENA_MEASUREMENT_ADAPTER=brightdata \
  *   SELENA_JOURNAL_TENANT=<organization id> \
  *   SELENA_JOURNAL_PROJECTS=korafoodhall SELENA_JOURNAL_MAX_COST_USD=0.5 \
- *   pnpm -C packages/lib exec tsx scripts/selena-measure-journal.ts
+ *   pnpm -C apps/worker exec tsx src/scripts/measure-journal.ts
  */
 
-import { visitorSurfaces } from "@workspace/selena-visibility-contracts";
-import { and, eq, gte } from "drizzle-orm";
-import { createBrightDataAdapter } from "../src/adapters/brightdata-measurement-adapter";
-import { db } from "../src/db/db";
-import * as schema from "../src/db/schema";
-import { createSelenaMeasurementResolvers, lockedProfileBlock } from "../src/selena-extraction-context";
-import { journalScenario, journalScenarioSlugs } from "../src/selena-journal-scenarios";
+import { brightDataVisitorSurface, createBrightDataAdapter } from "@workspace/lib/adapters/brightdata";
+import { db } from "@workspace/lib/db/db";
+import * as schema from "@workspace/lib/db/schema";
+import { createSelenaMeasurementResolvers, lockedProfileBlock } from "@workspace/lib/selena-extraction-context";
+import { journalScenario, journalScenarioSlugs } from "@workspace/lib/selena-journal-scenarios";
 import {
 	type MeasurementAdapterRegistry,
 	measurementAdapterNamesFor,
 	measurementConfigFromEnv,
 	runMeasurementForPermit,
-} from "../src/selena-run-executor";
-import { createSelenaRepositories, type SelenaRepositoryContext } from "../src/selena-visibility-repositories";
+} from "@workspace/lib/selena-run-executor";
+import { createSelenaRepositories, type SelenaRepositoryContext } from "@workspace/lib/selena-visibility-repositories";
+import { and, eq, gte } from "drizzle-orm";
 
 /** What Bright Data's pricing page showed per answer; the ceiling is checked against it. */
 const PRICE_PER_ANSWER_USD = 0.0015;
@@ -233,7 +232,12 @@ async function measure(slug: string): Promise<void> {
 		return;
 	}
 	const rows = await scenarioRowsFor(project.id, slug);
-	const systems = visitorSurfaces.map((systemId) => ({ systemId, channel: "VISITOR" as const }));
+	// The surfaces the collectors are pointed at, under the names the catalog
+	// sells them as — the adapter's own map, so the two cannot drift apart.
+	const systems = BRIGHTDATA_SURFACES.map((surface) => ({
+		systemId: brightDataVisitorSurface[surface],
+		channel: "VISITOR" as const,
+	}));
 	const expectedRuns = rows.length * systems.length;
 	const cost = expectedRuns * PRICE_PER_ANSWER_USD;
 	if (cost > maxCostUsd) {

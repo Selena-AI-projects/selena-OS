@@ -9,8 +9,7 @@
 		"compare:onboarding": "tsx scripts/compare-onboarding.ts",
 		"generate:auth-schema": "bash scripts/generate-auth-schema.sh",
 		"verify:membership-dedupe": "tsx scripts/verify-membership-dedupe.ts",
-		"rehearse:selena-stub-cycle": "tsx scripts/selena-stub-cycle.ts",
-		"measure:selena-journal": "tsx scripts/selena-measure-journal.ts"
+		"rehearse:selena-stub-cycle": "tsx scripts/selena-stub-cycle.ts"
 	},
 	"exports": {
 		"./db/db": "./src/db/db.ts",
@@ -52,12 +51,12 @@
 		"./public-source-adapters": "./src/public-source-adapters.ts",
 		"./public-provider-gates": "./src/public-provider-gates.ts",
 		"./recommendation-persistence": "./src/recommendation-persistence.ts",
-		"./recommendation-engine": "./src/recommendation-engine.ts",
 		"./selena-entities": "./src/selena-entities.ts",
 		"./selena-manual-pilot": "./src/selena-manual-pilot.ts",
 		"./selena-dispatch": "./src/selena-dispatch.ts",
 		"./selena-preflight": "./src/selena-preflight.ts",
 		"./selena-run-executor": "./src/selena-run-executor.ts",
+		"./selena-journal-scenarios": "./src/selena-journal-scenarios.ts",
 		"./selena-answer-extraction": "./src/selena-answer-extraction.ts",
 		"./selena-citation-gap": "./src/selena-citation-gap.ts",
 		"./selena-cycle-diff": "./src/selena-cycle-diff.ts",
