@@ -1,4 +1,4 @@
-import { type Icon } from "@tabler/icons-react";
+import type { Icon } from "@tabler/icons-react";
 
 import {
 	SidebarGroup,
@@ -15,6 +15,7 @@ export interface NavItem {
 	url: string;
 	icon?: Icon;
 	absolute?: boolean;
+	hash?: string;
 }
 
 export interface NavGroup {
@@ -33,8 +34,11 @@ export function NavMain({ groups }: { groups: NavGroup[] }) {
 		return absolute ? url : `/app/${brandId}${url}`;
 	};
 
-	const isActive = (url: string, absolute?: boolean) => {
+	const isActive = (url: string, absolute?: boolean, hash?: string) => {
 		const href = getHref(url, absolute);
+		if (hash) {
+			return pathname === href && (location.hash === `#${hash}` || (hash === "inbox" && !location.hash));
+		}
 		if (href === `/app/${brandId}` || href === `/app/${brandId}/`) {
 			return pathname === `/app/${brandId}` || pathname === `/app/${brandId}/`;
 		}
@@ -49,8 +53,12 @@ export function NavMain({ groups }: { groups: NavGroup[] }) {
 					<SidebarMenu>
 						{group.items.map((item) => (
 							<SidebarMenuItem key={item.title}>
-								<SidebarMenuButton asChild tooltip={item.title} isActive={isActive(item.url, item.absolute)}>
-									<Link to={getHref(item.url, item.absolute)} onClick={() => setOpenMobile(false)}>
+								<SidebarMenuButton
+									asChild
+									tooltip={item.title}
+									isActive={isActive(item.url, item.absolute, item.hash)}
+								>
+									<Link to={getHref(item.url, item.absolute)} hash={item.hash} onClick={() => setOpenMobile(false)}>
 										{item.icon && <item.icon />}
 										<span>{item.title}</span>
 									</Link>
