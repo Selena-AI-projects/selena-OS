@@ -5,8 +5,8 @@ import {
 	json,
 	jsonb,
 	numeric,
-	pgSchema,
 	pgEnum,
+	pgSchema,
 	pgTable,
 	smallint,
 	text,
@@ -881,7 +881,8 @@ export const scrContentStatusEnum = selenaRegistrySchema.enum("content_status", 
 ]);
 export const scrAssetScanStatusEnum = selenaRegistrySchema.enum("asset_scan_status", [
 	"QUARANTINED",
-	"PASSED",
+	"SCANNING",
+	"CLEAN",
 	"REJECTED",
 ]);
 export const scrApprovalDecisionEnum = selenaRegistrySchema.enum("approval_decision", [
@@ -901,6 +902,7 @@ export const scrReleaseIntentStatusEnum = selenaReleaseSchema.enum("release_inte
 	"DISPATCHING",
 	"BLOCKED",
 	"CANCELLED",
+	"CANCEL_REQUESTED",
 	"SUCCEEDED",
 	"UNKNOWN",
 	"FAILED",
@@ -910,6 +912,7 @@ export const scrOutboxEventStatusEnum = selenaReleaseSchema.enum("outbox_event_s
 	"LEASED",
 	"DELIVERED",
 	"DEAD_LETTER",
+	"CANCELLED",
 ]);
 export const scrPublicationAttemptStatusEnum = selenaReleaseSchema.enum("publication_attempt_status", [
 	"RESERVED",
@@ -930,528 +933,638 @@ export const scrMetricQualityEnum = selenaPerformanceSchema.enum("metric_quality
 ]);
 export const scrKillSwitchScopeEnum = selenaRegistrySchema.enum("kill_switch_scope", ["GLOBAL", "BRAND", "ACCOUNT"]);
 
-export const scrChannelAccounts = selenaRegistrySchema.table(
-	"channel_accounts",
-	{
-		id: uuid("id").defaultRandom().primaryKey().notNull(),
-		organizationId: text("organization_id")
-			.notNull()
-			.references(() => organization.id),
-		brandId: text("brand_id")
-			.notNull()
-			.references(() => brands.id),
-		platform: text("platform").notNull(),
-		providerAccountRef: text("provider_account_ref").notNull(),
-		providerIntegrationId: text("provider_integration_id"),
-		status: text("status").notNull().default("ACTIVE"),
-		allowlisted: boolean("allowlisted").notNull().default(true),
-		createdBy: text("created_by").notNull(),
-		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
-		updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
-	},
-	(table) => ({
-		brandIdx: index("scr_channel_accounts_brand_idx").on(table.brandId),
-		orgIdx: index("scr_channel_accounts_org_idx").on(table.organizationId),
-		brandPlatformRefUnique: uniqueIndex("scr_channel_accounts_brand_platform_ref_unique").on(
-			table.brandId,
-			table.platform,
-			table.providerAccountRef,
-		),
-	}),
-).enableRLS();
+export const scrContentPolicies = selenaRegistrySchema
+	.table(
+		"content_policies",
+		{
+			id: uuid("id").defaultRandom().primaryKey().notNull(),
+			organizationId: text("organization_id")
+				.notNull()
+				.references(() => organization.id),
+			brandId: text("brand_id")
+				.notNull()
+				.references(() => brands.id),
+			policyVersion: text("policy_version").notNull(),
+			requireEvidence: boolean("require_evidence").notNull().default(false),
+			createdBy: text("created_by").notNull(),
+			createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+			updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+		},
+		(table) => ({
+			brandVersionUnique: uniqueIndex("scr_content_policies_brand_version_unique").on(
+				table.brandId,
+				table.policyVersion,
+			),
+			orgIdx: index("scr_content_policies_org_idx").on(table.organizationId),
+		}),
+	)
+	.enableRLS();
 
-export const scrContentItems = selenaRegistrySchema.table(
-	"content_items",
-	{
-		id: uuid("id").defaultRandom().primaryKey().notNull(),
-		organizationId: text("organization_id")
-			.notNull()
-			.references(() => organization.id),
-		brandId: text("brand_id")
-			.notNull()
-			.references(() => brands.id),
-		title: text("title").notNull(),
-		status: scrContentStatusEnum().notNull().default("DRAFT"),
-		createdBy: text("created_by").notNull(),
-		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
-		updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
-	},
-	(table) => ({
-		brandIdx: index("scr_content_items_brand_idx").on(table.brandId),
-		orgIdx: index("scr_content_items_org_idx").on(table.organizationId),
-	}),
-).enableRLS();
+export const scrChannelAccounts = selenaRegistrySchema
+	.table(
+		"channel_accounts",
+		{
+			id: uuid("id").defaultRandom().primaryKey().notNull(),
+			organizationId: text("organization_id")
+				.notNull()
+				.references(() => organization.id),
+			brandId: text("brand_id")
+				.notNull()
+				.references(() => brands.id),
+			platform: text("platform").notNull(),
+			providerAccountRef: text("provider_account_ref").notNull(),
+			providerIntegrationId: text("provider_integration_id"),
+			status: text("status").notNull().default("ACTIVE"),
+			allowlisted: boolean("allowlisted").notNull().default(true),
+			createdBy: text("created_by").notNull(),
+			createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+			updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+		},
+		(table) => ({
+			brandIdx: index("scr_channel_accounts_brand_idx").on(table.brandId),
+			orgIdx: index("scr_channel_accounts_org_idx").on(table.organizationId),
+			brandPlatformRefUnique: uniqueIndex("scr_channel_accounts_brand_platform_ref_unique").on(
+				table.brandId,
+				table.platform,
+				table.providerAccountRef,
+			),
+		}),
+	)
+	.enableRLS();
 
-export const scrContentVersions = selenaRegistrySchema.table(
-	"content_versions",
-	{
-		id: uuid("id").defaultRandom().primaryKey().notNull(),
-		organizationId: text("organization_id")
-			.notNull()
-			.references(() => organization.id),
-		brandId: text("brand_id")
-			.notNull()
-			.references(() => brands.id),
-		contentId: uuid("content_id")
-			.notNull()
-			.references(() => scrContentItems.id),
-		version: integer("version").notNull(),
-		body: text("body").notNull(),
-		ctaUrl: text("cta_url").notNull(),
-		claims: jsonb("claims").notNull().default([]),
-		evidence: jsonb("evidence").notNull().default([]),
-		disclosure: jsonb("disclosure").notNull().default({}),
-		policyVersion: text("policy_version").notNull(),
-		contentHash: text("content_hash").notNull(),
-		evidenceExpiresAt: timestamp("evidence_expires_at", { withTimezone: true }),
-		immutable: boolean("immutable").notNull().default(true),
-		createdBy: text("created_by").notNull(),
-		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
-	},
-	(table) => ({
-		contentVersionUnique: uniqueIndex("scr_content_versions_content_version_unique").on(table.contentId, table.version),
-		contentIdx: index("scr_content_versions_content_idx").on(table.contentId, table.createdAt),
-		brandIdx: index("scr_content_versions_brand_idx").on(table.brandId),
-		orgIdx: index("scr_content_versions_org_idx").on(table.organizationId),
-	}),
-).enableRLS();
+export const scrContentItems = selenaRegistrySchema
+	.table(
+		"content_items",
+		{
+			id: uuid("id").defaultRandom().primaryKey().notNull(),
+			organizationId: text("organization_id")
+				.notNull()
+				.references(() => organization.id),
+			brandId: text("brand_id")
+				.notNull()
+				.references(() => brands.id),
+			title: text("title").notNull(),
+			status: scrContentStatusEnum().notNull().default("DRAFT"),
+			createdBy: text("created_by").notNull(),
+			createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+			updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+		},
+		(table) => ({
+			brandIdx: index("scr_content_items_brand_idx").on(table.brandId),
+			orgIdx: index("scr_content_items_org_idx").on(table.organizationId),
+		}),
+	)
+	.enableRLS();
 
-export const scrContentAssets = selenaRegistrySchema.table(
-	"content_assets",
-	{
-		id: uuid("id").defaultRandom().primaryKey().notNull(),
-		organizationId: text("organization_id")
-			.notNull()
-			.references(() => organization.id),
-		brandId: text("brand_id")
-			.notNull()
-			.references(() => brands.id),
-		contentVersionId: uuid("content_version_id")
-			.notNull()
-			.references(() => scrContentVersions.id),
-		storageKey: text("storage_key").notNull(),
-		objectVersionId: text("object_version_id"),
-		sha256: text("sha256").notNull(),
-		mimeType: text("mime_type").notNull(),
-		sizeBytes: integer("size_bytes").notNull(),
-		scanStatus: scrAssetScanStatusEnum("scan_status").notNull().default("QUARANTINED"),
-		scanProviderEventRef: text("scan_provider_event_ref"),
-		rightsExpiresAt: timestamp("rights_expires_at", { withTimezone: true }),
-		consentExpiresAt: timestamp("consent_expires_at", { withTimezone: true }),
-		verifiedAt: timestamp("verified_at", { withTimezone: true }),
-		immutable: boolean("immutable").notNull().default(true),
-		createdBy: text("created_by").notNull(),
-		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
-	},
-	(table) => ({
-		versionHashUnique: uniqueIndex("scr_content_assets_version_hash_unique").on(table.contentVersionId, table.sha256),
-		versionIdx: index("scr_content_assets_version_idx").on(table.contentVersionId),
-		orgIdx: index("scr_content_assets_org_idx").on(table.organizationId),
-	}),
-).enableRLS();
+export const scrContentVersions = selenaRegistrySchema
+	.table(
+		"content_versions",
+		{
+			id: uuid("id").defaultRandom().primaryKey().notNull(),
+			organizationId: text("organization_id")
+				.notNull()
+				.references(() => organization.id),
+			brandId: text("brand_id")
+				.notNull()
+				.references(() => brands.id),
+			contentId: uuid("content_id")
+				.notNull()
+				.references(() => scrContentItems.id),
+			version: integer("version").notNull(),
+			body: text("body").notNull(),
+			ctaUrl: text("cta_url").notNull(),
+			claims: jsonb("claims").notNull().default([]),
+			evidence: jsonb("evidence").notNull().default([]),
+			disclosure: jsonb("disclosure").notNull().default({}),
+			policyVersion: text("policy_version").notNull(),
+			contentHash: text("content_hash").notNull(),
+			evidenceExpiresAt: timestamp("evidence_expires_at", { withTimezone: true }),
+			immutable: boolean("immutable").notNull().default(true),
+			createdBy: text("created_by").notNull(),
+			createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+		},
+		(table) => ({
+			contentVersionUnique: uniqueIndex("scr_content_versions_content_version_unique").on(
+				table.contentId,
+				table.version,
+			),
+			contentIdx: index("scr_content_versions_content_idx").on(table.contentId, table.createdAt),
+			brandIdx: index("scr_content_versions_brand_idx").on(table.brandId),
+			orgIdx: index("scr_content_versions_org_idx").on(table.organizationId),
+		}),
+	)
+	.enableRLS();
 
-export const scrApprovals = selenaRegistrySchema.table(
-	"approvals",
-	{
-		id: uuid("id").defaultRandom().primaryKey().notNull(),
-		organizationId: text("organization_id")
-			.notNull()
-			.references(() => organization.id),
-		brandId: text("brand_id")
-			.notNull()
-			.references(() => brands.id),
-		contentVersionId: uuid("content_version_id")
-			.notNull()
-			.references(() => scrContentVersions.id),
-		channelAccountId: uuid("channel_account_id")
-			.notNull()
-			.references(() => scrChannelAccounts.id),
-		decision: scrApprovalDecisionEnum().notNull(),
-		bindingHash: text("binding_hash").notNull(),
-		contentHash: text("content_hash").notNull(),
-		assetBundleHash: text("asset_bundle_hash").notNull(),
-		policyVersion: text("policy_version").notNull(),
-		disclosureHash: text("disclosure_hash").notNull(),
-		approverId: text("approver_id").notNull(),
-		reason: text("reason"),
-		expiresAt: timestamp("expires_at", { withTimezone: true }),
-		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
-	},
-	(table) => ({
-		versionAccountIdx: index("scr_approvals_version_account_idx").on(
-			table.contentVersionId,
-			table.channelAccountId,
-			table.createdAt,
-		),
-		brandIdx: index("scr_approvals_brand_idx").on(table.brandId),
-		orgIdx: index("scr_approvals_org_idx").on(table.organizationId),
-	}),
-).enableRLS();
+export const scrContentAssets = selenaRegistrySchema
+	.table(
+		"content_assets",
+		{
+			id: uuid("id").defaultRandom().primaryKey().notNull(),
+			organizationId: text("organization_id")
+				.notNull()
+				.references(() => organization.id),
+			brandId: text("brand_id")
+				.notNull()
+				.references(() => brands.id),
+			contentVersionId: uuid("content_version_id")
+				.notNull()
+				.references(() => scrContentVersions.id),
+			storageBucket: text("storage_bucket").notNull().default("selena-quarantine"),
+			storageKey: text("storage_key").notNull(),
+			objectVersionId: text("object_version_id"),
+			originalFilename: text("original_filename").notNull(),
+			sha256: text("sha256").notNull(),
+			mimeType: text("mime_type").notNull(),
+			detectedMimeType: text("detected_mime_type"),
+			sizeBytes: integer("size_bytes").notNull(),
+			scanStatus: scrAssetScanStatusEnum("scan_status").notNull().default("QUARANTINED"),
+			scanProviderEventRef: text("scan_provider_event_ref"),
+			scanStartedAt: timestamp("scan_started_at", { withTimezone: true }),
+			scanCompletedAt: timestamp("scan_completed_at", { withTimezone: true }),
+			scanAttempts: integer("scan_attempts").notNull().default(0),
+			scanAvailableAt: timestamp("scan_available_at", { withTimezone: true }).notNull().defaultNow(),
+			scanLeaseExpiresAt: timestamp("scan_lease_expires_at", { withTimezone: true }),
+			scanLeaseToken: uuid("scan_lease_token"),
+			scanError: text("scan_error"),
+			scannerVersion: text("scanner_version"),
+			rejectionReason: text("rejection_reason"),
+			rightsExpiresAt: timestamp("rights_expires_at", { withTimezone: true }),
+			consentExpiresAt: timestamp("consent_expires_at", { withTimezone: true }),
+			verifiedAt: timestamp("verified_at", { withTimezone: true }),
+			immutable: boolean("immutable").notNull().default(true),
+			createdBy: text("created_by").notNull(),
+			createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+		},
+		(table) => ({
+			versionHashUnique: uniqueIndex("scr_content_assets_version_hash_unique").on(table.contentVersionId, table.sha256),
+			versionIdx: index("scr_content_assets_version_idx").on(table.contentVersionId),
+			orgIdx: index("scr_content_assets_org_idx").on(table.organizationId),
+		}),
+	)
+	.enableRLS();
 
-export const scrReleaseManifests = selenaReleaseSchema.table(
-	"release_manifests",
-	{
-		id: uuid("id").defaultRandom().primaryKey().notNull(),
-		organizationId: text("organization_id")
-			.notNull()
-			.references(() => organization.id),
-		brandId: text("brand_id")
-			.notNull()
-			.references(() => brands.id),
-		contentVersionId: uuid("content_version_id")
-			.notNull()
-			.references(() => scrContentVersions.id),
-		approvalId: uuid("approval_id")
-			.notNull()
-			.references(() => scrApprovals.id),
-		channelAccountId: uuid("channel_account_id")
-			.notNull()
-			.references(() => scrChannelAccounts.id),
-		platform: text("platform").notNull(),
-		manifest: jsonb("manifest").notNull(),
-		manifestHash: text("manifest_hash").notNull(),
-		signatureAlgorithm: text("signature_algorithm").notNull(),
-		signingKeyVersion: text("signing_key_version").notNull(),
-		signature: text("signature").notNull(),
-		status: scrReleaseManifestStatusEnum().notNull().default("READY"),
-		expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
-		createdBy: text("created_by").notNull(),
-		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
-	},
-	(table) => ({
-		approvalAccountUnique: uniqueIndex("scr_release_manifests_approval_account_unique").on(
-			table.approvalId,
-			table.channelAccountId,
-		),
-		brandIdx: index("scr_release_manifests_brand_idx").on(table.brandId, table.createdAt),
-		orgIdx: index("scr_release_manifests_org_idx").on(table.organizationId),
-	}),
-).enableRLS();
+export const scrApprovals = selenaRegistrySchema
+	.table(
+		"approvals",
+		{
+			id: uuid("id").defaultRandom().primaryKey().notNull(),
+			organizationId: text("organization_id")
+				.notNull()
+				.references(() => organization.id),
+			brandId: text("brand_id")
+				.notNull()
+				.references(() => brands.id),
+			contentVersionId: uuid("content_version_id")
+				.notNull()
+				.references(() => scrContentVersions.id),
+			channelAccountId: uuid("channel_account_id")
+				.notNull()
+				.references(() => scrChannelAccounts.id),
+			decision: scrApprovalDecisionEnum().notNull(),
+			bindingHash: text("binding_hash").notNull(),
+			contentHash: text("content_hash").notNull(),
+			assetBundleHash: text("asset_bundle_hash").notNull(),
+			policyVersion: text("policy_version").notNull(),
+			disclosureHash: text("disclosure_hash").notNull(),
+			approverId: text("approver_id").notNull(),
+			reason: text("reason"),
+			expiresAt: timestamp("expires_at", { withTimezone: true }),
+			createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+		},
+		(table) => ({
+			versionAccountIdx: index("scr_approvals_version_account_idx").on(
+				table.contentVersionId,
+				table.channelAccountId,
+				table.createdAt,
+			),
+			brandIdx: index("scr_approvals_brand_idx").on(table.brandId),
+			orgIdx: index("scr_approvals_org_idx").on(table.organizationId),
+		}),
+	)
+	.enableRLS();
 
-export const scrReleaseIntents = selenaReleaseSchema.table(
-	"release_intents",
-	{
-		id: uuid("id").defaultRandom().primaryKey().notNull(),
-		organizationId: text("organization_id")
-			.notNull()
-			.references(() => organization.id),
-		brandId: text("brand_id")
-			.notNull()
-			.references(() => brands.id),
-		contentVersionId: uuid("content_version_id")
-			.notNull()
-			.references(() => scrContentVersions.id),
-		approvalId: uuid("approval_id")
-			.notNull()
-			.references(() => scrApprovals.id),
-		channelAccountId: uuid("channel_account_id")
-			.notNull()
-			.references(() => scrChannelAccounts.id),
-		platform: text("platform").notNull(),
-		idempotencyKey: text("idempotency_key").notNull(),
-		correlationId: uuid("correlation_id").notNull(),
-		status: scrReleaseIntentStatusEnum().notNull().default("QUEUED"),
-		notBefore: timestamp("not_before", { withTimezone: true }).defaultNow().notNull(),
-		cancellationReason: text("cancellation_reason"),
-		createdBy: text("created_by").notNull(),
-		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
-	},
-	(table) => ({
-		idempotencyScopeUnique: uniqueIndex("release_intents_scope_idempotency_unique").on(
-			table.organizationId,
-			table.brandId,
-			table.channelAccountId,
-			table.idempotencyKey,
-		),
-		approvalAccountUnique: uniqueIndex("release_intents_approval_account_unique").on(table.approvalId, table.channelAccountId),
-		brandStatusIdx: index("release_intents_brand_status_idx").on(table.brandId, table.status, table.createdAt),
-	}),
-).enableRLS();
+export const scrReleaseManifests = selenaReleaseSchema
+	.table(
+		"release_manifests",
+		{
+			id: uuid("id").defaultRandom().primaryKey().notNull(),
+			organizationId: text("organization_id")
+				.notNull()
+				.references(() => organization.id),
+			brandId: text("brand_id")
+				.notNull()
+				.references(() => brands.id),
+			contentVersionId: uuid("content_version_id")
+				.notNull()
+				.references(() => scrContentVersions.id),
+			approvalId: uuid("approval_id")
+				.notNull()
+				.references(() => scrApprovals.id),
+			channelAccountId: uuid("channel_account_id")
+				.notNull()
+				.references(() => scrChannelAccounts.id),
+			platform: text("platform").notNull(),
+			manifest: jsonb("manifest").notNull(),
+			manifestHash: text("manifest_hash").notNull(),
+			signatureAlgorithm: text("signature_algorithm").notNull(),
+			signingKeyVersion: text("signing_key_version").notNull(),
+			signature: text("signature").notNull(),
+			status: scrReleaseManifestStatusEnum().notNull().default("READY"),
+			expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+			createdBy: text("created_by").notNull(),
+			createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+		},
+		(table) => ({
+			approvalAccountUnique: uniqueIndex("scr_release_manifests_approval_account_unique").on(
+				table.approvalId,
+				table.channelAccountId,
+			),
+			brandIdx: index("scr_release_manifests_brand_idx").on(table.brandId, table.createdAt),
+			orgIdx: index("scr_release_manifests_org_idx").on(table.organizationId),
+		}),
+	)
+	.enableRLS();
 
-export const scrReleaseOutboxEvents = selenaReleaseSchema.table(
-	"outbox_events",
-	{
-		id: uuid("id").defaultRandom().primaryKey().notNull(),
-		organizationId: text("organization_id")
-			.notNull()
-			.references(() => organization.id),
-		brandId: text("brand_id")
-			.notNull()
-			.references(() => brands.id),
-		releaseIntentId: uuid("release_intent_id")
-			.notNull()
-			.references(() => scrReleaseIntents.id),
-		eventType: text("event_type").notNull(),
-		eventVersion: integer("event_version").notNull().default(1),
-		idempotencyKey: text("idempotency_key").notNull(),
-		status: scrOutboxEventStatusEnum().notNull().default("PENDING"),
-		availableAt: timestamp("available_at", { withTimezone: true }).defaultNow().notNull(),
-		leaseOwner: text("lease_owner"),
-		leaseExpiresAt: timestamp("lease_expires_at", { withTimezone: true }),
-		attemptCount: integer("attempt_count").notNull().default(0),
-		maxAttempts: integer("max_attempts").notNull().default(5),
-		lastError: text("last_error"),
-		deliveredAt: timestamp("delivered_at", { withTimezone: true }),
-		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
-	},
-	(table) => ({
-		intentEventUnique: uniqueIndex("release_outbox_events_intent_event_unique").on(
-			table.releaseIntentId,
-			table.eventType,
-			table.eventVersion,
-		),
-		idempotencyUnique: uniqueIndex("release_outbox_events_idempotency_unique").on(table.idempotencyKey),
-		claimIdx: index("release_outbox_events_claim_idx").on(table.status, table.availableAt, table.leaseExpiresAt),
-	}),
-).enableRLS();
+export const scrReleaseIntents = selenaReleaseSchema
+	.table(
+		"release_intents",
+		{
+			id: uuid("id").defaultRandom().primaryKey().notNull(),
+			organizationId: text("organization_id")
+				.notNull()
+				.references(() => organization.id),
+			brandId: text("brand_id")
+				.notNull()
+				.references(() => brands.id),
+			contentVersionId: uuid("content_version_id")
+				.notNull()
+				.references(() => scrContentVersions.id),
+			approvalId: uuid("approval_id")
+				.notNull()
+				.references(() => scrApprovals.id),
+			channelAccountId: uuid("channel_account_id")
+				.notNull()
+				.references(() => scrChannelAccounts.id),
+			platform: text("platform").notNull(),
+			idempotencyKey: text("idempotency_key").notNull(),
+			correlationId: uuid("correlation_id").notNull(),
+			status: scrReleaseIntentStatusEnum().notNull().default("QUEUED"),
+			notBefore: timestamp("not_before", { withTimezone: true }).defaultNow().notNull(),
+			scheduleTimezone: text("schedule_timezone").notNull().default("UTC"),
+			cancellationReason: text("cancellation_reason"),
+			createdBy: text("created_by").notNull(),
+			createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+		},
+		(table) => ({
+			idempotencyScopeUnique: uniqueIndex("release_intents_scope_idempotency_unique").on(
+				table.organizationId,
+				table.brandId,
+				table.channelAccountId,
+				table.idempotencyKey,
+			),
+			approvalAccountUnique: uniqueIndex("release_intents_approval_account_unique").on(
+				table.approvalId,
+				table.channelAccountId,
+			),
+			brandStatusIdx: index("release_intents_brand_status_idx").on(table.brandId, table.status, table.createdAt),
+		}),
+	)
+	.enableRLS();
 
-export const scrReleaseDispatchReservations = selenaReleaseSchema.table(
-	"dispatch_reservations",
-	{
-		id: uuid("id").defaultRandom().primaryKey().notNull(),
-		organizationId: text("organization_id")
-			.notNull()
-			.references(() => organization.id),
-		brandId: text("brand_id")
-			.notNull()
-			.references(() => brands.id),
-		releaseManifestId: uuid("release_manifest_id")
-			.notNull()
-			.references(() => scrReleaseManifests.id),
-		channelAccountId: uuid("channel_account_id")
-			.notNull()
-			.references(() => scrChannelAccounts.id),
-		platform: text("platform").notNull(),
-		integrationId: text("integration_id").notNull(),
-		allowlistReference: text("allowlist_reference").notNull(),
-		idempotencyKey: text("idempotency_key").notNull(),
-		nonce: text("nonce").notNull(),
-		reservedAt: timestamp("reserved_at", { withTimezone: true }).defaultNow().notNull(),
-		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
-	},
-	(table) => ({
-		idempotencyScopeUnique: uniqueIndex("release_dispatch_reservations_scope_idempotency_unique").on(
-			table.organizationId,
-			table.brandId,
-			table.channelAccountId,
-			table.idempotencyKey,
-		),
-		nonceUnique: uniqueIndex("release_dispatch_reservations_nonce_unique").on(table.nonce),
-		manifestIdx: index("release_dispatch_reservations_manifest_idx").on(table.releaseManifestId, table.reservedAt),
-	}),
-).enableRLS();
+export const scrReleaseOutboxEvents = selenaReleaseSchema
+	.table(
+		"outbox_events",
+		{
+			id: uuid("id").defaultRandom().primaryKey().notNull(),
+			organizationId: text("organization_id")
+				.notNull()
+				.references(() => organization.id),
+			brandId: text("brand_id")
+				.notNull()
+				.references(() => brands.id),
+			releaseIntentId: uuid("release_intent_id")
+				.notNull()
+				.references(() => scrReleaseIntents.id),
+			eventType: text("event_type").notNull(),
+			eventVersion: integer("event_version").notNull().default(1),
+			idempotencyKey: text("idempotency_key").notNull(),
+			status: scrOutboxEventStatusEnum().notNull().default("PENDING"),
+			availableAt: timestamp("available_at", { withTimezone: true }).defaultNow().notNull(),
+			leaseOwner: text("lease_owner"),
+			leaseExpiresAt: timestamp("lease_expires_at", { withTimezone: true }),
+			attemptCount: integer("attempt_count").notNull().default(0),
+			maxAttempts: integer("max_attempts").notNull().default(5),
+			lastError: text("last_error"),
+			deliveredAt: timestamp("delivered_at", { withTimezone: true }),
+			createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+		},
+		(table) => ({
+			intentEventUnique: uniqueIndex("release_outbox_events_intent_event_unique").on(
+				table.releaseIntentId,
+				table.eventType,
+				table.eventVersion,
+			),
+			idempotencyUnique: uniqueIndex("release_outbox_events_idempotency_unique").on(table.idempotencyKey),
+			claimIdx: index("release_outbox_events_claim_idx").on(table.status, table.availableAt, table.leaseExpiresAt),
+		}),
+	)
+	.enableRLS();
 
-export const scrPublicationAttempts = selenaReleaseSchema.table(
-	"publication_attempts",
-	{
-		id: uuid("id").defaultRandom().primaryKey().notNull(),
-		organizationId: text("organization_id")
-			.notNull()
-			.references(() => organization.id),
-		brandId: text("brand_id")
-			.notNull()
-			.references(() => brands.id),
-		reservationId: uuid("reservation_id")
-			.notNull()
-			.references(() => scrReleaseDispatchReservations.id),
-		releaseManifestId: uuid("release_manifest_id")
-			.notNull()
-			.references(() => scrReleaseManifests.id),
-		channelAccountId: uuid("channel_account_id")
-			.notNull()
-			.references(() => scrChannelAccounts.id),
-		platform: text("platform").notNull(),
-		integrationId: text("integration_id").notNull(),
-		allowlistReference: text("allowlist_reference").notNull(),
-		manifestHash: text("manifest_hash").notNull(),
-		attemptNumber: integer("attempt_number").notNull(),
-		transitionNumber: integer("transition_number").notNull(),
-		status: scrPublicationAttemptStatusEnum().notNull(),
-		providerRequestId: text("provider_request_id"),
-		providerReferenceId: text("provider_reference_id"),
-		errorClassification: text("error_classification"),
-		errorDetail: text("error_detail"),
-		occurredAt: timestamp("occurred_at", { withTimezone: true }).defaultNow().notNull(),
-		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
-	},
-	(table) => ({
-		reservationAttemptTransitionUnique: uniqueIndex("publication_attempts_transition_unique").on(
-			table.reservationId,
-			table.attemptNumber,
-			table.transitionNumber,
-		),
-		providerRequestUnique: uniqueIndex("publication_attempts_provider_request_unique").on(table.providerRequestId),
-		reservationIdx: index("publication_attempts_reservation_idx").on(table.reservationId, table.occurredAt),
-		brandIdx: index("publication_attempts_brand_idx").on(table.brandId, table.occurredAt),
-	}),
-).enableRLS();
+export const scrWorkflowDispatches = selenaReleaseSchema
+	.table(
+		"workflow_dispatches",
+		{
+			id: uuid("id").defaultRandom().primaryKey().notNull(),
+			organizationId: text("organization_id")
+				.notNull()
+				.references(() => organization.id),
+			brandId: text("brand_id")
+				.notNull()
+				.references(() => brands.id),
+			outboxEventId: uuid("outbox_event_id")
+				.notNull()
+				.references(() => scrReleaseOutboxEvents.id),
+			releaseIntentId: uuid("release_intent_id")
+				.notNull()
+				.references(() => scrReleaseIntents.id),
+			correlationId: uuid("correlation_id").notNull(),
+			triggerRunId: text("trigger_run_id"),
+			idempotencyKey: text("idempotency_key").notNull(),
+			status: text("status").notNull().default("QUEUED"),
+			attemptCount: integer("attempt_count").notNull().default(0),
+			lastError: text("last_error"),
+			cancelledAt: timestamp("cancelled_at", { withTimezone: true }),
+			createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+			updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+		},
+		(table) => ({
+			outboxUnique: uniqueIndex("workflow_dispatches_outbox_event_unique").on(table.outboxEventId),
+			idempotencyUnique: uniqueIndex("workflow_dispatches_idempotency_unique").on(table.idempotencyKey),
+			brandStatusIdx: index("workflow_dispatches_brand_status_idx").on(table.brandId, table.status, table.createdAt),
+		}),
+	)
+	.enableRLS();
 
-export const scrKillSwitches = selenaRegistrySchema.table(
-	"kill_switches",
-	{
-		id: uuid("id").defaultRandom().primaryKey().notNull(),
-		organizationId: text("organization_id")
-			.notNull()
-			.references(() => organization.id),
-		scope: scrKillSwitchScopeEnum().notNull(),
-		brandId: text("brand_id").references(() => brands.id),
-		channelAccountId: uuid("channel_account_id").references(() => scrChannelAccounts.id),
-		active: boolean("active").notNull().default(false),
-		reason: text("reason").notNull(),
-		changedBy: text("changed_by").notNull(),
-		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
-		updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
-	},
-	(table) => ({
-		scopeIdx: index("scr_kill_switches_scope_idx").on(table.organizationId, table.scope, table.active),
-		orgIdx: index("scr_kill_switches_org_idx").on(table.organizationId),
-	}),
-).enableRLS();
+export const scrReleaseDispatchReservations = selenaReleaseSchema
+	.table(
+		"dispatch_reservations",
+		{
+			id: uuid("id").defaultRandom().primaryKey().notNull(),
+			organizationId: text("organization_id")
+				.notNull()
+				.references(() => organization.id),
+			brandId: text("brand_id")
+				.notNull()
+				.references(() => brands.id),
+			releaseManifestId: uuid("release_manifest_id")
+				.notNull()
+				.references(() => scrReleaseManifests.id),
+			channelAccountId: uuid("channel_account_id")
+				.notNull()
+				.references(() => scrChannelAccounts.id),
+			platform: text("platform").notNull(),
+			integrationId: text("integration_id").notNull(),
+			allowlistReference: text("allowlist_reference").notNull(),
+			idempotencyKey: text("idempotency_key").notNull(),
+			nonce: text("nonce").notNull(),
+			reservedAt: timestamp("reserved_at", { withTimezone: true }).defaultNow().notNull(),
+			createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+		},
+		(table) => ({
+			idempotencyScopeUnique: uniqueIndex("release_dispatch_reservations_scope_idempotency_unique").on(
+				table.organizationId,
+				table.brandId,
+				table.channelAccountId,
+				table.idempotencyKey,
+			),
+			nonceUnique: uniqueIndex("release_dispatch_reservations_nonce_unique").on(table.nonce),
+			manifestIdx: index("release_dispatch_reservations_manifest_idx").on(table.releaseManifestId, table.reservedAt),
+		}),
+	)
+	.enableRLS();
 
-export const scrIncidents = selenaAuditSchema.table(
-	"incidents",
-	{
-		id: uuid("id").defaultRandom().primaryKey().notNull(),
-		organizationId: text("organization_id")
-			.notNull()
-			.references(() => organization.id),
-		brandId: text("brand_id")
-			.notNull()
-			.references(() => brands.id),
-		publicationAttemptId: uuid("publication_attempt_id").references(() => scrPublicationAttempts.id),
-		severity: text("severity").notNull(),
-		code: text("code").notNull(),
-		summary: text("summary").notNull(),
-		status: scrIncidentStatusEnum().notNull().default("OPEN"),
-		detectedBy: text("detected_by").notNull(),
-		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
-		resolvedAt: timestamp("resolved_at", { withTimezone: true }),
-	},
-	(table) => ({
-		brandIdx: index("scr_incidents_brand_idx").on(table.brandId, table.status),
-		orgIdx: index("scr_incidents_org_idx").on(table.organizationId),
-	}),
-).enableRLS();
+export const scrPublicationAttempts = selenaReleaseSchema
+	.table(
+		"publication_attempts",
+		{
+			id: uuid("id").defaultRandom().primaryKey().notNull(),
+			organizationId: text("organization_id")
+				.notNull()
+				.references(() => organization.id),
+			brandId: text("brand_id")
+				.notNull()
+				.references(() => brands.id),
+			reservationId: uuid("reservation_id")
+				.notNull()
+				.references(() => scrReleaseDispatchReservations.id),
+			releaseManifestId: uuid("release_manifest_id")
+				.notNull()
+				.references(() => scrReleaseManifests.id),
+			channelAccountId: uuid("channel_account_id")
+				.notNull()
+				.references(() => scrChannelAccounts.id),
+			platform: text("platform").notNull(),
+			integrationId: text("integration_id").notNull(),
+			allowlistReference: text("allowlist_reference").notNull(),
+			manifestHash: text("manifest_hash").notNull(),
+			attemptNumber: integer("attempt_number").notNull(),
+			transitionNumber: integer("transition_number").notNull(),
+			status: scrPublicationAttemptStatusEnum().notNull(),
+			providerRequestId: text("provider_request_id"),
+			providerReferenceId: text("provider_reference_id"),
+			errorClassification: text("error_classification"),
+			errorDetail: text("error_detail"),
+			occurredAt: timestamp("occurred_at", { withTimezone: true }).defaultNow().notNull(),
+			createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+		},
+		(table) => ({
+			reservationAttemptTransitionUnique: uniqueIndex("publication_attempts_transition_unique").on(
+				table.reservationId,
+				table.attemptNumber,
+				table.transitionNumber,
+			),
+			providerRequestUnique: uniqueIndex("publication_attempts_provider_request_unique").on(table.providerRequestId),
+			reservationIdx: index("publication_attempts_reservation_idx").on(table.reservationId, table.occurredAt),
+			brandIdx: index("publication_attempts_brand_idx").on(table.brandId, table.occurredAt),
+		}),
+	)
+	.enableRLS();
 
-export const scrAuditEvents = selenaAuditSchema.table(
-	"audit_events",
-	{
-		id: uuid("id").defaultRandom().primaryKey().notNull(),
-		organizationId: text("organization_id")
-			.notNull()
-			.references(() => organization.id),
-		brandId: text("brand_id").references(() => brands.id),
-		actorId: text("actor_id").notNull(),
-		action: text("action").notNull(),
-		aggregateType: text("aggregate_type").notNull(),
-		aggregateId: text("aggregate_id").notNull(),
-		previousHash: text("previous_hash"),
-		eventHash: text("event_hash").notNull(),
-		metadata: jsonb("metadata").notNull().default({}),
-		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
-	},
-	(table) => ({
-		brandIdx: index("scr_audit_events_brand_idx").on(table.brandId, table.createdAt),
-		orgIdx: index("scr_audit_events_org_idx").on(table.organizationId, table.createdAt),
-	}),
-).enableRLS();
+export const scrKillSwitches = selenaRegistrySchema
+	.table(
+		"kill_switches",
+		{
+			id: uuid("id").defaultRandom().primaryKey().notNull(),
+			organizationId: text("organization_id")
+				.notNull()
+				.references(() => organization.id),
+			scope: scrKillSwitchScopeEnum().notNull(),
+			brandId: text("brand_id").references(() => brands.id),
+			channelAccountId: uuid("channel_account_id").references(() => scrChannelAccounts.id),
+			active: boolean("active").notNull().default(false),
+			reason: text("reason").notNull(),
+			changedBy: text("changed_by").notNull(),
+			createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+			updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+		},
+		(table) => ({
+			scopeIdx: index("scr_kill_switches_scope_idx").on(table.organizationId, table.scope, table.active),
+			orgIdx: index("scr_kill_switches_org_idx").on(table.organizationId),
+		}),
+	)
+	.enableRLS();
 
-export const scrRawPlatformSnapshots = selenaIngestRawSchema.table(
-	"raw_platform_snapshots",
-	{
-		id: uuid("id").defaultRandom().primaryKey().notNull(),
-		organizationId: text("organization_id")
-			.notNull()
-			.references(() => organization.id),
-		brandId: text("brand_id")
-			.notNull()
-			.references(() => brands.id),
-		channelAccountId: uuid("channel_account_id")
-			.notNull()
-			.references(() => scrChannelAccounts.id),
-		provider: text("provider").notNull(),
-		checkpoint: text("checkpoint").notNull(),
-		requestKey: text("request_key").notNull(),
-		windowStartedAt: timestamp("window_started_at", { withTimezone: true }).notNull(),
-		windowEndedAt: timestamp("window_ended_at", { withTimezone: true }).notNull(),
-		capturedAt: timestamp("captured_at", { withTimezone: true }).notNull(),
-		payload: jsonb("payload").notNull(),
-		payloadSha256: text("payload_sha256").notNull(),
-		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
-	},
-	(table) => ({
-		requestUnique: uniqueIndex("raw_platform_snapshots_request_unique").on(
-			table.channelAccountId,
-			table.requestKey,
-		),
-		accountCheckpointIdx: index("raw_platform_snapshots_account_checkpoint_idx").on(
-			table.channelAccountId,
-			table.checkpoint,
-			table.capturedAt,
-		),
-	}),
-).enableRLS();
+export const scrIncidents = selenaAuditSchema
+	.table(
+		"incidents",
+		{
+			id: uuid("id").defaultRandom().primaryKey().notNull(),
+			organizationId: text("organization_id")
+				.notNull()
+				.references(() => organization.id),
+			brandId: text("brand_id")
+				.notNull()
+				.references(() => brands.id),
+			publicationAttemptId: uuid("publication_attempt_id").references(() => scrPublicationAttempts.id),
+			severity: text("severity").notNull(),
+			code: text("code").notNull(),
+			summary: text("summary").notNull(),
+			status: scrIncidentStatusEnum().notNull().default("OPEN"),
+			detectedBy: text("detected_by").notNull(),
+			createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+			resolvedAt: timestamp("resolved_at", { withTimezone: true }),
+		},
+		(table) => ({
+			brandIdx: index("scr_incidents_brand_idx").on(table.brandId, table.status),
+			orgIdx: index("scr_incidents_org_idx").on(table.organizationId),
+		}),
+	)
+	.enableRLS();
 
-export const scrMetricSnapshots = selenaPerformanceSchema.table(
-	"metric_snapshots",
-	{
-		id: uuid("id").defaultRandom().primaryKey().notNull(),
-		organizationId: text("organization_id")
-			.notNull()
-			.references(() => organization.id),
-		brandId: text("brand_id")
-			.notNull()
-			.references(() => brands.id),
-		publicationAttemptId: uuid("publication_attempt_id")
-			.notNull()
-			.references(() => scrPublicationAttempts.id),
-		rawSnapshotId: uuid("raw_snapshot_id").references(() => scrRawPlatformSnapshots.id),
-		platform: text("platform").notNull(),
-		observedAt: timestamp("observed_at", { withTimezone: true }).notNull(),
-		dataCutoffAt: timestamp("data_cutoff_at", { withTimezone: true }).notNull(),
-		definitionVersion: text("definition_version").notNull(),
-		quality: scrMetricQualityEnum().notNull(),
-		values: jsonb("values").notNull(),
-		revisionOfId: uuid("revision_of_id"),
-		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
-	},
-	(table) => ({
-		publicationAttemptIdx: index("metric_snapshots_publication_attempt_idx").on(
-			table.publicationAttemptId,
-			table.observedAt,
-		),
-		rawSnapshotIdx: index("metric_snapshots_raw_snapshot_idx").on(table.rawSnapshotId),
-		orgIdx: index("scr_metric_snapshots_org_idx").on(table.organizationId),
-	}),
-).enableRLS();
+export const scrAuditEvents = selenaAuditSchema
+	.table(
+		"audit_events",
+		{
+			id: uuid("id").defaultRandom().primaryKey().notNull(),
+			organizationId: text("organization_id")
+				.notNull()
+				.references(() => organization.id),
+			brandId: text("brand_id").references(() => brands.id),
+			actorId: text("actor_id").notNull(),
+			action: text("action").notNull(),
+			aggregateType: text("aggregate_type").notNull(),
+			aggregateId: text("aggregate_id").notNull(),
+			previousHash: text("previous_hash"),
+			eventHash: text("event_hash").notNull(),
+			metadata: jsonb("metadata").notNull().default({}),
+			createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+		},
+		(table) => ({
+			brandIdx: index("scr_audit_events_brand_idx").on(table.brandId, table.createdAt),
+			orgIdx: index("scr_audit_events_org_idx").on(table.organizationId, table.createdAt),
+		}),
+	)
+	.enableRLS();
 
-export const scrTrackingEvents = selenaPerformanceSchema.table(
-	"tracking_events",
-	{
-		id: uuid("id").defaultRandom().primaryKey().notNull(),
-		organizationId: text("organization_id")
-			.notNull()
-			.references(() => organization.id),
-		brandId: text("brand_id")
-			.notNull()
-			.references(() => brands.id),
-		publicationAttemptId: uuid("publication_attempt_id").references(() => scrPublicationAttempts.id),
-		correlationId: uuid("correlation_id"),
-		eventType: text("event_type").notNull(),
-		visitorHash: text("visitor_hash"),
-		attributionClass: text("attribution_class").notNull(),
-		occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull(),
-		metadata: jsonb("metadata").notNull().default({}),
-		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
-	},
-	(table) => ({
-		publicationAttemptIdx: index("tracking_events_publication_attempt_idx").on(
-			table.publicationAttemptId,
-			table.occurredAt,
-		),
-		orgIdx: index("scr_tracking_events_org_idx").on(table.organizationId),
-	}),
-).enableRLS();
+export const scrRawPlatformSnapshots = selenaIngestRawSchema
+	.table(
+		"raw_platform_snapshots",
+		{
+			id: uuid("id").defaultRandom().primaryKey().notNull(),
+			organizationId: text("organization_id")
+				.notNull()
+				.references(() => organization.id),
+			brandId: text("brand_id")
+				.notNull()
+				.references(() => brands.id),
+			channelAccountId: uuid("channel_account_id")
+				.notNull()
+				.references(() => scrChannelAccounts.id),
+			provider: text("provider").notNull(),
+			checkpoint: text("checkpoint").notNull(),
+			requestKey: text("request_key").notNull(),
+			windowStartedAt: timestamp("window_started_at", { withTimezone: true }).notNull(),
+			windowEndedAt: timestamp("window_ended_at", { withTimezone: true }).notNull(),
+			capturedAt: timestamp("captured_at", { withTimezone: true }).notNull(),
+			payload: jsonb("payload").notNull(),
+			payloadSha256: text("payload_sha256").notNull(),
+			createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+		},
+		(table) => ({
+			requestUnique: uniqueIndex("raw_platform_snapshots_request_unique").on(table.channelAccountId, table.requestKey),
+			accountCheckpointIdx: index("raw_platform_snapshots_account_checkpoint_idx").on(
+				table.channelAccountId,
+				table.checkpoint,
+				table.capturedAt,
+			),
+		}),
+	)
+	.enableRLS();
+
+export const scrMetricSnapshots = selenaPerformanceSchema
+	.table(
+		"metric_snapshots",
+		{
+			id: uuid("id").defaultRandom().primaryKey().notNull(),
+			organizationId: text("organization_id")
+				.notNull()
+				.references(() => organization.id),
+			brandId: text("brand_id")
+				.notNull()
+				.references(() => brands.id),
+			publicationAttemptId: uuid("publication_attempt_id")
+				.notNull()
+				.references(() => scrPublicationAttempts.id),
+			rawSnapshotId: uuid("raw_snapshot_id").references(() => scrRawPlatformSnapshots.id),
+			platform: text("platform").notNull(),
+			observedAt: timestamp("observed_at", { withTimezone: true }).notNull(),
+			dataCutoffAt: timestamp("data_cutoff_at", { withTimezone: true }).notNull(),
+			definitionVersion: text("definition_version").notNull(),
+			quality: scrMetricQualityEnum().notNull(),
+			values: jsonb("values").notNull(),
+			revisionOfId: uuid("revision_of_id"),
+			createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+		},
+		(table) => ({
+			publicationAttemptIdx: index("metric_snapshots_publication_attempt_idx").on(
+				table.publicationAttemptId,
+				table.observedAt,
+			),
+			rawSnapshotIdx: index("metric_snapshots_raw_snapshot_idx").on(table.rawSnapshotId),
+			orgIdx: index("scr_metric_snapshots_org_idx").on(table.organizationId),
+		}),
+	)
+	.enableRLS();
+
+export const scrTrackingEvents = selenaPerformanceSchema
+	.table(
+		"tracking_events",
+		{
+			id: uuid("id").defaultRandom().primaryKey().notNull(),
+			organizationId: text("organization_id")
+				.notNull()
+				.references(() => organization.id),
+			brandId: text("brand_id")
+				.notNull()
+				.references(() => brands.id),
+			publicationAttemptId: uuid("publication_attempt_id").references(() => scrPublicationAttempts.id),
+			correlationId: uuid("correlation_id"),
+			eventType: text("event_type").notNull(),
+			visitorHash: text("visitor_hash"),
+			attributionClass: text("attribution_class").notNull(),
+			occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull(),
+			metadata: jsonb("metadata").notNull().default({}),
+			createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+		},
+		(table) => ({
+			publicationAttemptIdx: index("tracking_events_publication_attempt_idx").on(
+				table.publicationAttemptId,
+				table.occurredAt,
+			),
+			orgIdx: index("scr_tracking_events_org_idx").on(table.organizationId),
+		}),
+	)
+	.enableRLS();
 
 export type SvProject = typeof svProjects.$inferSelect;
 export type NewSvProject = typeof svProjects.$inferInsert;

@@ -1,5 +1,5 @@
 # Elmo 
-# Supports: web app (Nitro server) and worker
+# Supports: web app (Nitro server), worker, and isolated private-asset scanner.
 
 # Build-time selector used by the final runtime stage.
 ARG RAILWAY_SERVICE_NAME=web
@@ -119,5 +119,53 @@ USER worker
 ENTRYPOINT ["/entrypoint.sh"]
 CMD ["npx", "tsx", "src/index.ts"]
 
-# The service name selects the final runtime stage: web or worker.
+# Scanner stage. It is intentionally a separate service: it is the only
+# runtime that receives the restricted scanner database role and Supabase
+# Storage service credential.
+FROM base AS scanner
+WORKDIR /app
+
+ENV NODE_ENV=production
+
+RUN apk add --no-cache clamav clamav-daemon
+RUN addgroup --system --gid 1002 scanner
+RUN adduser --system --uid 1002 scanner
+RUN mkdir -p /var/lib/clamav /run/clamav
+RUN chown -R scanner:scanner /var/lib/clamav /run/clamav
+
+COPY --from=builder --chown=scanner:scanner /deploy/worker ./
+COPY docker/scanner-entrypoint.sh /scanner-entrypoint.sh
+COPY docker/clamd.conf /etc/clamav/clamd.conf
+COPY docker/freshclam.conf /etc/clamav/freshclam.conf
+RUN chmod 500 /scanner-entrypoint.sh
+
+USER scanner
+
+EXPOSE 8081
+ENV SELENA_SCANNER_PORT=8081
+
+ENTRYPOINT ["/scanner-entrypoint.sh"]
+CMD ["node_modules/.bin/tsx", "src/selena-scanner.ts"]
+
+# Release Gateway has a distinct runtime identity and no Postiz credential.
+# It builds and signs an immutable publication package; a later adapter is the
+# only component that may submit that package to an external provider.
+FROM base AS gateway
+WORKDIR /app
+
+ENV NODE_ENV=production
+
+RUN addgroup --system --gid 1003 gateway
+RUN adduser --system --uid 1003 gateway
+
+COPY --from=builder --chown=gateway:gateway /deploy/worker ./
+
+USER gateway
+
+EXPOSE 8082
+ENV SELENA_GATEWAY_PORT=8082
+
+CMD ["node_modules/.bin/tsx", "src/selena-release-gateway.ts"]
+
+# The service name selects the final runtime stage: web, worker, migrate, scanner, or gateway.
 FROM ${RAILWAY_SERVICE_NAME} AS final

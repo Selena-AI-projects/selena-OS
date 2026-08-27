@@ -8,6 +8,7 @@ import {
 	scrChannelAccounts,
 	scrContentAssets,
 	scrContentItems,
+	scrContentPolicies,
 	scrContentVersions,
 	scrIncidents,
 	scrKillSwitches,
@@ -35,7 +36,11 @@ type AuditDatabase = Pick<ControlRoomDatabase, "execute" | "insert" | "select">;
 const uuidSchema = z.string().uuid();
 const brandSchema = z.object({ brandId: z.string().min(1).max(120) });
 const policyVersionSchema = z.string().trim().min(1).max(120);
-const evidenceSchema = z.array(z.object({ source: z.string().url().max(2048) })).min(1).max(20);
+const claimsSchema = z.array(z.string().trim().min(1).max(500)).max(20);
+const evidenceSchema = z
+	.array(z.object({ source: z.string().url().max(2048) }))
+	.min(1)
+	.max(20);
 const STAGING_DEMO_BRAND_ID = "selena";
 const STAGING_DEMO_ORGANIZATION_ID = "default";
 const STAGING_DEMO_ACCOUNT_REF = "Postiz local dry run";
@@ -71,6 +76,19 @@ function assertHumanReviewer(context: AuthContext): void {
 	}
 }
 
+function policyRequiresEvidence(policy: { requireEvidence: boolean } | undefined): boolean {
+	return policy?.requireEvidence === true;
+}
+
+function assertIanaTimeZone(value: string): string {
+	try {
+		Intl.DateTimeFormat(undefined, { timeZone: value });
+		return value;
+	} catch {
+		throw new Error("Scheduling time zone is invalid");
+	}
+}
+
 async function withControlRoomTransaction<T>(
 	context: AuthContext,
 	brandId: string,
@@ -92,6 +110,49 @@ async function withControlRoomTransaction<T>(
 		// set_request_context is the database boundary: its SECURITY DEFINER
 		// membership/brand check runs before any RLS-protected Control Room query.
 		return operation(tx);
+	});
+}
+
+export async function assertControlRoomContentVersionWriteAccess(
+	context: AuthContext,
+	brandId: string,
+	contentVersionId: string,
+): Promise<void> {
+	assertWritable(context);
+	await withControlRoomTransaction(context, brandId, async (tx) => {
+		const rows = await tx
+			.select({ id: scrContentVersions.id })
+			.from(scrContentVersions)
+			.where(
+				and(
+					eq(scrContentVersions.id, contentVersionId),
+					eq(scrContentVersions.organizationId, context.tenantId),
+					eq(scrContentVersions.brandId, brandId),
+				),
+			)
+			.limit(1);
+		if (rows.length !== 1) throw new Error("Content version is not available for this brand");
+	});
+}
+
+export async function assertControlRoomAssetReadAccess(
+	context: AuthContext,
+	brandId: string,
+	assetId: string,
+): Promise<void> {
+	await withControlRoomTransaction(context, brandId, async (tx) => {
+		const rows = await tx
+			.select({ id: scrContentAssets.id })
+			.from(scrContentAssets)
+			.where(
+				and(
+					eq(scrContentAssets.id, assetId),
+					eq(scrContentAssets.organizationId, context.tenantId),
+					eq(scrContentAssets.brandId, brandId),
+				),
+			)
+			.limit(1);
+		if (rows.length !== 1) throw new Error("Asset is not available for this brand");
 	});
 }
 
@@ -154,6 +215,11 @@ function getEvidenceSource(evidence: unknown): string | null {
 	return typeof first.source === "string" ? first.source : null;
 }
 
+function getClaims(claims: unknown): string[] {
+	if (!Array.isArray(claims)) return [];
+	return claims.filter((claim): claim is string => typeof claim === "string");
+}
+
 export const getControlRoomWorkspaceFn = createServerFn({ method: "GET" })
 	.validator(brandSchema)
 	.handler(async ({ data }) => {
@@ -194,6 +260,8 @@ export const getControlRoomWorkspaceFn = createServerFn({ method: "GET" })
 								platform: scrReleaseIntents.platform,
 								status: scrReleaseIntents.status,
 								notBefore: scrReleaseIntents.notBefore,
+								scheduleTimezone: scrReleaseIntents.scheduleTimezone,
+								cancellationReason: scrReleaseIntents.cancellationReason,
 								createdAt: scrReleaseIntents.createdAt,
 							})
 							.from(scrReleaseIntents)
@@ -230,6 +298,7 @@ export const getControlRoomWorkspaceFn = createServerFn({ method: "GET" })
 								version: scrContentVersions.version,
 								body: scrContentVersions.body,
 								ctaUrl: scrContentVersions.ctaUrl,
+								claims: scrContentVersions.claims,
 								evidence: scrContentVersions.evidence,
 								policyVersion: scrContentVersions.policyVersion,
 								contentHash: scrContentVersions.contentHash,
@@ -249,7 +318,12 @@ export const getControlRoomWorkspaceFn = createServerFn({ method: "GET" })
 							.select({
 								id: scrContentAssets.id,
 								contentVersionId: scrContentAssets.contentVersionId,
+								originalFilename: scrContentAssets.originalFilename,
+								mimeType: scrContentAssets.mimeType,
+								sizeBytes: scrContentAssets.sizeBytes,
 								scanStatus: scrContentAssets.scanStatus,
+								rightsExpiresAt: scrContentAssets.rightsExpiresAt,
+								consentExpiresAt: scrContentAssets.consentExpiresAt,
 								createdAt: scrContentAssets.createdAt,
 							})
 							.from(scrContentAssets)
@@ -400,8 +474,9 @@ export const getControlRoomWorkspaceFn = createServerFn({ method: "GET" })
 							latestApprovalByVersion.set(approval.contentVersionId, approval);
 					}
 
-					const clientVersions = versions.map(({ evidence, ...version }) => ({
+					const clientVersions = versions.map(({ evidence, claims, ...version }) => ({
 						...version,
+						claims: getClaims(claims),
 						evidenceSource: getEvidenceSource(evidence),
 					}));
 
@@ -559,6 +634,7 @@ export const createControlRoomContentFn = createServerFn({ method: "POST" })
 			title: z.string().trim().min(3).max(180),
 			body: z.string().trim().min(1).max(3000),
 			ctaUrl: z.string().url().max(2048),
+			claims: claimsSchema.optional().default([]),
 			evidence: evidenceSchema.optional().default([]),
 			policyVersion: policyVersionSchema,
 			evidenceExpiresAt: z.coerce.date().optional(),
@@ -572,7 +648,7 @@ export const createControlRoomContentFn = createServerFn({ method: "POST" })
 		const contentHash = contentVersionHash({
 			body: data.body,
 			ctaUrl: data.ctaUrl,
-			claims: [],
+			claims: data.claims,
 			evidence: data.evidence,
 			disclosure: {},
 			policyVersion: data.policyVersion,
@@ -596,7 +672,7 @@ export const createControlRoomContentFn = createServerFn({ method: "POST" })
 					version: 1,
 					body: data.body,
 					ctaUrl: data.ctaUrl,
-					claims: [],
+					claims: data.claims,
 					evidence: data.evidence,
 					disclosure: {},
 					policyVersion: data.policyVersion,
@@ -624,6 +700,7 @@ export const createContentVersionFn = createServerFn({ method: "POST" })
 			contentId: uuidSchema,
 			body: z.string().trim().min(1).max(3000),
 			ctaUrl: z.string().url().max(2048),
+			claims: claimsSchema.optional().default([]),
 			evidence: evidenceSchema.optional().default([]),
 			policyVersion: policyVersionSchema,
 			evidenceExpiresAt: z.coerce.date().optional(),
@@ -659,7 +736,7 @@ export const createContentVersionFn = createServerFn({ method: "POST" })
 			const contentHash = contentVersionHash({
 				body: data.body,
 				ctaUrl: data.ctaUrl,
-				claims: [],
+				claims: data.claims,
 				evidence: data.evidence,
 				disclosure: {},
 				policyVersion: data.policyVersion,
@@ -673,7 +750,7 @@ export const createContentVersionFn = createServerFn({ method: "POST" })
 					version: nextVersion,
 					body: data.body,
 					ctaUrl: data.ctaUrl,
-					claims: [],
+					claims: data.claims,
 					evidence: data.evidence,
 					disclosure: {},
 					policyVersion: data.policyVersion,
@@ -836,6 +913,17 @@ export const approveContentVersionFn = createServerFn({ method: "POST" })
 					),
 			]);
 			if (!version || !account) throw new Error("Version or target account was not found");
+			const [policy] = await db
+				.select({ requireEvidence: scrContentPolicies.requireEvidence })
+				.from(scrContentPolicies)
+				.where(
+					and(
+						eq(scrContentPolicies.organizationId, context.tenantId),
+						eq(scrContentPolicies.brandId, data.brandId),
+						eq(scrContentPolicies.policyVersion, version.policyVersion),
+					),
+				)
+				.limit(1);
 			const [latestVersion] = await db
 				.select({ id: scrContentVersions.id })
 				.from(scrContentVersions)
@@ -852,12 +940,14 @@ export const approveContentVersionFn = createServerFn({ method: "POST" })
 				throw new Error("A newer content version invalidates this approval request");
 			if (!isLocalLinkedInDryRunAccount(account) && (!account.allowlisted || account.status !== "ACTIVE"))
 				throw new Error("Target account is not allowlisted for release");
-			if (assets.length > 1 || (assets.length === 1 && assets[0]?.scanStatus !== "PASSED")) {
-				throw new Error("Approval requires every attached asset to have PASSED malware scanning");
+			if (assets.some((asset) => asset.scanStatus !== "CLEAN")) {
+				throw new Error("Approval requires every attached asset to complete malware scanning");
 			}
-			if (!Array.isArray(version.evidence) || version.evidence.length === 0 || !version.evidenceExpiresAt)
-				throw new Error("Approval requires verified evidence with an expiry");
-			if (version.evidenceExpiresAt <= now) throw new Error("Evidence has expired");
+			if (policyRequiresEvidence(policy)) {
+				if (!Array.isArray(version.evidence) || version.evidence.length === 0 || !version.evidenceExpiresAt)
+					throw new Error("This content policy requires verified evidence with an expiry");
+				if (version.evidenceExpiresAt <= now) throw new Error("Evidence has expired");
+			}
 			if (assets.length > 0) {
 				if (assets.some((asset) => !asset.rightsExpiresAt)) throw new Error("Approval requires verified asset rights");
 				if (assets.some((asset) => asset.rightsExpiresAt && asset.rightsExpiresAt <= now))
@@ -984,11 +1074,21 @@ export const revokeApprovalFn = createServerFn({ method: "POST" })
 	});
 
 export const queueReleaseIntentFn = createServerFn({ method: "POST" })
-	.validator(z.object({ brandId: z.string().min(1), approvalId: uuidSchema }))
+	.validator(
+		z.object({
+			approvalId: uuidSchema,
+			brandId: z.string().min(1),
+			notBefore: z.string().datetime({ offset: true }),
+			scheduleTimezone: z.string().trim().min(1).max(100),
+		}),
+	)
 	.handler(async ({ data }) => {
 		const context = await resolveSessionAuthContext();
 		assertHumanReviewer(context);
 		const now = new Date();
+		const notBefore = new Date(data.notBefore);
+		if (notBefore <= now) throw new Error("Scheduled time must be in the future");
+		const scheduleTimezone = assertIanaTimeZone(data.scheduleTimezone);
 		return withControlRoomTransaction(context, data.brandId, async (tx) => {
 			const [approval] = await tx
 				.select()
@@ -1061,6 +1161,17 @@ export const queueReleaseIntentFn = createServerFn({ method: "POST" })
 			if (!version || !account || latestDecision?.id !== approval.id || latestDecision.decision !== "APPROVED") {
 				throw new Error("Approval is no longer the current exact release decision");
 			}
+			const [policy] = await tx
+				.select({ requireEvidence: scrContentPolicies.requireEvidence })
+				.from(scrContentPolicies)
+				.where(
+					and(
+						eq(scrContentPolicies.organizationId, context.tenantId),
+						eq(scrContentPolicies.brandId, data.brandId),
+						eq(scrContentPolicies.policyVersion, approval.policyVersion),
+					),
+				)
+				.limit(1);
 			const [latestVersion] = await tx
 				.select({ id: scrContentVersions.id })
 				.from(scrContentVersions)
@@ -1086,28 +1197,28 @@ export const queueReleaseIntentFn = createServerFn({ method: "POST" })
 			) {
 				throw new Error("An active kill switch blocks this release");
 			}
-			if (
-				!Array.isArray(version.evidence) ||
-				version.evidence.length === 0 ||
-				!version.evidenceExpiresAt ||
-				version.evidenceExpiresAt <= now
-			) {
-				throw new Error("Fresh verified evidence is required to queue a release");
+			if (policyRequiresEvidence(policy)) {
+				if (
+					!Array.isArray(version.evidence) ||
+					version.evidence.length === 0 ||
+					!version.evidenceExpiresAt ||
+					version.evidenceExpiresAt <= now
+				) {
+					throw new Error("This content policy requires fresh verified evidence to queue a release");
+				}
 			}
 			if (
-				assets.length > 1 ||
-				(assets.length === 1 &&
-					assets.some(
-						(asset) =>
-							asset.scanStatus !== "PASSED" ||
-							!asset.objectVersionId ||
-							!asset.scanProviderEventRef ||
-							!asset.verifiedAt ||
-							!asset.rightsExpiresAt ||
-							asset.rightsExpiresAt <= now ||
-							!asset.consentExpiresAt ||
-							asset.consentExpiresAt <= now,
-					))
+				assets.some(
+					(asset) =>
+						asset.scanStatus !== "CLEAN" ||
+						!asset.objectVersionId ||
+						!asset.scanProviderEventRef ||
+						!asset.verifiedAt ||
+						!asset.rightsExpiresAt ||
+						asset.rightsExpiresAt <= now ||
+						!asset.consentExpiresAt ||
+						asset.consentExpiresAt <= now,
+				)
 			) {
 				throw new Error("Release requires every attached asset to be verified, scanned, and current");
 			}
@@ -1145,6 +1256,8 @@ export const queueReleaseIntentFn = createServerFn({ method: "POST" })
 					platform: account.platform,
 					idempotencyKey,
 					correlationId: randomUUID(),
+					notBefore,
+					scheduleTimezone,
 					createdBy: context.actorId,
 				})
 				.onConflictDoNothing()
@@ -1182,6 +1295,35 @@ export const queueReleaseIntentFn = createServerFn({ method: "POST" })
 				metadata: { approvalId: approval.id, channelAccountId: account.id, idempotencyKey },
 			});
 			return { created: true, releaseIntent: createdIntent };
+		});
+	});
+
+export const cancelReleaseIntentFn = createServerFn({ method: "POST" })
+	.validator(
+		z.object({
+			brandId: z.string().min(1),
+			reason: z.string().trim().min(3).max(1000),
+			releaseIntentId: uuidSchema,
+		}),
+	)
+	.handler(async ({ data }) => {
+		const context = await resolveSessionAuthContext();
+		assertHumanReviewer(context);
+		return withControlRoomTransaction(context, data.brandId, async (tx) => {
+			const result = await tx.execute(sql`
+				SELECT selena_release.request_release_cancellation(${data.releaseIntentId}, ${data.reason}) AS status
+			`);
+			const status = (result.rows?.[0] as { status?: unknown } | undefined)?.status;
+			if (typeof status !== "string") throw new Error("Release cancellation did not return a status");
+			await appendAudit(tx, {
+				context,
+				brandId: data.brandId,
+				action: status === "CANCELLED" ? "release.cancelled" : "release.cancellation_requested",
+				aggregateType: "release_intent",
+				aggregateId: data.releaseIntentId,
+				metadata: { reason: data.reason, status },
+			});
+			return { status };
 		});
 	});
 
