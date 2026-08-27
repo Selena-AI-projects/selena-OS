@@ -46,6 +46,7 @@ declare global {
 			readonly SELENA_WEB_DATABASE_URL?: string;
 			readonly SELENA_MIGRATION_DATABASE_URL?: string;
 			readonly SELENA_MIGRATION_DATABASE_CA_PEM?: string;
+			readonly SELENA_RUNTIME_DATABASE_CA_PEM?: string;
 			readonly SELENA_STAGING_MVP?: string;
 			readonly SELENA_SCANNER_URL?: string;
 			readonly SELENA_SCANNER_INTERNAL_TOKEN?: string;
