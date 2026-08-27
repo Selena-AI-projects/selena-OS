@@ -175,6 +175,8 @@ function ControlRoomPage() {
 	const [contentTitle, setContentTitle] = useState("");
 	const [contentBody, setContentBody] = useState("");
 	const [contentCta, setContentCta] = useState("");
+	const [contentEvidenceSource, setContentEvidenceSource] = useState("");
+	const [contentEvidenceExpiry, setContentEvidenceExpiry] = useState("");
 	const contentPolicy = "selena-brand-pack/v1";
 	const [approvalVersionId, setApprovalVersionId] = useState("");
 	const [approvalAccountId, setApprovalAccountId] = useState("");
@@ -183,6 +185,8 @@ function ControlRoomPage() {
 	const [revisionContentId, setRevisionContentId] = useState("");
 	const [revisionBody, setRevisionBody] = useState("");
 	const [revisionCta, setRevisionCta] = useState("");
+	const [revisionEvidenceSource, setRevisionEvidenceSource] = useState("");
+	const [revisionEvidenceExpiry, setRevisionEvidenceExpiry] = useState("");
 	const revisionPolicy = "selena-brand-pack/v1";
 	const [stopBrandOpen, setStopBrandOpen] = useState(false);
 	const [stopBrandConfirmation, setStopBrandConfirmation] = useState("");
@@ -206,6 +210,17 @@ function ControlRoomPage() {
 		);
 	}, [data.accounts, data.approvals, data.content, data.versions]);
 
+	useEffect(() => {
+		const latestVersion = data.versions
+			.filter((version) => version.contentId === revisionContentId)
+			.sort((left, right) => right.version - left.version)[0];
+		if (!latestVersion) return;
+		setRevisionBody(latestVersion.body);
+		setRevisionCta(latestVersion.ctaUrl);
+		setRevisionEvidenceSource(latestVersion.evidenceSource ?? "");
+		setRevisionEvidenceExpiry("");
+	}, [data.versions, revisionContentId]);
+
 	function run(action: () => Promise<unknown>, successMessage: string) {
 		startTransition(async () => {
 			try {
@@ -228,7 +243,9 @@ function ControlRoomPage() {
 						title: contentTitle,
 						body: contentBody,
 						ctaUrl: contentCta,
+						evidence: [{ source: contentEvidenceSource }],
 						policyVersion: contentPolicy,
+						evidenceExpiresAt: new Date(contentEvidenceExpiry).toISOString(),
 					},
 				}),
 			"Material created",
@@ -245,7 +262,9 @@ function ControlRoomPage() {
 						contentId: revisionContentId,
 						body: revisionBody,
 						ctaUrl: revisionCta,
+						evidence: [{ source: revisionEvidenceSource }],
 						policyVersion: revisionPolicy,
+						evidenceExpiresAt: new Date(revisionEvidenceExpiry).toISOString(),
 					},
 				}),
 			"New material version saved",
@@ -375,6 +394,25 @@ function ControlRoomPage() {
 											onChange={(event) => setContentCta(event.target.value)}
 										/>
 									</Label>
+									<Label className="grid gap-2">
+										Evidence source
+										<Input
+											required
+											type="url"
+											placeholder="https://example.com/source"
+											value={contentEvidenceSource}
+											onChange={(event) => setContentEvidenceSource(event.target.value)}
+										/>
+									</Label>
+									<Label className="grid gap-2">
+										Evidence valid until
+										<Input
+											required
+											type="datetime-local"
+											value={contentEvidenceExpiry}
+											onChange={(event) => setContentEvidenceExpiry(event.target.value)}
+										/>
+									</Label>
 									<Button disabled={pending} type="submit">
 										<IconPlus />
 										Create material
@@ -423,6 +461,25 @@ function ControlRoomPage() {
 											placeholder="https://example.com"
 											value={revisionCta}
 											onChange={(event) => setRevisionCta(event.target.value)}
+										/>
+									</Label>
+									<Label className="grid gap-2">
+										Evidence source
+										<Input
+											required
+											type="url"
+											placeholder="https://example.com/source"
+											value={revisionEvidenceSource}
+											onChange={(event) => setRevisionEvidenceSource(event.target.value)}
+										/>
+									</Label>
+									<Label className="grid gap-2">
+										Evidence valid until
+										<Input
+											required
+											type="datetime-local"
+											value={revisionEvidenceExpiry}
+											onChange={(event) => setRevisionEvidenceExpiry(event.target.value)}
 										/>
 									</Label>
 									<Button disabled={pending} variant="outline" type="submit">
