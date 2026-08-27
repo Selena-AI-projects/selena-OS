@@ -35,6 +35,7 @@ type AuditDatabase = Pick<ControlRoomDatabase, "execute" | "insert" | "select">;
 const uuidSchema = z.string().uuid();
 const brandSchema = z.object({ brandId: z.string().min(1).max(120) });
 const policyVersionSchema = z.string().trim().min(1).max(120);
+const evidenceSchema = z.array(z.object({ source: z.string().url().max(2048) })).min(1).max(20);
 const STAGING_DEMO_BRAND_ID = "selena";
 const STAGING_DEMO_ORGANIZATION_ID = "default";
 const STAGING_DEMO_ACCOUNT_REF = "Postiz local dry run";
@@ -146,6 +147,13 @@ function validFutureDate(value: Date | null | undefined): Date | null {
 	return value;
 }
 
+function getEvidenceSource(evidence: unknown): string | null {
+	if (!Array.isArray(evidence)) return null;
+	const first = evidence[0];
+	if (!first || typeof first !== "object" || !("source" in first)) return null;
+	return typeof first.source === "string" ? first.source : null;
+}
+
 export const getControlRoomWorkspaceFn = createServerFn({ method: "GET" })
 	.validator(brandSchema)
 	.handler(async ({ data }) => {
@@ -220,6 +228,9 @@ export const getControlRoomWorkspaceFn = createServerFn({ method: "GET" })
 								id: scrContentVersions.id,
 								contentId: scrContentVersions.contentId,
 								version: scrContentVersions.version,
+								body: scrContentVersions.body,
+								ctaUrl: scrContentVersions.ctaUrl,
+								evidence: scrContentVersions.evidence,
 								policyVersion: scrContentVersions.policyVersion,
 								contentHash: scrContentVersions.contentHash,
 								evidenceExpiresAt: scrContentVersions.evidenceExpiresAt,
@@ -389,11 +400,16 @@ export const getControlRoomWorkspaceFn = createServerFn({ method: "GET" })
 							latestApprovalByVersion.set(approval.contentVersionId, approval);
 					}
 
+					const clientVersions = versions.map(({ evidence, ...version }) => ({
+						...version,
+						evidenceSource: getEvidenceSource(evidence),
+					}));
+
 					return {
 						role: context.role,
 						stagingMvp: isSelenaStagingDemo(context, data.brandId),
 						content,
-						versions,
+						versions: clientVersions,
 						assets,
 						accounts,
 						approvals,
@@ -543,6 +559,7 @@ export const createControlRoomContentFn = createServerFn({ method: "POST" })
 			title: z.string().trim().min(3).max(180),
 			body: z.string().trim().min(1).max(3000),
 			ctaUrl: z.string().url().max(2048),
+			evidence: evidenceSchema,
 			policyVersion: policyVersionSchema,
 			evidenceExpiresAt: z.coerce.date().optional(),
 		}),
@@ -555,7 +572,7 @@ export const createControlRoomContentFn = createServerFn({ method: "POST" })
 			body: data.body,
 			ctaUrl: data.ctaUrl,
 			claims: [],
-			evidence: [],
+			evidence: data.evidence,
 			disclosure: {},
 			policyVersion: data.policyVersion,
 		});
@@ -579,7 +596,7 @@ export const createControlRoomContentFn = createServerFn({ method: "POST" })
 					body: data.body,
 					ctaUrl: data.ctaUrl,
 					claims: [],
-					evidence: [],
+					evidence: data.evidence,
 					disclosure: {},
 					policyVersion: data.policyVersion,
 					contentHash,
@@ -606,6 +623,7 @@ export const createContentVersionFn = createServerFn({ method: "POST" })
 			contentId: uuidSchema,
 			body: z.string().trim().min(1).max(3000),
 			ctaUrl: z.string().url().max(2048),
+			evidence: evidenceSchema,
 			policyVersion: policyVersionSchema,
 			evidenceExpiresAt: z.coerce.date().optional(),
 		}),
@@ -640,7 +658,7 @@ export const createContentVersionFn = createServerFn({ method: "POST" })
 				body: data.body,
 				ctaUrl: data.ctaUrl,
 				claims: [],
-				evidence: [],
+				evidence: data.evidence,
 				disclosure: {},
 				policyVersion: data.policyVersion,
 			});
@@ -654,7 +672,7 @@ export const createContentVersionFn = createServerFn({ method: "POST" })
 					body: data.body,
 					ctaUrl: data.ctaUrl,
 					claims: [],
-					evidence: [],
+					evidence: data.evidence,
 					disclosure: {},
 					policyVersion: data.policyVersion,
 					contentHash,
