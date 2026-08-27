@@ -94,7 +94,10 @@ FROM base AS migrate
 WORKDIR /app
 
 COPY --from=builder /deploy/lib ./
+COPY docker/migrate-entrypoint.sh /migrate-entrypoint.sh
+RUN chmod 500 /migrate-entrypoint.sh
 
+ENTRYPOINT ["/migrate-entrypoint.sh"]
 CMD ["npx", "drizzle-kit", "migrate"]
 
 # Worker stage

@@ -65,6 +65,13 @@ export const ENV_REGISTRY: EnvVarSpec[] = [
 		description: "Dedicated PostgreSQL migration identity; never available to normal web or worker runtime.",
 	},
 	{
+		name: "SELENA_MIGRATION_DATABASE_CA_PEM",
+		scope: "server",
+		requiredBy: "optional",
+		credential: true,
+		description: "Supabase root CA used only by the isolated Selena staging migration runner for verify-full TLS.",
+	},
+	{
 		name: "SELENA_STAGING_MVP",
 		scope: "server",
 		requiredBy: "optional",
