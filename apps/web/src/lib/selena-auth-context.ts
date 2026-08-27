@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { createServerOnlyFn } from "@tanstack/react-start";
 import { getRequestHeaders } from "@tanstack/react-start/server";
 import { db } from "@workspace/lib/db/db";
 import { member, organization, svApiKeys } from "@workspace/lib/db/schema";
@@ -13,6 +14,8 @@ export type AuthContext = {
 	permissions: string[];
 };
 
+const currentRequestHeaders = createServerOnlyFn(() => getRequestHeaders());
+
 function normalizeRole(role: string): SelenaRole {
 	if (role === "owner" || role === "admin") return "owner";
 	if (role === "viewer") return "viewer";
@@ -25,7 +28,7 @@ function hashApiKey(value: string): Buffer {
 
 export async function resolveSessionAuthContext(): Promise<AuthContext> {
 	const { auth } = await import("./auth/server");
-	const session = await auth.api.getSession({ headers: getRequestHeaders() });
+	const session = await auth.api.getSession({ headers: currentRequestHeaders() });
 	if (!session) throw new Error("Unauthorized: authenticated session required");
 	const activeOrg = (session.session as { activeOrganizationId?: string | null }).activeOrganizationId;
 	const rows = await db

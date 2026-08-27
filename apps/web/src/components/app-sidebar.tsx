@@ -12,9 +12,9 @@ import {
 	IconLink,
 	IconListDetails,
 	IconReport,
+	IconShieldCheck,
 	IconSitemap,
 	IconSpeakerphone,
-	IconShieldCheck,
 	IconTable,
 	IconTarget,
 	IconTimeline,
@@ -24,7 +24,15 @@ import {
 import { Link, useLocation, useParams, useRouteContext } from "@tanstack/react-router";
 import type { ClientConfig } from "@workspace/config/types";
 import type { BrandWithPrompts } from "@workspace/lib/db/schema";
-
+import {
+	DropdownMenu,
+	DropdownMenuContent,
+	DropdownMenuGroup,
+	DropdownMenuItem,
+	DropdownMenuLabel,
+	DropdownMenuSeparator,
+	DropdownMenuTrigger,
+} from "@workspace/ui/components/dropdown-menu";
 import {
 	Sidebar,
 	SidebarContent,
@@ -35,15 +43,6 @@ import {
 	SidebarMenuItem,
 	useSidebar,
 } from "@workspace/ui/components/sidebar";
-import {
-	DropdownMenu,
-	DropdownMenuContent,
-	DropdownMenuGroup,
-	DropdownMenuItem,
-	DropdownMenuLabel,
-	DropdownMenuSeparator,
-	DropdownMenuTrigger,
-} from "@workspace/ui/components/dropdown-menu";
 import type * as React from "react";
 import { DemoModePill } from "@/components/demo-mode-pill";
 import { Logo } from "@/components/logo";
@@ -121,7 +120,7 @@ export function AppSidebar({
 	isAdmin = false,
 	hasReportAccess = false,
 	scope = "brand",
-	brand,
+	brand: _brand,
 	...props
 }: AppSidebarProps) {
 	const { setOpenMobile } = useSidebar();
@@ -159,78 +158,69 @@ export function AppSidebar({
 				url: "/",
 				icon: IconDashboard,
 			},
+			{
+				title: "Visibility",
+				url: "/visibility",
+				icon: IconChartBar,
+			},
+			{
+				title: "Share of Voice",
+				url: "/share-of-voice",
+				icon: IconSpeakerphone,
+			},
+			{
+				title: "Query Fan-Out",
+				url: "/query-fan-out",
+				icon: IconSitemap,
+			},
+			{
+				title: "Citations",
+				url: "/citations",
+				icon: IconLink,
+			},
+			{
+				title: "Opportunities",
+				url: "/opportunities",
+				icon: IconTarget,
+			},
 		];
-
-		// Only show Visibility and Citations if the brand is onboarded
-		if (brand?.onboarded) {
-			dashboardItems.push(
-				{
-					title: "Visibility",
-					url: "/visibility",
-					icon: IconChartBar,
-				},
-				{
-					title: "Share of Voice",
-					url: "/share-of-voice",
-					icon: IconSpeakerphone,
-				},
-				{
-					title: "Query Fan-Out",
-					url: "/query-fan-out",
-					icon: IconSitemap,
-				},
-				{
-					title: "Citations",
-					url: "/citations",
-					icon: IconLink,
-				},
-				{
-					title: "Opportunities",
-					url: "/opportunities",
-					icon: IconTarget,
-				},
-			);
-		}
 
 		groups.push({
 			label: "AI Visibility",
 			items: dashboardItems,
 		});
 
-		// Settings section - only show if onboarded
-		if (brand?.onboarded) {
-			groups.push({
-				label: "Settings",
-				items: [
-					{
-						title: "Brand",
-						url: "/settings/brand",
-						icon: IconBuilding,
-					},
-					{
-						title: "Competitors",
-						url: "/settings/competitors",
-						icon: IconBuildings,
-					},
-					{
-						title: "Prompts",
-						url: "/settings/prompts",
-						icon: IconListDetails,
-					},
-					{
-						title: "LLMs",
-						url: "/settings/llms",
-						icon: IconCpu,
-					},
-					...(context.clientConfig?.features.teamInvites
-						? [{ title: "Team", url: "/settings/members", icon: IconUsers }]
-						: []),
-					...(context.clientConfig?.features.billing
-						? [{ title: "Billing", url: "/settings/billing", icon: IconCreditCard }]
-						: []),
-				],
-			});
-		}
+		groups.push({
+			label: "Settings",
+			items: [
+				{
+					title: "Brand",
+					url: "/settings/brand",
+					icon: IconBuilding,
+				},
+				{
+					title: "Competitors",
+					url: "/settings/competitors",
+					icon: IconBuildings,
+				},
+				{
+					title: "Prompts",
+					url: "/settings/prompts",
+					icon: IconListDetails,
+				},
+				{
+					title: "LLMs",
+					url: "/settings/llms",
+					icon: IconCpu,
+				},
+				...(context.clientConfig?.features.teamInvites
+					? [{ title: "Team", url: "/settings/members", icon: IconUsers }]
+					: []),
+				...(context.clientConfig?.features.billing
+					? [{ title: "Billing", url: "/settings/billing", icon: IconCreditCard }]
+					: []),
+			],
+		});
 	}
 
 	// Admin section

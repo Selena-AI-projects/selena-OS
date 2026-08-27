@@ -2,4 +2,4 @@
 "@workspace/web": patch
 ---
 
-Require an evidence source and expiry when creating or revising a Content Control material.
+Keep evidence optional for ordinary material creation, and require fresh verified evidence only when the selected content policy requires it for approval or release.

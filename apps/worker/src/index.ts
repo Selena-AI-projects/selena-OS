@@ -5,7 +5,10 @@ import { isMaintenanceEnabled } from "@workspace/lib/run-policy";
 import { startCredentialRefresh } from "@workspace/lib/secrets";
 import boss from "./boss";
 import { registerHandlers } from "./handlers";
+import { startSelenaTriggerDispatcher } from "./selena-trigger-dispatcher";
 import { shutdownTelemetry } from "./telemetry";
+
+let stopSelenaTriggerDispatcher: (() => Promise<void>) | null = null;
 
 if (process.env.SENTRY_DSN) {
 	Sentry.init({
@@ -91,6 +94,8 @@ async function main() {
 	// Register job handlers
 	await registerHandlers(boss);
 	console.log("All handlers registered, worker is ready");
+	stopSelenaTriggerDispatcher = startSelenaTriggerDispatcher();
+	if (stopSelenaTriggerDispatcher) console.log("Selena Trigger outbox dispatcher started");
 }
 
 main().catch(async (error) => {
@@ -104,7 +109,7 @@ main().catch(async (error) => {
 process.on("SIGTERM", async () => {
 	console.log("Received SIGTERM, shutting down gracefully...");
 	await boss.stop({ graceful: true, timeout: 30000 });
-	await Promise.all([Sentry.flush(2000), shutdownTelemetry()]);
+	await Promise.all([Sentry.flush(2000), shutdownTelemetry(), stopSelenaTriggerDispatcher?.()]);
 	console.log("Worker stopped");
 	process.exit(0);
 });
@@ -112,7 +117,7 @@ process.on("SIGTERM", async () => {
 process.on("SIGINT", async () => {
 	console.log("Received SIGINT, shutting down gracefully...");
 	await boss.stop({ graceful: true, timeout: 30000 });
-	await Promise.all([Sentry.flush(2000), shutdownTelemetry()]);
+	await Promise.all([Sentry.flush(2000), shutdownTelemetry(), stopSelenaTriggerDispatcher?.()]);
 	console.log("Worker stopped");
 	process.exit(0);
 });

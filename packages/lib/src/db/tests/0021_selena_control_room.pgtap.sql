@@ -395,7 +395,7 @@ RESET SESSION AUTHORIZATION;
 BEGIN;
 SET ROLE selena_backup_restore;
 UPDATE selena_registry.content_assets
-  SET scan_status = 'PASSED',
+  SET scan_status = 'CLEAN',
       scan_provider_event_ref = 'pgtap-scan-pass',
       verified_at = now(),
       rights_expires_at = now() - interval '1 minute',

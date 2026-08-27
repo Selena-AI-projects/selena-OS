@@ -13,6 +13,7 @@
 	"exports": {
 		"./db/db": "./src/db/db.ts",
 		"./db/schema": "./src/db/schema.ts",
+		"./db/staging-tls": "./src/db/staging-tls.ts",
 		"./db/auth-sync": "./src/db/auth-sync.ts",
 		"./db/provisioning": "./src/db/provisioning.ts",
 		"./auth/server": "./src/auth/server.ts",
@@ -44,6 +45,11 @@
 		,"./selena-monitoring": "./src/selena-monitoring.ts"
 		,"./selena-flow": "./src/selena-flow.ts"
 		,"./selena-control-room": "./src/selena-control-room.ts"
+		,"./selena-private-storage": "./src/selena-private-storage.ts"
+		,"./selena-clamav": "./src/selena-clamav.ts"
+		,"./selena-release-gateway": "./src/selena-release-gateway.ts"
+		,"./selena-postiz": "./src/selena-postiz.ts"
+		,"./selena-postiz-ingestion": "./src/selena-postiz-ingestion.ts"
 		,"./public-source-adapters": "./src/public-source-adapters.ts"
 		,"./public-provider-gates": "./src/public-provider-gates.ts"
 		,"./recommendation-persistence": "./src/recommendation-persistence.ts"

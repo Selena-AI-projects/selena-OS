@@ -1,281 +1,157 @@
-# Selena OS MVP Implementation Gap Report
+# Selena OS MVP implementation gap report
 
-**Дата аудита:** 2026-08-26; staging execution addendum: 2026-08-27.
-**Источник требований:** `Selena_OS_MVP_Technical_Spec_v1_2026-08-26.docx`, разделы 14-15 и AC-001..AC-032.
-**Baseline:** Selena OS `main` at `f90eeba5f94b88c19f1071c063ebff47717e0187`.
-**Контрольная сумма `0021`:** `sha256:88c3030c9c85b000b2ac8c07fe75031d0da5eef24afcccb182cdb4571999e5c2`.
-**Ограничения соблюдены:** `0021`-`0024` исполнены только в staging через отдельный Railway `migrate` runner; production migration/deploy, Postiz, LinkedIn и социальные публикации не выполнялись. Disposable proof for `0021` remains separate evidence. `.env` and credential values were not read or reported.
+**Audit date:** 2026-08-27
+**Requirement source:** `SELENA_OS_MVP_AUTONOMOUS_EXECUTION_SPEC_v1_2026-08-26.docx`
+**Repository state audited:** `main` at `b15f1d03` plus the uncommitted implementation working tree through migrations `0025`–`0031`. Nothing in this update is a staging deployment or an external provider result.
 
-Codex Security diff scan completed with no remaining confirmed findings in its original snapshot. It warned that the working tree changed during the scan; the post-fix source trace, tests and secret scan recorded below are the authoritative evidence for the final local state.
+## Status rules
 
-## Как читать статусы
+`PASS` requires the complete required runtime level: database, application, browser, provider, or recovery evidence as specified. Source, a table, a UI, or a TypeScript function is never enough. `PARTIAL` means a limited, repeatable piece of evidence exists but does not meet the required level. `MISSING` means no implementation or no required evidence exists. `BLOCKED_EXTERNAL` means the next missing proof requires an approved external account, credential, or provider contract.
 
-- **PASS**: есть доказательство работающего требования в соответствующей среде и тесте/ручной проверке.
-- **PARTIAL**: есть локальный код или статическая защита, но нет требуемого runtime boundary, DB/integration test или полного vertical slice.
-- **MISSING**: требуемая capability отсутствует в репозитории.
-- **BLOCKED**: проверка или capability требует не предоставленной внешней инфраструктуры, credentials, legal/ADR решения или staging database.
+## Strict owner-requirement coverage
 
-Ни один TypeScript helper, таблица или UI-экран в этом отчёте сам по себе не считается production capability.
+**0% (0/12) requirements are complete.** No row below is `PASS`; this is intentional. The current code contains useful partial controls but does not meet the frozen end-to-end contract.
 
-## Scope и фактические изменения
-
-Локальная реализация добавляет Control Room route/UI, server functions, Drizzle schema/migration и pure gate helpers. После решений владельца она дополнительно:
-
-- переносит canonical Selena tables в private `selena_registry`, `selena_release`, `selena_audit`, `selena_ingest_raw` и `selena_performance` schemas (`packages/lib/src/db/schema.ts:869-1362`, `packages/lib/src/db/migrations/0021_selena_control_room.sql:58-365`);
-- вводит no-login role groups, transaction-scoped verified context, `FORCE RLS`, role grants/revokes, immutable triggers, release intents и transactional outbox contract (`0021:6-56`, `:382-902`);
-- выполняет все Control Room database operations inside a transaction that first establishes server-owned context (`apps/web/src/server/selena-control-room.ts:56-73`);
-- добавляет 34-case disposable-only pgTAP source with cross-brand, forged-context, approval, release-intent/outbox idempotency, nonce, role, immutability and context-leak negatives (`packages/lib/src/db/tests/0021_selena_control_room.pgtap.sql`).
-
-DB schema/RLS/role controls получили **PASS в disposable scope** и limited staging evidence for the applied migration chain. They remain **PARTIAL** for production and do not create a deployable Gateway, Postiz, Trigger.dev, Payload, scanner, object storage, network boundary or ingestion adapter.
-
-## Staging Execution Addendum
-
-This addendum supersedes earlier historical statements in this report that said `0021` was unexecuted or that staging migration was not authorized.
-
-- `0021`-`0024` were applied only to the canonical Supabase staging project through Railway `migrate`; deployment `0bced186-389a-4c08-aea7-2f858ca7e9b6` ended `SUCCESS` with `migrations applied successfully`.
-- The migration ledger has 25 entries. `0024_repair_staging_dry_run_approval_policy.sql` has SHA-256 `f6f67523bd8dbb3324f497e2e340bd15bbcd32d17c761a9cb8a3bad9d1c5216e`, and the recorded hash is present. Staging ACL verification confirmed web `INSERT` on approvals, denied web `INSERT` on publication attempts, and denied web/worker `SET ROLE selena_schema_owner`.
-- `0024` was generated through `drizzle-kit generate --custom`, not by hand-editing Drizzle metadata. It reconciles the database approval predicate with the fixed no-publish account: only organization `default`, brand `selena`, platform `linkedin_page_dry_run`, reference `Postiz local dry run`, `provider_integration_id IS NULL`, `DRY_RUN`, and `allowlisted = false` receive the exception. All ordinary accounts still require an active allowlisted account; invalid/expired scanned assets still fail.
-- Disposable PostgreSQL full chain through `0024` passed. Its transaction-scoped RLS smoke inserted the permitted text-only dry-run approval while confirming that web cannot insert a publication attempt or become schema owner. A new disposable-only pgTAP source covers the same case; pgTAP was unavailable in the locally installed Docker images, so that new source was not executed in this addendum.
-- Railway web deployment `e892ec21-7c55-46d9-a0e7-d09524ee02b9` ended `SUCCESS` from the exact `f90eeba5` checkout. The incorrect `selena-ai-visibility` GitHub source binding was disconnected from the staging web service before this deploy, so it cannot overwrite Selena staging automatically.
-- Browser evidence at `https://web-staging-4a8f.up.railway.app/app/selena/control-room` passed for an existing interactive owner session: Selena Systems demo material was visible, approval was recorded, then one internal release intent was queued. Nine additional queue requests left exactly one visible `QUEUED` intent with `PENDING` outbox and no Gateway manifest. This is a no-publish flow, not a real release.
-- During the scenario, Railway DNS logs returned no requests for `postiz.com` or `linkedin.com`. The dry-run account has no integration ID. No Postiz/LinkedIn credential, adapter, OAuth call, signed manifest, dispatch reservation, publication attempt or public post was created.
-- A managed Supabase backup/PITR confirmation was not available in the authenticated dashboard, so the applied staging migration has limited provider-backup evidence. Production remains untouched.
-
-## Ответы на архитектурные вопросы
-
-| Вопрос | Ответ и evidence | Статус |
-|---|---|---|
-| Release Gateway отдельный deployable service или библиотека? | Отдельного service нет. В web/lib удалены manifest/dispatch и signer surfaces; остаются pure gate/classification rules (`packages/lib/src/selena-control-room.ts:116-145`) и UI-декларация отсутствующего Gateway (`apps/web/src/routes/_authed/app/$brand/control-room.tsx:577-582`). ADR-004 и service design описывают будущий отдельный deployable. | MISSING |
-| Как запрещён direct frontend/agents/Trigger доступ к Postiz? | В source нет Postiz client: проверка `rg -l -i 'postiz' apps/web/src apps/worker/src packages/lib/src` вернула 0 файлов. Это отсутствие интеграции, не network/credential denial. Топология запрета определена только в `docs/control-room/phase-0/ADR-004_POSTIZ_DEPLOYMENT_AND_LICENSE.md`. | MISSING |
-| Только Gateway может получить Postiz credential? | Нет реального Postiz credential namespace, vault policy, IAM role или network route. Целевая physical placement определена ADR-004, но не реализована. | MISSING |
-| Есть Trigger.dev durable workflow: queues, retries, idempotency, approval wait, cancellation, reconciliation? | Trigger.dev отсутствует. Worker использует только pg-boss queues для иных задач (`apps/worker/src/index.ts:37`, `:42`), без Selena handler. | MISSING |
-| Используется Payload; если нет, чем заменён Content Registry? | Payload отсутствует в dependencies/source. ADR-003 фиксирует Payload = DEFER FOR MVP, а не несовместимость с TanStack/Vite: отдельный Next.js/Payload service и REST API технически возможны. До review после первого бренда единственный Registry -- Drizzle/PostgreSQL `selena_registry` tables (`packages/lib/src/db/schema.ts:918-1074`). Он не обладает deployed storage/scanning или production evidence. | PARTIAL |
-| Где original assets и derivatives? | `content_assets` now reserves `storage_key`, `object_version_id`, SHA-256 and scanner-event metadata (`schema.ts:1004-1036`), but buckets, immutable object controls, derivative linkage and signed URLs do not exist. | MISSING |
-| Реализованы sha256, immutable originals, malware/storage scanning? | SHA-256 format/size/MIME checks and a forced `QUARANTINED` web insert state migrated successfully; pgTAP rejects a quarantined asset and restore preserves asset hashes. Approval predicate rejects non-`PASSED` or expired asset metadata (`0021`; `db/tests/0021_selena_control_room.pgtap.sql`). Нет object-byte hashing, immutable storage, MIME sniffing или scanner provider/result. | PARTIAL |
-| Есть PostgreSQL RLS, отдельные service roles и cross-brand negative tests? | Disposable evidence passed: private schemas, no-login web/worker/Gateway/Trigger/ingestion/analytics/scanner/migration/backup roles, grants/revokes, `FORCE RLS`, verified context and `34/34` pgTAP, including forged context and cross-brand DML. Staging now has a dedicated migrate-only login and verifies web/worker cannot become schema owner; a full staging cross-brand negative test is still absent. | PARTIAL |
-| Есть outbox consumer или только таблица? | Web atomically creates `selena_release.release_intents` and `selena_release.outbox_events` only after fresh approval, account, evidence, rights/consent, asset-scan and kill-switch checks (`apps/web/src/server/selena-control-room.ts:711-903`; `schema.ts`). The contract has unique idempotency keys, but no consumer, lease worker, Trigger queue, retry, approval wait, cancellation or reconciliation runtime. | PARTIAL |
-| Реализован настоящий Postiz adapter? | Нет dependency, client, account mapping, OAuth flow, webhook/reconciler или adapter implementation. | MISSING |
-| Есть ambiguous-result flow без blind retry? | Pure classification returns `RECONCILE_REQUIRED` (`packages/lib/src/selena-control-room.ts:138`, test `:130`), but no Gateway/worker uses it and no reconciliation poller exists. | PARTIAL |
-| Есть platform ingestion, raw snapshots, normalization, attribution? | `selena_ingest_raw.raw_platform_snapshots` and performance records exist as unexecuted append-only data contracts (`schema.ts:1267-1362`), but нет adapter/dlt/ingestion run, normalization, DQ или attribution processor. | PARTIAL |
-| Какие runtime variables и внешние credentials отсутствуют? | Current source has no Postiz, LinkedIn, Trigger, Gateway, Supabase Storage, or scanner integration contract. Required-from-user actions below are sequenced: decisions first, projects only after acceptance, secrets only after integration code. No credential value is requested now. | BLOCKED |
-
-## Проверка архитектурной подмены
-
-| Проверка | Результат |
-|---|---|
-| Control Room UI не подменяет Payload/Content Registry | **Подтверждено как gap.** UI is a client of custom tables (`apps/web/src/routes/_authed/app/$brand/control-room.tsx:223`); Payload is absent. |
-| TypeScript release-check не назван отдельным Release Gateway | **Исправлено локально.** Web/lib manifest signing and dispatch surfaces removed; UI states that the Gateway is not deployed (`apps/web/src/routes/_authed/app/$brand/control-room.tsx:577-582`). No service/network boundary exists. |
-| Таблица outbox не названа durable workflow | **Подтверждено как gap.** It is an atomically-written contract only; there is no consumer or Selena durable workflow. |
-| Таблица metrics не названа ingestion | **Подтверждено как gap.** There is no connector, raw record or normalization. |
-| Postiz type/interface не названы интеграцией | **Подтверждено как gap.** There is no Postiz adapter/interface/client in the reviewed source. |
-
-## Phase 0 integration decisions
-
-| Decision | Status | Evidence | Consequence before first migration |
+| ID | Status | Exact evidence | Required proof still missing |
 |---|---|---|---|
-| Trigger runtime | APPROVED; implementation deferred | `docs/control-room/phase-0/ADR-001_TRIGGER_RUNTIME.md`; worker remains pg-boss-only at `apps/worker/src/index.ts:37-75` | Trigger.dev Cloud is the selected durable workflow provider. No task, queue, credential, or PostgreSQL access exists yet. |
-| Database and storage | APPROVED; project deferred | `ADR-002_DATABASE_AND_STORAGE.md`; local migration `0021` | Supabase Cloud PostgreSQL/private Storage; Better Auth only; five canonical schemas excluded from Data API; browser uses Selena backend only. |
-| Content Registry | DEFER FOR MVP | `ADR-003_PAYLOAD_INTEGRATION.md`; prospective registry `packages/lib/src/db/schema.ts:927-1051` | Payload is technically viable as a separate service, but deferred because of a second runtime/auth/migration boundary and duplicate Registry. Re-evaluate after first brand. |
-| Postiz and Gateway | BLOCKED_CONTRACT_SPIKE | `ADR-004_POSTIZ_DEPLOYMENT_AND_LICENSE.md`; `RELEASE_GATEWAY_SERVICE_DESIGN.md` | Provisional choice is Postiz Cloud in one isolated Selena Systems organization. Self-hosting is fallback only if Cloud spike fails; Gateway remains a future separate deployable. |
-| Primary channel | PILOT APPROVED; external setup blocked | `ADR-005_PRIMARY_CHANNEL.md` | LinkedIn Page pilot is approved. Candidate callback is `/integrations/social/linkedin-page`, to be re-verified against current Postiz docs and actual Cloud/version immediately before registration. |
-| OSS ownership | PARTIAL | `OPEN_SOURCE_COMPONENT_MATRIX.md` | Matrix distinguishes service/package/adapt/reject and records license/version observations. No component was installed or copied. |
+| R-001 Full frozen MVP specification | PARTIAL | Private storage/scanner, Gateway, outbox/Trigger boundaries, Postiz contract, ingestion and the Control Room UI are implemented and tested locally. | A deployed staging vertical cycle and the external provider/OAuth evidence still required by AC-01…AC-36. |
+| R-002 Autonomous execution without interim stops | PARTIAL | This audit continues independent local work and does not request a decision for safe implementation. | This is an execution constraint, not a deployable product capability; it cannot be credited until the complete evidence bundle exists. |
+| R-003 AI Visibility and Selena OS separated | PARTIAL | Product switcher: `apps/web/src/components/app-sidebar.tsx:71-117`; exclusive Content Control navigation: `:141-154`; exclusive AI Visibility navigation: `:155-224`. | Browser evidence that each workspace has the correct navigation, route guards and empty states. Both still run in one web deployment and share the same brand route hierarchy. |
+| R-004 One account for both products | PARTIAL | Shared authenticated brand layout resolves Better Auth session and organisation membership at `apps/web/src/routes/_authed/app/$brand.tsx:52-100`; both product routes are beneath that layout. | Browser/account test proving one member can switch products without a second login and cannot access another organisation. |
+| R-005 Persistent populated AI Visibility sidebar | PARTIAL | The UI now renders Overview, Visibility, Share of Voice, Query Fan-Out, Citations, Opportunities and Settings regardless of `brand.onboarded`: `apps/web/src/components/app-sidebar.tsx:155-224`. | Desktop and narrow-viewport browser evidence; route-by-route empty-state verification for a non-onboarded brand. |
+| R-006 Control Room as a separate workspace | PARTIAL | Route and eight-section sidebar: `apps/web/src/routes/_authed/app/$brand/control-room.tsx:23-49,480-1107`; exclusive navigation: `apps/web/src/components/app-sidebar.tsx:141-154`; owner-only cancellation and brand stop: `apps/web/src/server/selena-control-room.ts:1285-1385`. | Authenticated browser evidence and deployed integration for every section. |
+| R-007 Human approval blocks publication | PARTIAL | Interactive-owner approval and queue validation: `apps/web/src/server/selena-control-room.ts:860-1260`; Gateway re-validates exact approval, content, evidence policy, CLEAN assets, rights/consent, destination, schedule and kill switch: `packages/lib/src/db/migrations/0027_release_gateway_manifest_boundary.sql:104-282`; pgTAP gateway negatives: `packages/lib/src/db/tests/0027_release_gateway_manifest_boundary.pgtap.sql:111-301`. | Deployed Gateway and real workflow must prove the same boundary before provider egress. |
+| R-008 Selena Systems LinkedIn Page through Postiz | BLOCKED_EXTERNAL | Typed Postiz Cloud contract supports destination discovery, schedule, cancel, status and analytics: `packages/lib/src/selena-postiz.ts:1-211`; allowlist and ambiguous-outcome DB boundary: `packages/lib/src/db/migrations/0029_gateway_postiz_submission_boundary.sql:1-214`; connection screen: `apps/web/src/routes/_authed/app/$brand/control-room.tsx:578-605`. | Isolated Postiz Cloud contract spike, real Page OAuth and allowlisted integration ID. No credential or post has been created. |
+| R-009 Public publishing technically excluded before permission | PARTIAL | Current staging test queues an internal no-publish intent only; Gateway has no active adapter submission call; Postiz submission first reserves immutable state and an ambiguous result becomes `UNKNOWN` with an incident: `packages/lib/src/db/migrations/0029_gateway_postiz_submission_boundary.sql:20-192`; pgTAP: `packages/lib/src/db/tests/0029_gateway_postiz_submission_boundary.pgtap.sql:78-156`. | Deployed Gateway egress/credential isolation and negative network proof. A source-level absence or a local test is not the final boundary. |
+| R-010 Owner-readable interface | PARTIAL | Material, channel, scheduled date/time zone and readable statuses replace operational identifiers: `apps/web/src/routes/_authed/app/$brand/control-room.tsx:97-149,888-1026`; error correlation ID and Retry: `:60-85`; `Stop brand` has a consequence-confirmation: `:365-384,899-928`. | Authenticated usability/browser review, including loading, errors, empty states and the owner’s actual language choice. |
+| R-011 Staging security, ACL/RLS and credential separation proven | PARTIAL | A fresh disposable runner applied the full chain through `0031`; pgTAP passed `115/115` across `0021`, `0023`, `0024`, `0026`–`0031`. Storage scanner, Gateway, worker, ingestion and web roles have negative tests. Staging TLS remains fail-closed in `packages/lib/src/db/staging-tls.ts`. | Staging catalog/grant/data-API evidence, deployed TLS/secret namespaces and cross-brand browser/API proof. The disposable runner still needs the documented pre-provisioned migration-role handoff. |
+| R-012 Repeatable real user scenario | MISSING | Owner-reported earlier no-publish activity is not independent browser evidence for the current working tree. No browser-control tool is available in this audit session. | Authenticated browser trace: account creation/login, product switch, content/review/approval, queued no-publish test, and at least five negative paths. |
 
-### Reauthored `0021` table map
+## Corrections to prior report claims
 
-All rows below are local, unexecuted source evidence from `packages/lib/src/db/migrations/0021_selena_control_room.sql:82-365,647-902`. RLS is `ENABLE + FORCE` with role-specific policies. Retention is a contract to configure later, not a live provider setting.
+1. **`0021` checksum conflict:** the autonomous specification names `bc56d076e3c6f0819790051b18bce58f6b8eb0e23382ab68191b2bb2c65e63dd`; the checked-in file now hashes to `4b731c832b80ff17cb9aeb4d58bc15e40c18fca0d8113f0c615dac6e8a790d47`. Historical report statements that the old checksum was the current final checksum are withdrawn. Historical migrations are not edited in this audit.
+2. **Clean runner handoff:** a fresh disposable database applied the complete ledger through `0031` with `packages/lib/scripts/run-migrations.mjs`, but only after its bootstrap connection was granted `SET ROLE selena_schema_owner`. The staging runner remains intentionally fail-closed: its dedicated migration login and role handoff must be pre-provisioned rather than created by a web or worker runtime.
+3. **Staging/browser claims:** earlier report prose that asserted a full staging browser pass, migration application, provider DNS logs, and production-adjacent grants is not re-verified in this audit and is not counted toward any `PASS`.
+4. **No architecture substitution:** the current Control Room route does not replace Payload/Content Registry. An HTTP Gateway runtime, outbox dispatcher, workflow state machine, raw-ingestion boundary and typed Postiz client now exist in source, but none counts as a deployed provider integration, Trigger Cloud task, Postiz OAuth connection or staging vertical cycle.
+5. **Staging TLS correction:** the unsafe `SELENA_STAGING_MVP` override that removed the URL SSL mode and disabled certificate validation was removed in this working tree. `db.ts` now calls `assertStagingDatabaseTls`, which rejects a staging URL without `sslmode=verify-full` and `sslrootcert`; its focused tests pass. This is an un-deployed source repair, not proof that Railway's running service has the CA file and a verified connection.
 
-| Legacy/current concept -> canonical physical table | Owner / schema | Runtime role and allowed operation | Immutable | RLS / retention | Disposition |
-|---|---|---|---|---|---|
-| `scr_channel_accounts` -> `channel_accounts` | Registry / `selena_registry` | Web `SELECT`; Gateway `SELECT/INSERT/UPDATE`; scanner read only | No, configuration history is audited | Brand context; retain account configuration/audit per policy | REFACTORED; browser cannot allowlist accounts |
-| `scr_content_items` -> `content_items` | Registry / `selena_registry` | Web `SELECT/INSERT/UPDATE` | No, mutable draft container | Brand context; retain lifecycle per policy | REFACTORED |
-| `scr_content_versions` -> `content_versions` | Registry / `selena_registry` | Web `SELECT/INSERT` | Yes, DB trigger rejects `UPDATE/DELETE` | Brand context; audit/legal retention | KEPT AS DEFERRED-PAYLOAD REGISTRY |
-| `scr_content_assets` -> `content_assets` | Registry / `selena_registry` | Web `SELECT/INSERT QUARANTINED`; scanner scoped `SELECT/UPDATE scan fields` | Database record is mutable only by scanner state; object immutability external | Brand context; storage retention is blocked | REFACTORED |
-| `scr_approvals` -> `approvals` | Registry / `selena_registry` | Interactive-owner web `SELECT/INSERT` only | Yes | Brand context plus DB predicate for membership, account, asset scan/expiry; audit retention | REFACTORED |
-| `scr_kill_switches` -> `kill_switches` | Registry / `selena_registry` | Web owner path `SELECT/INSERT/UPDATE` | No, state change audited | Brand/global context; retain incident/audit policy | REFACTORED |
-| `scr_release_manifests` -> `release_manifests` | Gateway / `selena_release` | Gateway `SELECT` exact `READY` manifest, `INSERT`; web metadata projection | Yes | Gateway exact-manifest or web brand policy; release/audit retention | REPLACED |
-| new local dispatch contract -> `release_intents` | Release / `selena_release` | Web `SELECT/INSERT`; registry worker `SELECT/UPDATE` | No, status evolves under worker only | Brand context, unique approved release/account idempotency | ADDED AS CONTRACT, NOT A GATEWAY |
-| `scr_outbox_events` -> `outbox_events` | Release / `selena_release` | Web `SELECT/INSERT`; registry worker `SELECT/UPDATE` | No, status/lease is worker-owned | Brand context, event and idempotency unique | ADDED AS TRANSACTIONAL OUTBOX CONTRACT, NOT A DURABLE WORKFLOW |
-| `scr_publications` -> `publication_attempts` | Gateway / `selena_release` | Gateway `SELECT/INSERT`; web metadata projection | Yes | Brand + exact manifest; immutable transition history; release/audit retention | REPLACED |
-| `scr_incidents` -> `incidents` | Audit / `selena_audit` | Gateway `INSERT/UPDATE`; web `SELECT` | No, resolution state changes | Brand context; incident retention policy | REFACTORED |
-| `scr_audit_events` -> `audit_events` | Audit / `selena_audit` | Web/Gateway append, web read | Yes | Brand/global context; audit/legal retention | REFACTORED |
-| new raw contract -> `raw_platform_snapshots` | Ingestion / `selena_ingest_raw` | Ingestion `SELECT/INSERT` | Yes | Brand context, request-key dedupe; raw-retention policy | ADDED AS CONTRACT, NOT INGESTION |
-| `scr_metric_snapshots` -> `metric_snapshots` | Performance / `selena_performance` | Ingestion `INSERT`; analytics/web read | Yes | Brand context; metrics retention policy | RETAINED AS CONTRACT, NOT NORMALIZATION |
-| `scr_tracking_events` -> `tracking_events` | Performance / `selena_performance` | Ingestion `INSERT`; analytics read | Yes | Brand context; privacy/attribution retention policy | RETAINED AS CONTRACT, NOT ATTRIBUTION |
+## Evidence gathered in this audit
 
-Role split is defined in `0021:6-56,817-902`: `selena_schema_owner`/`selena_migrator`, `selena_web_runtime`, `selena_registry_worker_runtime`, `selena_gateway_runtime`, `selena_trigger_runtime`, `selena_ingestion_runtime`, `selena_analytics_runtime`, `selena_scanner_runtime`, and `selena_backup_restore`. All ordinary runtime groups are `NOLOGIN NOBYPASSRLS`; Trigger has no database grants; only controlled no-login backup/restore has `BYPASSRLS`. The actual login identities, secret mounts, network policy, Supabase exposed-schema setting, storage bucket policies, and retention configuration remain external work.
+### Disposable PostgreSQL only
 
-Migration `0021` is reauthored clean-install SQL, not a compensating migration. Its final checksum was first validated in disposable PostgreSQL and was later applied only in staging through the controlled runner; it has not been applied to production.
+Isolated local PostgreSQL 17.6.1.143 disposable containers were used. They have no staging or production connection.
 
-### E0-E8 execution order
-
-| Step | Status | Depends on | Deliverable/gate |
+| Check | Result | Command / evidence | Limit |
 |---|---|---|---|
-| E0: freeze external side effects and audit repository/OSS | PASS | None | No migration/deploy/publication; Node 24 validation; ADR and matrix evidence. |
-| E1: obtain owner decisions | PASS | E0 | Trigger.dev Cloud, Supabase staging, Postiz Cloud no-publish spike, and LinkedIn Page pilot are approved. No legal/VPC/self-host request is opened. |
-| E2: reauthor 0021 and final Drizzle schema/roles | PASS (disposable) | E1, ADR-002/003/004 review | Clean Drizzle `0000…0021`, recorded SHA-256, `34/34` pgTAP, upgrade fixture and restore drill pass on Supabase PostgreSQL 17.6.1.143. Staging still needs separately authorized execution. |
-| E3: create approved staging projects and identities | PARTIAL | E2 disposable DB proof and explicit external authorization | Supabase staging project and migrate-only identity exist. Trigger project, isolated Selena Systems Postiz Cloud organization, private storage/scanner design, and later role/secret namespaces remain blocked. |
-| E4: implement/deploy Release Gateway | BLOCKED | E2, E3 | Separate Gateway API/worker, KMS signing, nonce/idempotency, allowlist, kill switch, audit, health and contract tests. |
-| E5: implement Trigger durable workflow and outbox consumer | BLOCKED | E3, E4 | Queues, retry classifications, approval wait, cancellation, ten-delivery idempotency and reconciliation. |
-| E6: connect real LinkedIn staging channel via Postiz Cloud | BLOCKED | E3, E4, ADR-005 owner actions | Re-verify callback path, controlled OAuth, one allowed integration ID, Postiz adapter, timeout/reconciliation, and direct-access denial evidence. |
-| E7: implement storage/scanning and platform ingestion/attribution | BLOCKED | E2, E3, E6 | Immutable originals/derivatives, byte hashing/scanning, raw snapshots, normalize/DQ, redirect/lead path. |
-| E8: execute staging vertical-slice and resilience/restore drills | PARTIAL | E4-E7 | A no-publish Control Room flow passed. All external negative tests, cross-brand staging DB tests, recovery, provider backup restore and an observed publication-to-lead cycle remain blocked. |
+| Current 0021 checksum | PASS (source fact) | `shasum -a 256 packages/lib/src/db/migrations/0021_selena_control_room.sql` | Conflicts with the specification baseline above. |
+| Restricted migration sequence | PARTIAL | `DATABASE_URL=postgres://... node scripts/run-migrations.mjs` applied the complete ledger `0000…0031` on a fresh disposable database after the isolated migration role was granted `SET ROLE selena_schema_owner`. | The staging login/pre-provisioning handoff and its live ledger/checksums are still unverified. |
+| pgTAP | PARTIAL | `CREATE EXTENSION pgtap`; suites `0021`, `0023`, `0024`, `0026`–`0031` passed `115/115` on that clean migrated disposable database. | Disposable only; not the requested staging/API/browser suite. |
+| Scoped database restore | PARTIAL | `pg_dump`/`pg_restore` of `public`, `drizzle` and the five Selena schemas restored to a clean disposable target. Catalog result: `25` ledger rows, `16` Selena tables, `16` with `FORCE RLS`, `84` policies. | A full Supabase dump first failed on provider-managed `vault.secrets` and extension/default-ACL objects. No Storage restore, RTO/RPO or staging restore evidence exists. |
+| Migration static validation | PASS (static only) | `DATABASE_URL=postgresql://localhost:5432/selena_static pnpm --filter @workspace/lib exec drizzle-kit check` | No database connection or runtime grants were exercised. |
 
-## Phase 0-4 requirements
-
-| Phase / requirement | Status | Evidence: exact file:line | Test / command | Remaining work |
-|---|---|---|---|---|
-| P0: audit Payload/Trigger/Postiz | PASS_WITH_EXTERNAL_SETUP | `docs/control-room/phase-0/ADR-001_TRIGGER_RUNTIME.md`; `ADR-003_PAYLOAD_INTEGRATION.md`; `ADR-004_POSTIZ_DEPLOYMENT_AND_LICENSE.md`; existing pg-boss at `apps/worker/src/index.ts:37-75` | Source/lockfile review; prior official vendor documentation review | Payload rationale, Postiz Cloud/self-host decision, and no-publish acceptance are explicit. The controlled Cloud spike remains external and no runtime integration exists. |
-| P0: LinkedIn OAuth/post/metrics spike | BLOCKED | No implementation | None | Owned LinkedIn account, approved scopes and isolated staging account. |
-| P0: repository threat model | PARTIAL | Security scan threat model in isolated scan artifacts; repository `SECURITY.md` is generic only | Codex Security diff scan | Persist product threat model/ADR and review it with owner/security. |
-| P0: license/hosting/data-retention ADRs | PASS_WITH_EXTERNAL_SETUP | ADR-001..005 and `OPEN_SOURCE_COMPONENT_MATRIX.md` in `docs/control-room/phase-0/` | `rg -n 'Status:|User actions required' docs/control-room/phase-0` | Owner decisions and controlled Cloud spike. AGPL/legal/VPC action is deferred unless the Cloud spike fails. |
-| P0: Brand Pack / policy v1 | MISSING | `policyVersion` is an arbitrary client string in `apps/web/src/server/selena-control-room.ts:310` | Typecheck only | Versioned policy bundle, claims/evidence contract and owner approval. |
-| P0 architecture gate: no unknown blocker for one channel | PASS_WITH_EXTERNAL_SETUP | ADR-002 through ADR-005, matrix, and this report | ADR consistency review | Remaining Phase 0 external blockers are the approved staging projects and controlled OAuth/Cloud contract spike; this is not a completed publication/metrics vertical slice. |
-| P1: Auth/RBAC | PARTIAL | Better Auth context `apps/web/src/lib/selena-auth-context.ts:26-45`; verified transaction wrapper `apps/web/src/server/selena-control-room.ts:56-73`; role/RLS SQL `0021` | Disposable pgTAP `34/34`; restore RLS smoke | Provision distinct staging login identities and add MFA/step-up. |
-| P1: Content Registry contracts | PARTIAL | Custom private-schema tables `packages/lib/src/db/schema.ts`; Payload deferred in ADR-003 | Clean migration, pgTAP and restore drill passed | Implement claims/evidence/rights/storage/scanning and re-evaluate Payload after first brand. |
-| P1: versioned content, claims and evidence | PARTIAL | Version model `packages/lib/src/db/schema.ts:956`; create functions currently write empty claims/evidence at `apps/web/src/server/selena-control-room.ts:321` | lib hash test `:32` | Claims/evidence editor, validation, lifecycle/status and evidence provenance. |
-| P1: assets, rights, consent | PARTIAL | Registry `packages/lib/src/db/schema.ts:983`; quarantine `apps/web/src/server/selena-control-room.ts:519` | lib test `:57`, `:69` | Real upload/object verification/scanner/rights workflow. |
-| P1: private storage | MISSING | Contract fields only at `packages/lib/src/db/schema.ts:1004-1036` | Source review | Private bucket, immutable originals, derivatives, signed URLs, EXIF policy. |
-| P1: human approval / revocation | PARTIAL | Approval handler `apps/web/src/server/selena-control-room.ts`; DB predicate `0021`; pgTAP denies service approval and expired rights | Disposable pgTAP passed; no server/DB HTTP integration | Step-up/MFA, approval replay control, reject UX and staging integration test. |
-| P1: audit | PARTIAL | Lock/hash chain `apps/web/src/server/selena-control-room.ts`; immutable trigger `0021` | Disposable immutable-trigger test and restore of synthetic audit hash passed | Concurrent server transaction test and staging/PITR evidence. |
-| P1: basic Control Room UI | PARTIAL | Route `apps/web/src/routes/_authed/app/$brand/control-room.tsx:206` | web build | Role-based E2E, approval diff/evidence and real data sources. |
-| P1 gate: immutable approved version and RLS/ACL baseline | PASS (disposable) | `FORCE RLS`, grants and append-only triggers `0021`; pgTAP source `db/tests/0021_selena_control_room.pgtap.sql` | Clean chain + `34/34` pgTAP + restore RLS smoke | Obtain separately authorized staging evidence. |
-| P2: transactional outbox | PARTIAL | Server-owned transaction writes `release_intents`, `outbox_events` and audit atomically (`apps/web/src/server/selena-control-room.ts:711-903`); schema/migration provide idempotency and worker lease fields. | Tables migrated and visible in pgTAP; no consumer | Implement a separate consumer/workflow with leases, retries, cancellation, reconciliation and operational monitoring. |
-| P2: Trigger durable workflow | MISSING | Existing pg-boss only `apps/worker/src/index.ts:42` | Source review | Trigger.dev tasks/queues/retry/idempotency/wait/cancel/reconciliation. |
-| P2: manifest and Gateway | MISSING | No web/lib signer or dispatch surface; UI declares Gateway absent `apps/web/src/routes/_authed/app/$brand/control-room.tsx:577-582`; design in `docs/control-room/phase-0/RELEASE_GATEWAY_SERVICE_DESIGN.md` | Targeted source scan | Deploy separate service with private ingress, asymmetric/KMS signing, verification and reconciliation endpoints. |
-| P2: Postiz Cloud adapter | BLOCKED_CONTRACT_SPIKE | No Postiz client/config | `rg -l -i 'postiz' ...` | Approve and complete no-publish Cloud spike, then implement Gateway-only credential/allowlist/network controls. Self-host/legal work only if the spike fails. |
-| P2: idempotency / nonce | PARTIAL | Release-intent/outbox unique keys plus legacy reservation nonce uniqueness (`0021`; `packages/lib/src/selena-control-room.ts`); replay/idempotency pgTAP source `db/tests/0021_selena_control_room.pgtap.sql:148-209` | Disposable pgTAP passed replay and ten-reservation uniqueness | Implement Gateway and run 10-delivery/replay/concurrency tests. |
-| P2: reconciliation and kill switches | PARTIAL | Pure classification `packages/lib/src/selena-control-room.ts:138`; kill-switch state setter `apps/web/src/server/selena-control-room.ts:717-795` | lib tests `:113`, `:130` | Gateway consumer, provider poller, incident creation and cancellation integration tests. |
-| P2 gate: first staging/prod post only through Gateway | BLOCKED | Gateway and Postiz do not exist | None | Complete a staging vertical slice; production is out of scope. |
-| P3: redirect/UTM | MISSING | No Selena redirect endpoint | Source review | Controlled redirect domain, token, privacy/consent and visit event. |
-| P3: platform adapter + dlt | MISSING | No adapter/dlt dependency/source | Source/dependency review | Implement one LinkedIn adapter and dlt/raw contract after OAuth spike. |
-| P3: raw, normalized, DQ | PARTIAL | Raw/metric contracts `packages/lib/src/db/schema.ts:1267-1362` | Source review | Ingestion adapter, checkpoints, normalization, schema drift/type quarantine. |
-| P3: lead event / deterministic attribution | PARTIAL | Tracking event schema `packages/lib/src/db/schema.ts:1258` | None | First-party collector, duplicate key, attribution classes and 30-day window. |
-| P3: SQL views / Performance UI | PARTIAL | Read-only Performance table `apps/web/src/routes/_authed/app/$brand/control-room.tsx:699` | web build | Defined metrics/current-vs-delta semantics, lineage, quality and views. |
-| P3 gate: publication to visit to lead | BLOCKED | No publication, redirect or lead processing | None | One isolated staging vertical cycle. |
-| P4: negative tests | PARTIAL | Pure tests plus 34-case disposable pgTAP source `packages/lib/src/db/tests/0021_selena_control_room.pgtap.sql` | Disposable `34/34` pgTAP passed | Gateway, workflow, OAuth, webhook and storage test suites. |
-| P4: OAuth/replay/ambiguous drills | MISSING | Only pure ambiguous classifier `packages/lib/src/selena-control-room.ts:138` | lib test `:130` | Real provider drill, nonce store/consume, webhook verification and reconciliation. |
-| P4: monitoring / incidents | MISSING | Incident table `packages/lib/src/db/schema.ts:1191`, no producer/alerts | Source review | Runbooks, alert rules, on-call and incident consumer. |
-| P4: backups / restore | PARTIAL | Hash fields/trigger plus scoped custom-format backup | Clean disposable restore preserved 1 content hash, 1 asset hash, 2 manifest hashes and 1 audit hash; RLS smoke passed | Supabase PITR/backups, object-storage versioning and staging restore proof. |
-| P4 gate: all Go/No-Go checks | MISSING | Many AC statuses below are missing/blocked | This report | Finish all P0-P4 blocked items and run a full vertical staging cycle. |
-
-## Acceptance tests AC-001..AC-032
-
-| AC | Status | Evidence: exact file:line | Test / verification command | Remaining requirement |
-|---|---|---|---|---|
-| AC-001 no human approval blocks | PARTIAL | Gate `packages/lib/src/selena-control-room.ts:116`; test `packages/lib/src/selena-control-room.test.ts:69` | `pnpm --filter @workspace/lib test` | Gateway must independently reject and prove Postiz was not called. |
-| AC-002 one changed character invalidates approval | PARTIAL | Content hash `packages/lib/src/selena-control-room.ts:70`; test `test.ts:32` | lib test | Migrated immutable record and Gateway E2E mismatch test. |
-| AC-003 replaced asset bytes block | PARTIAL | Asset bundle hash `packages/lib/src/selena-control-room.ts:88`; test `test.ts:78` | lib test | Server-side byte hash/object-version verification, not supplied metadata. |
-| AC-004 wrong/foreign account blocks | PARTIAL | Account binding `packages/lib/src/selena-control-room.ts:96`; test `test.ts:101`; server organization-constrained brand lookup `apps/web/src/server/selena-control-room.ts:44-51` | lib test | RLS/brand membership and Gateway allowlist integration test. |
-| AC-005 expired evidence/rights/consent block | PARTIAL | Gate `packages/lib/src/selena-control-room.ts:126`; tests `test.ts:57`, `:82` | lib test | Gateway-side time check and source-of-truth evidence/rights records. |
-| AC-006 service cannot approve | PARTIAL | Human session check `packages/lib/src/selena-control-room.ts`; DB predicate `0021`; pgTAP service impersonation/grant cases `db/tests/0021_selena_control_room.pgtap.sql` | lib test; disposable pgTAP PASS | Server/DB integration evidence and Gateway E2E. |
-| AC-007 cross-brand reviewer/editor denied | PARTIAL | Verified context/RLS source `0021`; pgTAP `SELECT/INSERT/UPDATE/DELETE` cases `db/tests/0021_selena_control_room.pgtap.sql` | Disposable pgTAP PASS | Full RBAC E2E and staging evidence. |
-| AC-008 approval callback/token replay | MISSING | No callback/token table or replay key | None | Canonical approval request ID, unique decision and replay E2E. |
-| AC-009 Trigger delivers release 10 times | BLOCKED | Outbox unique intent/event contract and disposable uniqueness assertion exist, but no Trigger task or consumer | `packages/lib/src/db/tests/0021_selena_control_room.pgtap.sql` | Durable workflow plus staging x10 delivery test. |
-| AC-010 pre-Postiz failure safe retry | MISSING | No dispatcher/attempt model | None | Attempt state machine, classified retry and test. |
-| AC-011 possible Postiz timeout reconciles | PARTIAL | Classifier `packages/lib/src/selena-control-room.ts:138`; test `test.ts:130` | lib test | Real Gateway request state, poll/reconcile and no-blind-retry E2E. |
-| AC-012 revoked approval during wait cancels | PARTIAL | Revocation appends an immutable `REVOKED` record `apps/web/src/server/selena-control-room.ts:696-744` | No workflow test | Durable approval wait/cancellation and Gateway dispatcher re-check. |
-| AC-013 policy change invalidates pending release | MISSING | Gate compares stored policy only `packages/lib/src/selena-control-room.ts:124` | None | Policy registry/change event and invalidate/grandfather decision. |
-| AC-014 direct Postiz access denied | MISSING | No Postiz source files and no network/credential policy. The required future topology is ADR-004. | `rg -l -i 'postiz' apps/web/src apps/worker/src packages/lib/src` | Private network, credential namespace and negative network tests. |
-| AC-015 out-of-band publication incident | MISSING | Incident schema only `packages/lib/src/db/schema.ts:1191` | None | Reconciliation poller and incident producer. |
-| AC-016 forged/replayed webhook non-authoritative | MISSING | No webhook endpoint | None | Signed webhook verification, replay store and polling confirmation. |
-| AC-017 OAuth expiry controlled | MISSING | No OAuth/client/token code | None | Gateway-scoped OAuth store/refresh/redaction tests. |
-| AC-018 MIME/oversize/malware rejected/quarantined | PARTIAL | Zod allowlist `apps/web/src/server/selena-control-room.ts`; DB `QUARANTINED` predicate `0021`; pgTAP negative cases `db/tests/0021_selena_control_room.pgtap.sql` | Disposable pgTAP PASS | Byte sniffing, scanner result, private storage and malicious-upload E2E. |
-| AC-019 cross-brand DB access denied | PARTIAL | `FORCE RLS` and role policies `0021`; pgTAP cross-brand matrix `db/tests/0021_selena_control_room.pgtap.sql` | Disposable pgTAP PASS; restore no-context smoke PASS | Staging role evidence and full RBAC E2E. |
-| AC-020 retried API page preserves one raw observation set | PARTIAL | Raw snapshot request-key uniqueness `schema.ts:1267-1301`; no adapter | Source review | Ingestion adapter/retry test and immutable raw observation proof. |
-| AC-021 100 to 130 snapshot math | MISSING | Metrics table only `packages/lib/src/db/schema.ts:1230` | None | Normalized current/delta view and unit test. |
-| AC-022 metric revision retained | PARTIAL | `revisionOfId` and append-only metric schema `packages/lib/src/db/schema.ts:1303-1334`; immutable trigger `0021:876-879` | Static check | Ingestion revision handler and tests. |
-| AC-023 incomplete pagination holds checkpoint | MISSING | No adapter/checkpoint | None | Pagination contract and mart protection test. |
-| AC-024 new API field retained/drift alert | MISSING | No raw schema/DQ | None | Raw payload retention and drift alert. |
-| AC-025 type change quarantines batch | MISSING | No normalizer/DQ | None | Schema contract/quarantine test. |
-| AC-026 duplicate lead event one first-party event | MISSING | Tracking schema lacks dedupe key `packages/lib/src/db/schema.ts:1258` | None | Collector unique event ID and E2E. |
-| AC-027 tracked direct attribution | MISSING | No redirect/session/lead processor | None | Deterministic attribution pipeline and test. |
-| AC-028 unattributed lead labeled | MISSING | No attribution processor | None | Explicit UNATTRIBUTED rule and test. |
-| AC-029 no modeled attribution | MISSING | No attribution implementation | None | Enforced enum/output contract and test. |
-| AC-030 dashboard cutoff/definition/quality/lineage | PARTIAL | Snapshot columns `packages/lib/src/db/schema.ts:1303-1334`; UI display `apps/web/src/routes/_authed/app/$brand/control-room.tsx:699` | web build | Source lineage/definition values from real ingest, DQ and dashboard E2E. |
-| AC-031 kill switch fails closed | PARTIAL | Pure gate `packages/lib/src/selena-control-room.ts:117`; server can set kill-switch state `apps/web/src/server/selena-control-room.ts:717-795`; test `test.ts:113` | lib test | Gateway/workflow re-check and staging test before Postiz call. |
-| AC-032 restore verifies hashes/manifests/assets/audit | PARTIAL | Append-only audit/manifest triggers `0021`; disposable backup included synthetic hash-bearing fixtures | Clean restore preserved 1 content hash, 1 asset hash, 2 manifest hashes and 1 audit hash; 16 private tables remained `FORCE RLS` | Provider backups, storage versioning and staging/PITR proof. |
-
-## Negative test matrix
-
-| Required negative case | Current result |
-|---|---|
-| One character after approval | PARTIAL: pure hash/gate test at `packages/lib/src/selena-control-room.test.ts:32`; no DB/Gateway E2E. |
-| Wrong brand/account | PARTIAL: pure binding plus disposable pgTAP brand DML cases; no Gateway account allowlist integration. |
-| Expired evidence, rights, consent | PARTIAL: pure gate tests and migrated approval predicate; pgTAP rejects expired rights; no authoritative storage/provider. |
-| Malware scan not PASSED | PARTIAL: DB predicate and disposable pgTAP reject a quarantined asset; no malware scanner. |
-| Kill switch active | PARTIAL: unit branch at `test.ts:113`; no dispatcher/Gateway test. |
-| Same release 10 times | PARTIAL/BLOCKED: unique reservation plus release-intent/outbox keys exist and disposable pgTAP asserts reservation idempotency; no Trigger consumer or end-to-end delivery. |
-| Replay nonce | PARTIAL: nonce uniqueness and disposable pgTAP replay case; no Gateway atomic consumption test. |
-| Timeout after possible Postiz acceptance | PARTIAL: pure classifier at `test.ts:130`; no provider reconciliation. |
-| Cross-brand database access | PARTIAL: `34/34` disposable pgTAP verifies cross-brand read/write denial and restore smoke verifies no-context denial; no staging evidence. |
-| Service identity human approval | PARTIAL: pure and pgTAP impersonation source exist; no HTTP/server integration run. |
-| Direct Postiz bypass Gateway | MISSING: source absence check only; no network/credential denial test. |
-
-## Required from user, in order
-
-No credential value is required, requested, or to be created now. Future Gateway/Postiz material must never appear in Control Room, browser, agent, worker, or Trigger runtime.
-
-### A. Decisions recorded
-
-1. Trigger.dev Cloud: APPROVED.
-2. Supabase staging: APPROVED.
-3. Postiz Cloud isolated one-brand no-publish contract spike: APPROVED, but execution remains blocked until an implemented Gateway and explicit external authorization.
-4. LinkedIn organization Page pilot: APPROVED.
-
-### B. Accounts/projects to create only after disposable DB proof and explicit external authorization
-
-1. A Supabase staging project with an owner, region, retention/PITR decision, private-schema Data API exclusion, and private-storage plan.
-2. A Trigger.dev Cloud staging project.
-3. A single isolated Selena Systems Postiz Cloud organization.
-4. A staging LinkedIn organization Page and Developer application only after the Postiz origin/version and corrected callback path have been re-verified.
-
-### C. Secrets created only after integration code exists
-
-The following are intentionally absent and must not be requested now: Gateway client ID/private key, Gateway audience, Postiz credential, LinkedIn client secret, database role credentials, storage credential, scanner credential, webhook key, or KMS key reference. Once the relevant service and secret-holder configuration have code review, create each value directly in its designated secret namespace, never in chat or git.
-
-Non-secret runtime configuration such as APP_URL/VITE_APP_URL and DEPLOYMENT_MODE remains deployment-specific. A disposable PostgreSQL connection is needed only for the next local DB test; `DATABASE_URL` for staging is needed only after an explicit migration authorization. SENTRY_AUTH_TOKEN remains optional build observability and is not a Phase 0 decision.
-
-## Verification results
-
-All Phase 0 follow-up commands below used the repository `.nvmrc` value through local NVM Node `v24.18.0`, without changing the global Node selection.
+### Current changed-code validation
 
 | Command | Result |
 |---|---|
-| `PATH=/Users/msnigmatullaeva/.nvm/versions/node/v24.18.0/bin:$PATH pnpm --filter @workspace/lib check-types` | PASS after final changes. |
-| `PATH=/Users/msnigmatullaeva/.nvm/versions/node/v24.18.0/bin:$PATH pnpm --filter @workspace/web check-types` | PASS after final changes. |
-| `PATH=/Users/msnigmatullaeva/.nvm/versions/node/v24.18.0/bin:$PATH pnpm --filter @workspace/lib test` | PASS after final changes: 47 files, 556 tests. |
-| `PATH=/Users/msnigmatullaeva/.nvm/versions/node/v24.18.0/bin:$PATH pnpm --filter @workspace/web exec biome lint src/server/selena-control-room.ts src/routes/_authed/app/'$brand'/control-room.tsx` | PASS after final changes; 2 changed Control Room files, no diagnostics. |
-| `PATH=/Users/msnigmatullaeva/.nvm/versions/node/v24.18.0/bin:$PATH pnpm --filter @workspace/web build` | PASS after final changes. Warnings: Sentry auth token absent for release/source-map upload; client chunk exceeds 500 kB. |
-| `PATH=/Users/msnigmatullaeva/.nvm/versions/node/v24.18.0/bin:$PATH pnpm --filter @workspace/lib exec drizzle-kit check` | PASS static migration validation. It did not connect to or migrate a database. |
-| `git diff --check` | PASS. |
-| Current-diff secret scan | PASS: final read-only pattern scan across every tracked/untracked changed file returned no matches and printed no values. |
-| `PATH=/Users/msnigmatullaeva/.nvm/versions/node/v24.18.0/bin:$PATH pnpm --filter @workspace/web lint` | FAIL: 33 existing errors, 133 warnings in unrelated `.storybook`, `scripts`, `src/components/base-chart*`, `citations-display.tsx`, SVG assets and config files. Scoped Node 24 lint proves no errors or warnings in changed Control Room files; no implementation-introduced lint error was observed. |
-| Disposable clean migration | `drizzle-kit migrate` against a new Supabase PostgreSQL `17.6.1.143` database: PASS; all journal entries `0000…0021` applied, with 22 recorded rows. |
-| Migration checksum and rerun | PASS: database record `id=22` equals final `0021` SHA-256 `88c3030c9c85b000b2ac8c07fe75031d0da5eef24afcccb182cdb4571999e5c2`; rerun retained 22 recorded rows. |
-| Disposable pgTAP | PASS: `CREATE EXTENSION pgtap` then `packages/lib/src/db/tests/0021_selena_control_room.pgtap.sql` returned `1..34`, `34/34`, `finish` success. |
-| Pre-0021 upgrade fixture | PASS: applied `0000…0020`, inserted one synthetic organization/member/brand, then applied `0021`; all three tenant records and `selena_registry.content_items` remained present. |
-| Disposable backup/restore drill | PASS: scoped custom-format dump restored into a new clean target with `pg_restore --clean --if-exists`; hashes, 16-table `FORCE RLS`, runtime `NOBYPASSRLS`, `anon/authenticated` denial, no account-allowlist insert and no-context runtime read denial passed. |
-| `npx --no-install impeccable detect` | NOT RUNNABLE in the prior frontend audit because of local npm-cache permissions; not required for this backend/schema reauthoring and no install or permission change was attempted. |
+| `pnpm --filter @workspace/{lib,web,worker} check-types` | PASS | All three packages pass. The host uses Node `22.23.0` while `package.json` declares Node `24.x`; this is a non-fatal engine warning and needs CI/staging confirmation on Node 24. |
+| `pnpm --filter @workspace/lib test` | PASS | `53` files and `576` tests pass. |
+| Focused worker suites via workspace Vitest binary | PASS | Scanner, Gateway, dispatcher, Trigger workflow and Postiz-ingestion: `5` files, `12` tests. `apps/worker` intentionally has no direct Vitest package. |
+| Targeted `biome check` on 33 changed TypeScript files | PASS | No errors or warnings after deterministic formatting/import ordering. Full repository lint remains outside this changed surface and is not re-verified. |
+| `pnpm --filter @workspace/web build` | PASS | Nitro production output generated. Vite reports existing Node-module externalization warnings from the server/auth dependency graph; the build succeeds. |
+| `DATABASE_URL=postgresql://localhost:5432/selena_static pnpm --filter @workspace/lib exec drizzle-kit check` | PASS (static only) | Static schema validation only; it does not connect to a database. |
+| `git diff --check`; added/modified-file secret-pattern scans | PASS | No whitespace errors and no matching key-like added values. Values were not printed. |
+| `tools/verify-railway-targets.sh` | PASS (static only) | Dockerfile target selection includes `web`, `worker`, `scanner` and `gateway`. |
+| `docker build --target scanner …` | BLOCKED_LOCAL | Docker/Colima cannot resolve the local `docker-credential-desktop` helper while pulling `node:24-alpine`; no image was built, run or deployed. |
+| Existing Playwright E2E forced to `http://127.0.0.1:1515` | BLOCKED_LOCAL | The browser launches after sandbox approval but the local web server is absent. Existing specs cover AI Visibility, not Selena Control Room. No staging URL was contacted. |
+| `impeccable detect` | UNAVAILABLE | The command is not installed in this checkout; no platform/tool installation was performed. |
 
-All final validation commands listed above ran through local NVM Node `v24.18.0`, matching the repository Node 24 requirement. Earlier audit artifacts that used Node 22 are not relied upon for the final validation results.
+## Phase 0-4 audit
 
-## Completion and recommendation
+| Phase | Status | Exact evidence | Required next evidence |
+|---|---|---|---|
+| Phase 0 architecture decisions | PARTIAL | Payload deferral is correctly stated at `docs/control-room/phase-0/ADR-003_PAYLOAD_INTEGRATION.md:19-41`; Postiz Cloud fallback decision at `ADR-004_POSTIZ_DEPLOYMENT_AND_LICENSE.md:17-25`; Better Auth/private-schema model at `ADR-002_DATABASE_AND_STORAGE.md:21-46`. | Complete real Postiz Cloud contract spike and update ADR-004 with dated result. |
+| Phase 1 disposable database | PARTIAL | Fresh migration runner ledger through `0031`; pgTAP `115/115`, including storage, Gateway, outbox, cancellation and ingestion boundaries. | Supported staging migration-login bootstrap, upgrade/restore repeat and staging evidence. |
+| Phase 2 staging PostgreSQL and CI DB gate | MISSING | `packages/lib/scripts/run-migrations.mjs:1-55` and `packages/lib/drizzle.config.ts:1-33` describe a restricted staging path. | Applied staging ledger/checksum, Data API exposure proof, cross-brand staging test, CI disposable gate and advisor result. |
+| Phase 3 Content Registry and Control Room state | PARTIAL | Server transaction context, content/review/approval/release/cancellation: `apps/web/src/server/selena-control-room.ts:86-1385`; private upload/download routes: `apps/web/src/routes/api/v1/selena/control-room/assets/`; UI: `apps/web/src/routes/_authed/app/$brand/control-room.tsx:183-1107`. | Browser paths and deployed storage/scanner evidence. |
+| Phase 4 outbox and Trigger durable workflow | PARTIAL | Atomic outbox dispatcher: `apps/worker/src/selena-trigger-dispatcher.ts:1-202`; durable state machine: `apps/worker/src/selena-trigger-release-workflow.ts:1-81`; database leasing/retry/cancellation: `0028` and `0030`. | A registered Trigger.dev Cloud task and staging crash/retry evidence. |
 
-**Phase 0 architecture status: PASS_WITH_EXTERNAL_SETUP.** Payload is correctly deferred rather than declared incompatible; Postiz Cloud versus self-hosted selection is conditional and corrected; the LinkedIn callback candidate is corrected; the Better Auth/RLS identity model and pgTAP plan are specified; and the 0021 reauthoring plan is defined. This status means the architecture decision gate is complete. It does **not** mean the Postiz/LinkedIn spike, RLS, Gateway, or a vertical slice is complete.
+Phases 5-11 are not complete: source has separate Gateway/scanner runtimes, private storage, Postiz contract and raw-performance ingestion, but no deployed service topology, Postiz OAuth/contract result, Trigger Cloud task, staging vertical cycle or Go-Live package.
 
-**Evidence-complete MVP progress: approximately 33%.** This is a conservative engineering estimate, not a specification metric. The staging no-publish user flow and migration/role evidence now pass, but no AC is PASS end-to-end through an external platform and no external vertical slice has run.
+## Acceptance matrix (AC-01…AC-36)
 
-**Migration verdict: STAGING_MIGRATION_PASS_WITH_LIMITED_BACKUP_EVIDENCE.** `0021`-`0024` are applied only to staging. `0024` ledger checksum, runtime grants and role-escalation denials were verified; the full-chain and `34/34` pgTAP/restore evidence remains disposable. Managed Supabase backup/PITR evidence is still missing. Production is not authorized or touched.
+| AC | Status | Current evidence | What blocks PASS |
+|---|---|---|---|
+| AC-01 clean migration chain | PARTIAL | Fresh disposable migration runner applied `0000…0031` after an explicit local `SET ROLE` handoff. | Pre-provisioned staging migration identity and live ledger/checksum evidence. |
+| AC-02 pgTAP suite | PARTIAL | Fresh disposable pgTAP `115/115` across `0021`, `0023`, `0024`, `0026`–`0031`. | Staging/API/browser evidence. |
+| AC-03 cross-brand DML denied | PARTIAL | Local pgTAP covers SELECT/INSERT/UPDATE/DELETE. | Staging/integration evidence. |
+| AC-04 forged/missing context denied | PARTIAL | Local pgTAP; transaction context source at `selena-control-room.ts:74-96`. | API/browser proof. |
+| AC-05 role/grant/DDL boundary | PARTIAL | Local catalog/pgTAP and `0023:101-131`. | Staging effective-grant snapshot. |
+| AC-06 append-only history | PARTIAL | `0021:866-879`; local pgTAP. | Clean/staging repeat. |
+| AC-07 nonce concurrency | PARTIAL | Unique reservation and local 10-attempt loop. | Concurrent Gateway test. |
+| AC-08 private schema outside Data API | MISSING | ADR intent only. | Staging HTTP/catalog proof. |
+| AC-09 upgrade and restore | PARTIAL | Scoped disposable restore only. | Upgrade fixture, full provider-compatible DB+Storage restore. |
+| AC-10 server-owned brand authorization | PARTIAL | Brand lookup/membership: `$brand.tsx:52-100`; server transaction context. | Route/input tampering test. |
+| AC-11 immutable approved version | PARTIAL | Latest-version checks: `selena-control-room.ts:839-852,1064-1076`. | Database/application and browser mutation proof. |
+| AC-12 human-only approval | PARTIAL | `assertHumanReviewer`: `selena-control-room.ts:68-72,787-803`; local pgTAP. | HTTP/staging test. |
+| AC-13 frontend has no publishing authority | PARTIAL | No Postiz/Trigger source scan; web queue only writes internal rows. | Bundle/network/route tests. |
+| AC-14 transactional outbox durability | PARTIAL | Lease/dispatch/retry/dead-letter DB consumer: `0028`; worker dispatcher: `apps/worker/src/selena-trigger-dispatcher.ts`; pgTAP: `0028...pgtap.sql`. | Crash/restart proof against deployed Trigger. |
+| AC-15 Trigger wait/retry/cancel | PARTIAL | Framework-independent durable state machine covers approval wait, schedule wait, run-once submission, cancellation and reconciliation: `apps/worker/src/selena-trigger-release-workflow.ts`; 3 contract tests. | Registered Trigger.dev Cloud task and deployed execution evidence. |
+| AC-16 Trigger receives opaque IDs | PARTIAL | `createOpaqueWorkflowPayload` and dispatcher carry only release intent/correlation IDs: `apps/worker/src/selena-trigger-dispatcher.ts:1-202`. | Deployed task/log inspection. |
+| AC-17 Gateway caller authentication | PARTIAL | Standalone HTTP Gateway requires timing-safe internal bearer token: `apps/worker/src/selena-release-gateway.ts:1-153`; focused negative test. | Deployed private network and caller proof. |
+| AC-18 exact manifest/hash checks | PARTIAL | Signed manifest runtime and pgTAP cover exact immutable package, hash, expiry, destination and schedule: `0027`; unit tests: `packages/lib/src/selena-release-gateway.test.ts`. | Deployed Gateway mutation tests. |
+| AC-19 evidence/rights/consent/scanner checks | PARTIAL | Real ClamAV INSTREAM scanner code, private signed storage and negative database tests: `apps/worker/src/selena-scanner.ts`, `packages/lib/src/selena-private-storage.ts`, `0026...pgtap.sql`. | Deployed scanner/Storage evidence. |
+| AC-20 kill switches | PARTIAL | Queue and Gateway check active kill switches; owner-only `Stop brand` is now confirmed in the UI; pgTAP Gateway gate. | Deployed pre-egress test. |
+| AC-21 ambiguous provider result | PARTIAL | `0029` records `AMBIGUOUS` as `UNKNOWN` with an incident and rejects blind retry; pgTAP covers timeout/replay. | Live provider reconciliation contract. |
+| AC-22 Gateway-only Postiz credential | PARTIAL | Postiz adapter config is Gateway-oriented; web/Trigger do not import its credential config and Gateway has no active provider call. | Runtime secret namespace and egress proof after contract spike. |
+| AC-23 one-brand Postiz allowlist | BLOCKED_EXTERNAL | ADR-004 proposal only. | Isolated Cloud contract test. |
+| AC-24 current LinkedIn callback/scopes | BLOCKED_EXTERNAL | Candidate only in ADR-005. | Observed registration evidence. |
+| AC-25 private Storage/signed URLs | PARTIAL | Private bucket client, server-mediated upload/download, magic bytes/size/MIME checks and signed URLs are implemented and unit-tested. | Deployed bucket policies and browser/staging proof. |
+| AC-26 asset provenance/restore | PARTIAL | Immutable opaque object key, SHA-256, object version and scanner evidence are persisted; scanner pgTAP covers isolation. | Storage backup/restore drill. |
+| AC-27 raw ingestion idempotency | PARTIAL | Immutable raw Postiz snapshot function rejects direct inserts and makes the request key idempotent: `0031`; pgTAP 9/9. | Provider-backed collection execution. |
+| AC-28 normalized lineage/freshness | PARTIAL | Normalizer version/hash and raw-to-metric linkage implemented in `packages/lib/src/selena-postiz-ingestion.ts` and `0031`. | Deployed freshness collection. |
+| AC-29 attribution categories | PARTIAL | Every Postiz metric snapshot is tied to the exact publication attempt and channel account; no visitor-attribution UX yet. | First-party attribution fixture/UI proof. |
+| AC-30 full staging happy path | MISSING | No current browser/provider trace. | Full correlation chain. |
+| AC-31 full negative verticals | MISSING | Unit/pgTAP fragments only. | Browser/provider denial traces. |
+| AC-32 DB+Storage restore/ops drill | PARTIAL | Scoped local database restore. | Provider-compatible DB, Storage, timing and fail-closed evidence. |
+| AC-33 changed-code quality/security | PARTIAL | Typechecks, 576 lib tests, 12 focused worker tests, scoped Biome, production build, static migration check, whitespace and secret scans pass. | Node 24 CI, container build, CI and browser checks. |
+| AC-34 no public staging side effect | PARTIAL | No real Postiz credential, OAuth connection or active Gateway submission path has been configured; source tests never call a live provider. | Provider/account audit for the final vertical run. |
+| AC-35 Go-Live package | MISSING | No release package. | Exact plans, rollback, first-release controls. |
+| AC-36 Sentry/chunk exception | PARTIAL | The production build succeeds, but this audit did not produce a staging performance or source-map artifact review. | Node 24 CI/staging artifact review and any required exception record. |
 
-**Production migration and real publication remain prohibited by:**
+## Required negative tests not yet closed
 
-- no completed Postiz Cloud contract spike, isolated organization, LinkedIn Page/Developer/OAuth/metrics evidence, or real adapter;
-- no deployable Release Gateway/private network/credential isolation or one-integration allowlist enforcement;
-- no Trigger durable workflow, outbox consumer, retry/cancel/replay/ambiguous-result implementation;
-- no production database-role provisioning, Data API exposure control, managed backup/PITR evidence or executed production cross-brand evidence;
-- no private storage, immutable originals, server-side hashing or malware scanner;
-- no ingestion/raw snapshots/normalization/DQ/attribution path;
-- no provider backup/PITR or object-storage restore configuration, operations runbooks, monitoring or on-call evidence;
-- no complete staging vertical cycle from approved content through a confirmed platform object, tracked visit and lead.
+The local pgTAP and focused suites cover cross-brand DML, forged context, human-only approval/cancellation, scanner lease and malware rejection, expiry/rights/consent gates, latest-version invalidation, kill switch, nonce replay, repeated reservation, timeout-to-`UNKNOWN`, and database-level direct-submission denial. They do **not** close end-to-end browser or provider tests for a one-character post-approval edit, wrong destination account, 10 concurrent Gateway requests, live provider reconciliation, network-level direct Postiz bypass, or browser route tampering.
 
-**One next implementation step without external side effects:** implement a separate Release Gateway service contract and its unit/integration tests, keeping it unable to obtain Postiz credentials until the approved Cloud contract spike exists. Do not use production, Postiz, LinkedIn or any external credential for that step.
+The repository's existing Playwright suite cannot supply those proofs: it has no Selena Control Room spec and a forced-local invocation stops before test execution because no local app is running. It did not reach staging.
+
+## Scope correction: evidence and publishing stop
+
+- Creating or revising a material no longer requires a source URL or expiry: `apps/web/src/server/selena-control-room.ts:555-699` and `apps/web/src/routes/_authed/app/$brand/control-room.tsx:224-255`.
+- A verified review source remains required only immediately before human approval, because the frozen specification requires fresh evidence for an approved/released version: `selena-control-room.ts:701-785,858-860`; UI at `control-room.tsx:526-566`.
+- The owner-facing `Stop brand` control is rendered with a consequence-confirmation and calls the owner-only server action: `apps/web/src/routes/_authed/app/$brand/control-room.tsx:365-384,899-928`; `apps/web/src/server/selena-control-room.ts:1285-1385`. The server-side kill switch remains the fail-closed enforcement boundary for AC-20.
+
+## Architecture answers
+
+| Question | Current answer |
+|---|---|
+| Release Gateway | A standalone HTTP runtime exists at `apps/worker/src/selena-release-gateway.ts`; it issues signed immutable packages and is built as a separate container target. It is not deployed and intentionally has no provider submission path, so it is not yet a demonstrated network boundary. |
+| Direct frontend/agent/Trigger access to Postiz | Web and workflow source do not receive a Postiz token; the typed adapter is Gateway-oriented and direct database reservation is denied. Network-level egress isolation and deployed secret namespaces are still unproven. |
+| Postiz credential holder | No credential exists. Target only: Gateway, after contract spike. |
+| Trigger durable workflow | The outbox dispatcher and a framework-independent workflow body implement opaque-ID dispatch, approval/schedule waits, run-once submission, cancellation and reconciliation semantics. No Trigger.dev SDK task is registered or deployed, so durable Cloud execution remains incomplete. |
+| Payload/Content Registry | Payload is `DEFER FOR MVP`, not incompatible. Drizzle PostgreSQL is a partial temporary registry; Control Room UI is not a substitute. |
+| Original/derivative assets | Immutable originals are addressed in the private `selena-quarantine` bucket with opaque object keys. A derivatives pipeline is not implemented. |
+| SHA-256/immutable originals/scanning | Source implements byte SHA-256, immutable original keys, magic-byte/MIME/size checks and ClamAV INSTREAM scanning with `QUARANTINED -> SCANNING -> CLEAN/REJECTED`. No deployed bucket/scanner proof exists. |
+| RLS/service roles/cross-brand tests | Local only, partial. No current staging proof. |
+| Outbox consumer | A lease/retry/dead-letter dispatcher exists in `apps/worker/src/selena-trigger-dispatcher.ts`; it conditionally dispatches opaque IDs to Trigger only when a restricted runtime configuration exists. It is not deployed. |
+| Real Postiz adapter | A typed contract with discovery, status, uploads, schedule, cancel and analytics exists in `packages/lib/src/selena-postiz.ts`, with mock tests and no credential. It is not a live OAuth/API integration. |
+| Ambiguous-result flow | The submission boundary records ambiguous timeouts as `UNKNOWN`, opens an incident and rejects blind retry; reconciliation remains unproven against a real provider. |
+| Ingestion/normalization/attribution | Raw immutable Postiz evidence and normalized snapshots are linked to an exact publication attempt and account in `0031` plus the worker-side normalizer. No provider collection has run. |
+| Missing external variables/credentials | No value is requested or created now. After source and staging checks complete, the remaining external gates are a paid scanner runtime if required, Trigger Cloud task credential, Postiz Cloud OAuth contract spike and LinkedIn Page OAuth. |
+
+## Safe next implementation step
+
+Commit the reviewed source as an isolated PR. The local quality gates are complete; scanner/Gateway Docker builds are blocked before source execution by the host's missing Docker credential helper. The next deployment work requires a Railway project link and then an exact staging cost for the ClamAV runtime. The TLS and migration-role source protections remain un-deployed and cannot be credited as staging evidence.
+
+## Production and publication blockers
+
+Production migration and real publication remain prohibited by unverified deployed staging TLS and role grants; absent deployed Storage/scanner/Gateway/Trigger topology; no Postiz Cloud contract result or LinkedIn OAuth; no provider-backed reconciliation/ingestion; no full browser vertical trace; and no Go-Live package. Source and disposable evidence are not production authorization.

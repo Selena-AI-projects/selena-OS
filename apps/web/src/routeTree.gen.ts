@@ -84,6 +84,8 @@ import { Route as ApiV1SelenaProjectsIndexRouteImport } from './routes/api/v1/se
 import { Route as ApiV1SelenaQuotesIndexRouteImport } from './routes/api/v1/selena/quotes/index'
 import { Route as ApiV1SelenaReadinessVerifyRouteImport } from './routes/api/v1/selena/readiness/verify'
 import { Route as ApiV1SelenaScenariosIndexRouteImport } from './routes/api/v1/selena/scenarios/index'
+import { Route as ApiV1SelenaControlRoomAssetsIndexRouteImport } from './routes/api/v1/selena/control-room/assets/index'
+import { Route as ApiV1SelenaControlRoomAssetsAssetIdRouteImport } from './routes/api/v1/selena/control-room/assets/$assetId'
 import { Route as ApiV1SelenaReadinessScansScanIdRouteImport } from './routes/api/v1/selena/readiness/scans/$scanId'
 import { Route as ApiV1SelenaReadinessScansScanIdFixesFindingIdRouteImport } from './routes/api/v1/selena/readiness/scans/$scanId/fixes/$findingId'
 
@@ -486,6 +488,18 @@ const ApiV1SelenaScenariosIndexRoute =
     path: '/api/v1/selena/scenarios/',
     getParentRoute: () => rootRouteImport,
   } as any)
+const ApiV1SelenaControlRoomAssetsIndexRoute =
+  ApiV1SelenaControlRoomAssetsIndexRouteImport.update({
+    id: '/api/v1/selena/control-room/assets/',
+    path: '/api/v1/selena/control-room/assets/',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiV1SelenaControlRoomAssetsAssetIdRoute =
+  ApiV1SelenaControlRoomAssetsAssetIdRouteImport.update({
+    id: '/api/v1/selena/control-room/assets/$assetId',
+    path: '/api/v1/selena/control-room/assets/$assetId',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiV1SelenaReadinessScansScanIdRoute =
   ApiV1SelenaReadinessScansScanIdRouteImport.update({
     id: '/api/v1/selena/readiness/scans/$scanId',
@@ -574,7 +588,9 @@ export interface FileRoutesByFullPath {
   '/api/v1/selena/projects/': typeof ApiV1SelenaProjectsIndexRoute
   '/api/v1/selena/quotes/': typeof ApiV1SelenaQuotesIndexRoute
   '/api/v1/selena/scenarios/': typeof ApiV1SelenaScenariosIndexRoute
+  '/api/v1/selena/control-room/assets/$assetId': typeof ApiV1SelenaControlRoomAssetsAssetIdRoute
   '/api/v1/selena/readiness/scans/$scanId': typeof ApiV1SelenaReadinessScansScanIdRouteWithChildren
+  '/api/v1/selena/control-room/assets/': typeof ApiV1SelenaControlRoomAssetsIndexRoute
   '/api/v1/selena/readiness/scans/$scanId/fixes/$findingId': typeof ApiV1SelenaReadinessScansScanIdFixesFindingIdRoute
 }
 export interface FileRoutesByTo {
@@ -648,7 +664,9 @@ export interface FileRoutesByTo {
   '/api/v1/selena/projects': typeof ApiV1SelenaProjectsIndexRoute
   '/api/v1/selena/quotes': typeof ApiV1SelenaQuotesIndexRoute
   '/api/v1/selena/scenarios': typeof ApiV1SelenaScenariosIndexRoute
+  '/api/v1/selena/control-room/assets/$assetId': typeof ApiV1SelenaControlRoomAssetsAssetIdRoute
   '/api/v1/selena/readiness/scans/$scanId': typeof ApiV1SelenaReadinessScansScanIdRouteWithChildren
+  '/api/v1/selena/control-room/assets': typeof ApiV1SelenaControlRoomAssetsIndexRoute
   '/api/v1/selena/readiness/scans/$scanId/fixes/$findingId': typeof ApiV1SelenaReadinessScansScanIdFixesFindingIdRoute
 }
 export interface FileRoutesById {
@@ -728,7 +746,9 @@ export interface FileRoutesById {
   '/api/v1/selena/projects/': typeof ApiV1SelenaProjectsIndexRoute
   '/api/v1/selena/quotes/': typeof ApiV1SelenaQuotesIndexRoute
   '/api/v1/selena/scenarios/': typeof ApiV1SelenaScenariosIndexRoute
+  '/api/v1/selena/control-room/assets/$assetId': typeof ApiV1SelenaControlRoomAssetsAssetIdRoute
   '/api/v1/selena/readiness/scans/$scanId': typeof ApiV1SelenaReadinessScansScanIdRouteWithChildren
+  '/api/v1/selena/control-room/assets/': typeof ApiV1SelenaControlRoomAssetsIndexRoute
   '/api/v1/selena/readiness/scans/$scanId/fixes/$findingId': typeof ApiV1SelenaReadinessScansScanIdFixesFindingIdRoute
 }
 export interface FileRouteTypes {
@@ -808,7 +828,9 @@ export interface FileRouteTypes {
     | '/api/v1/selena/projects/'
     | '/api/v1/selena/quotes/'
     | '/api/v1/selena/scenarios/'
+    | '/api/v1/selena/control-room/assets/$assetId'
     | '/api/v1/selena/readiness/scans/$scanId'
+    | '/api/v1/selena/control-room/assets/'
     | '/api/v1/selena/readiness/scans/$scanId/fixes/$findingId'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -882,7 +904,9 @@ export interface FileRouteTypes {
     | '/api/v1/selena/projects'
     | '/api/v1/selena/quotes'
     | '/api/v1/selena/scenarios'
+    | '/api/v1/selena/control-room/assets/$assetId'
     | '/api/v1/selena/readiness/scans/$scanId'
+    | '/api/v1/selena/control-room/assets'
     | '/api/v1/selena/readiness/scans/$scanId/fixes/$findingId'
   id:
     | '__root__'
@@ -961,7 +985,9 @@ export interface FileRouteTypes {
     | '/api/v1/selena/projects/'
     | '/api/v1/selena/quotes/'
     | '/api/v1/selena/scenarios/'
+    | '/api/v1/selena/control-room/assets/$assetId'
     | '/api/v1/selena/readiness/scans/$scanId'
+    | '/api/v1/selena/control-room/assets/'
     | '/api/v1/selena/readiness/scans/$scanId/fixes/$findingId'
   fileRoutesById: FileRoutesById
 }
@@ -1006,7 +1032,9 @@ export interface RootRouteChildren {
   ApiV1SelenaProjectsIndexRoute: typeof ApiV1SelenaProjectsIndexRoute
   ApiV1SelenaQuotesIndexRoute: typeof ApiV1SelenaQuotesIndexRoute
   ApiV1SelenaScenariosIndexRoute: typeof ApiV1SelenaScenariosIndexRoute
+  ApiV1SelenaControlRoomAssetsAssetIdRoute: typeof ApiV1SelenaControlRoomAssetsAssetIdRoute
   ApiV1SelenaReadinessScansScanIdRoute: typeof ApiV1SelenaReadinessScansScanIdRouteWithChildren
+  ApiV1SelenaControlRoomAssetsIndexRoute: typeof ApiV1SelenaControlRoomAssetsIndexRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -1536,6 +1564,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiV1SelenaScenariosIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/v1/selena/control-room/assets/': {
+      id: '/api/v1/selena/control-room/assets/'
+      path: '/api/v1/selena/control-room/assets'
+      fullPath: '/api/v1/selena/control-room/assets/'
+      preLoaderRoute: typeof ApiV1SelenaControlRoomAssetsIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/v1/selena/control-room/assets/$assetId': {
+      id: '/api/v1/selena/control-room/assets/$assetId'
+      path: '/api/v1/selena/control-room/assets/$assetId'
+      fullPath: '/api/v1/selena/control-room/assets/$assetId'
+      preLoaderRoute: typeof ApiV1SelenaControlRoomAssetsAssetIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/v1/selena/readiness/scans/$scanId': {
       id: '/api/v1/selena/readiness/scans/$scanId'
       path: '/api/v1/selena/readiness/scans/$scanId'
@@ -1739,8 +1781,12 @@ const rootRouteChildren: RootRouteChildren = {
   ApiV1SelenaProjectsIndexRoute: ApiV1SelenaProjectsIndexRoute,
   ApiV1SelenaQuotesIndexRoute: ApiV1SelenaQuotesIndexRoute,
   ApiV1SelenaScenariosIndexRoute: ApiV1SelenaScenariosIndexRoute,
+  ApiV1SelenaControlRoomAssetsAssetIdRoute:
+    ApiV1SelenaControlRoomAssetsAssetIdRoute,
   ApiV1SelenaReadinessScansScanIdRoute:
     ApiV1SelenaReadinessScansScanIdRouteWithChildren,
+  ApiV1SelenaControlRoomAssetsIndexRoute:
+    ApiV1SelenaControlRoomAssetsIndexRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
