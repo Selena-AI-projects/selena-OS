@@ -4,7 +4,8 @@ import { db } from "@workspace/lib/db/db";
 import { svApiKeys } from "@workspace/lib/db/schema";
 import { and, eq, isNull } from "drizzle-orm";
 import { z } from "zod";
-import { canWrite, resolveSessionAuthContext } from "../lib/selena-auth-context";
+import { resolveSessionAuthContext } from "../lib/selena-auth-context.server";
+import { canWrite } from "../lib/selena-authz";
 
 const permissions = z
 	.array(z.enum(["client:read", "client:write", "measurement:dispatch"]))

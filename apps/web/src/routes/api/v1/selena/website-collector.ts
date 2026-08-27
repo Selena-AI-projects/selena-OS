@@ -4,7 +4,7 @@ import { svProjectProfiles, svWebsiteSnapshots } from "@workspace/lib/db/schema"
 import { buildWebsiteActionPlan, collectWebsite } from "@workspace/lib/website-collector";
 import { and, eq } from "drizzle-orm";
 import { z } from "zod";
-import { resolveApiKeyAuthContext } from "../../../../lib/selena-auth-context";
+import { resolveApiKeyAuthContext } from "../../../../lib/selena-auth-context.server";
 
 const requestSchema = z.object({ projectId: z.string().uuid() });
 

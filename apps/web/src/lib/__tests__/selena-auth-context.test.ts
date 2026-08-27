@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { assertTenantContext, canWrite } from "../selena-auth-context";
+import { assertTenantContext, canWrite } from "../selena-authz";
 
 const context = {
 	actorId: "user-a",

@@ -2,7 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { db } from "@workspace/lib/db/db";
 import { createRecommendationRepositories } from "@workspace/lib/recommendation-persistence";
 import { z } from "zod";
-import { resolveSessionAuthContext } from "../lib/selena-auth-context";
+import { resolveSessionAuthContext } from "../lib/selena-auth-context.server";
 
 const repositories = createRecommendationRepositories(db);
 const evidenceSchema = z.object({ id: z.string().min(1), tenantId: z.string().min(1), snapshotId: z.string().min(1), kind: z.enum(["AI_RESPONSE", "WEBSITE", "SEARCH", "MAPS", "REVIEW", "SOCIAL", "UPLOADED"]), accessClass: z.enum(["PUBLIC", "CONNECTED", "UPLOADED"]), sourceRef: z.string().min(1), capturedAt: z.string().min(1), subject: z.string().min(1), text: z.string(), metadata: z.record(z.string(), z.unknown()).default({}) });

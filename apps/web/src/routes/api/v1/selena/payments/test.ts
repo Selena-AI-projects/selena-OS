@@ -4,7 +4,7 @@ import { svOrders, svPayments } from "@workspace/lib/db/schema";
 import { SELENA_CHECKOUT_METADATA } from "@workspace/selena-visibility-contracts";
 import { and, eq } from "drizzle-orm";
 import { z } from "zod";
-import { resolveApiKeyAuthContext } from "../../../../../lib/selena-auth-context";
+import { resolveApiKeyAuthContext } from "../../../../../lib/selena-auth-context.server";
 
 const bodySchema = z.object({
 	orderId: z.string().uuid(),

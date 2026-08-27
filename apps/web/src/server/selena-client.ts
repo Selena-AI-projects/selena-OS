@@ -11,7 +11,7 @@ import { createSelenaRepositories } from "@workspace/lib/selena-visibility-repos
 import { actionPlanSchema, projectCreateSchema } from "@workspace/selena-visibility-contracts";
 import { and, desc, eq } from "drizzle-orm";
 import { z } from "zod";
-import { resolveSessionAuthContext } from "../lib/selena-auth-context";
+import { resolveSessionAuthContext } from "../lib/selena-auth-context.server";
 
 const repositories = createSelenaRepositories(db);
 

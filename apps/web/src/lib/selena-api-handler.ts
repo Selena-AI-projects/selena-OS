@@ -1,4 +1,5 @@
-import { type AuthContext, resolveApiKeyAuthContext } from "./selena-auth-context";
+import { resolveApiKeyAuthContext } from "./selena-auth-context.server";
+import type { AuthContext } from "./selena-authz";
 
 export type SelenaApiContext = { request: Request; auth: AuthContext };
 

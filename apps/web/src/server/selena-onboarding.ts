@@ -2,7 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { db } from "@workspace/lib/db/db";
 import { createSelenaRepositories } from "@workspace/lib/selena-visibility-repositories";
 import { z } from "zod";
-import { resolveSessionAuthContext } from "../lib/selena-auth-context";
+import { resolveSessionAuthContext } from "../lib/selena-auth-context.server";
 
 const repositories = createSelenaRepositories(db);
 const profileSchema = z.object({

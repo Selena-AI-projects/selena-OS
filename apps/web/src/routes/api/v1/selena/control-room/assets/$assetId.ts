@@ -1,8 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod";
-import { resolveSessionAuthContext } from "../../../../../../lib/selena-auth-context";
+import { resolveSessionAuthContext } from "../../../../../../lib/selena-auth-context.server";
 import { createSelenaPrivateAssetDownloadUrl } from "../../../../../../lib/selena-scanner-client";
-import { assertControlRoomAssetReadAccess } from "../../../../../../server/selena-control-room";
+import { assertControlRoomAssetReadAccess } from "../../../../../../server/selena-control-room-access.server";
 
 const paramsSchema = z.object({ assetId: z.string().uuid() });
 
