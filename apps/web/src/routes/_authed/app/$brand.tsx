@@ -5,29 +5,31 @@
  * Shows sidebar navigation, header, and optional demo banner.
  * If brand exists in auth but not in DB, shows onboarding.
  */
-import { createFileRoute, Outlet, notFound, redirect } from "@tanstack/react-router";
-import { getAppName } from "@/lib/route-head";
+import { createFileRoute, notFound, Outlet, redirect, useLocation } from "@tanstack/react-router";
 import { createServerFn } from "@tanstack/react-start";
-import { z } from "zod";
-import { getOnboardingPlatformStateFn, type OnboardingPlatformState } from "@/server/platform-picks";
-import {
-	requireAuthSession,
-	isAdmin,
-	hasReportAccess,
-	checkOrgAccess,
-	listUserOrganizations,
-} from "@/lib/auth/helpers";
 import { db } from "@workspace/lib/db/db";
-import { brands, prompts, competitors } from "@workspace/lib/db/schema";
-import { eq } from "drizzle-orm";
 import type { BrandWithPrompts } from "@workspace/lib/db/schema";
+import { brands, competitors, prompts } from "@workspace/lib/db/schema";
+import { getOrgBillingState } from "@workspace/lib/entitlements";
 import { SidebarInset, SidebarProvider } from "@workspace/ui/components/sidebar";
 import { Skeleton } from "@workspace/ui/components/skeleton";
+import { eq } from "drizzle-orm";
+import { useEffect } from "react";
+import { z } from "zod";
 import { AppSidebar } from "@/components/app-sidebar";
-import { SiteHeader } from "@/components/site-header";
 import BrandOnboarding from "@/components/brand-onboarding";
-import { getOrgBillingState } from "@workspace/lib/entitlements";
+import { SiteHeader } from "@/components/site-header";
 import { validateBrandFilterSearch } from "@/hooks/use-list-filters";
+import {
+	checkOrgAccess,
+	hasReportAccess,
+	isAdmin,
+	listUserOrganizations,
+	requireAuthSession,
+} from "@/lib/auth/helpers";
+import { getAppName } from "@/lib/route-head";
+import { rememberSelenaProduct } from "@/lib/selena-product-entry";
+import { getOnboardingPlatformStateFn, type OnboardingPlatformState } from "@/server/platform-picks";
 
 interface BrandRouteData {
 	brand: BrandWithPrompts | null;
@@ -201,15 +203,17 @@ function BrandLayout() {
 	const { brand, brandName, isAdmin, hasReportAccess, needsOnboarding, onboardingPlatformState } =
 		Route.useLoaderData();
 	const { brand: brandId } = Route.useParams();
+	const { pathname } = useLocation();
+
+	useEffect(() => {
+		if (brandId !== "selena") return;
+		rememberSelenaProduct(pathname.includes("/control-room") ? "content-control" : "ai-visibility");
+	}, [brandId, pathname]);
 
 	// Brand exists in auth but not in DB - show onboarding
 	if (needsOnboarding) {
 		return (
-			<BrandOnboarding
-				brandId={brandId}
-				brandName={brandName || brandId}
-				platformState={onboardingPlatformState}
-			/>
+			<BrandOnboarding brandId={brandId} brandName={brandName || brandId} platformState={onboardingPlatformState} />
 		);
 	}
 

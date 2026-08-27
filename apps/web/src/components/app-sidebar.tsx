@@ -49,6 +49,7 @@ import { Logo } from "@/components/logo";
 import { NavAppInfo } from "@/components/nav-app-info";
 import { type NavGroup, NavMain } from "@/components/nav-main";
 import { NavUser } from "@/components/nav-user";
+import { rememberSelenaProduct } from "@/lib/selena-product-entry";
 
 /**
  * How much of the app the shell around this page can reach:
@@ -97,13 +98,27 @@ function ProductSwitcher() {
 						<DropdownMenuSeparator />
 						<DropdownMenuGroup>
 							<DropdownMenuItem asChild className="cursor-pointer">
-								<Link to="/app/$brand" params={{ brand }} onClick={() => setOpenMobile(false)}>
+								<Link
+									to="/app/$brand"
+									params={{ brand }}
+									onClick={() => {
+										if (brand === "selena") rememberSelenaProduct("ai-visibility");
+										setOpenMobile(false);
+									}}
+								>
 									<IconChartBar />
 									AI Visibility
 								</Link>
 							</DropdownMenuItem>
 							<DropdownMenuItem asChild className="cursor-pointer">
-								<Link to="/app/$brand/control-room" params={{ brand }} onClick={() => setOpenMobile(false)}>
+								<Link
+									to="/app/$brand/control-room"
+									params={{ brand }}
+									onClick={() => {
+										if (brand === "selena") rememberSelenaProduct("content-control");
+										setOpenMobile(false);
+									}}
+								>
 									<IconShieldCheck />
 									Content Control
 								</Link>
