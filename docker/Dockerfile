@@ -89,7 +89,7 @@ ENV HOST="0.0.0.0"
 ENTRYPOINT ["/entrypoint.sh"]
 CMD ["node", ".output/server/index.mjs"]
 
-# Migration stage — runs drizzle-kit migrate then exits
+# Migration stage — runs a single-connection migration runner then exits.
 FROM base AS migrate
 WORKDIR /app
 
@@ -98,7 +98,7 @@ COPY docker/migrate-entrypoint.sh /migrate-entrypoint.sh
 RUN chmod 500 /migrate-entrypoint.sh
 
 ENTRYPOINT ["/migrate-entrypoint.sh"]
-CMD ["npx", "drizzle-kit", "migrate"]
+CMD ["node", "scripts/run-migrations.mjs"]
 
 # Worker stage
 FROM base AS worker

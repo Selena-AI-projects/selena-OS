@@ -11,21 +11,21 @@ if (!databaseUrl) {
 	throw new Error("DATABASE_URL is required for the migration runner");
 }
 const stagingDatabaseUrl = new URL(databaseUrl);
-const stagingRole = stagingDatabaseUrl.searchParams.get("options") ?? process.env.PGOPTIONS;
 const usesAllowedStagingEndpoint =
 	stagingDatabaseUrl.hostname.startsWith("db.") || stagingDatabaseUrl.hostname.endsWith(".pooler.supabase.com");
 const usesVerifiedStagingTls =
 	stagingDatabaseUrl.searchParams.get("sslmode") === "verify-full" &&
 	Boolean(stagingDatabaseUrl.searchParams.get("sslrootcert"));
+const usesTenantQualifiedMigrationLogin = decodeURIComponent(stagingDatabaseUrl.username).includes(".");
 if (
 	isStagingMvp &&
 	(stagingDatabaseUrl.port !== "5432" ||
 		!usesAllowedStagingEndpoint ||
-		!stagingRole?.includes("role=selena_schema_owner") ||
+		!usesTenantQualifiedMigrationLogin ||
 		!usesVerifiedStagingTls)
 ) {
 	throw new Error(
-		"SELENA_MIGRATION_DATABASE_URL must use a direct or session-mode Supabase endpoint on port 5432 with the selena_schema_owner startup role and verify-full TLS",
+		"SELENA_MIGRATION_DATABASE_URL must use a direct or session-mode Supabase endpoint on port 5432 with a tenant-qualified migration login and verify-full TLS",
 	);
 }
 
