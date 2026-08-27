@@ -1,10 +1,10 @@
 # Selena OS MVP Implementation Gap Report
 
-**Дата аудита:** 2026-08-26
+**Дата аудита:** 2026-08-26; staging execution addendum: 2026-08-27.
 **Источник требований:** `Selena_OS_MVP_Technical_Spec_v1_2026-08-26.docx`, разделы 14-15 и AC-001..AC-032.
-**Baseline:** текущий local working-tree patch относительно `HEAD` (`19c235704344ce67e292a4d782990c1488f34fb4`).
+**Baseline:** Selena OS `main` at `f90eeba5f94b88c19f1071c063ebff47717e0187`.
 **Контрольная сумма `0021`:** `sha256:88c3030c9c85b000b2ac8c07fe75031d0da5eef24afcccb182cdb4571999e5c2`.
-**Ограничения соблюдены:** `0021` не исполнялась в staging или production. Она была исполнена только в трёх новых изолированных disposable контейнерах Supabase PostgreSQL `17.6.1.143`: clean full-chain + pgTAP, pre-`0021` upgrade fixture и clean restore target. Production deploy, Postiz и социальные публикации не выполнялись; `.env` и credentials не читались.
+**Ограничения соблюдены:** `0021`-`0024` исполнены только в staging через отдельный Railway `migrate` runner; production migration/deploy, Postiz, LinkedIn и социальные публикации не выполнялись. Disposable proof for `0021` remains separate evidence. `.env` and credential values were not read or reported.
 
 Codex Security diff scan completed with no remaining confirmed findings in its original snapshot. It warned that the working tree changed during the scan; the post-fix source trace, tests and secret scan recorded below are the authoritative evidence for the final local state.
 
@@ -26,7 +26,20 @@ Codex Security diff scan completed with no remaining confirmed findings in its o
 - выполняет все Control Room database operations inside a transaction that first establishes server-owned context (`apps/web/src/server/selena-control-room.ts:56-73`);
 - добавляет 34-case disposable-only pgTAP source with cross-brand, forged-context, approval, release-intent/outbox idempotency, nonce, role, immutability and context-leak negatives (`packages/lib/src/db/tests/0021_selena_control_room.pgtap.sql`).
 
-DB schema/RLS/role controls получили **PASS только в disposable scope**: clean full migration chain, recorded checksum, `34/34` pgTAP, pre-`0021` tenant-preservation fixture и clean-target restore smoke прошли. Они остаются **PARTIAL** для staging/production и не создают deployable Gateway, Postiz, Trigger.dev, Payload, scanner, object storage, network boundary или ingestion adapter.
+DB schema/RLS/role controls получили **PASS в disposable scope** и limited staging evidence for the applied migration chain. They remain **PARTIAL** for production and do not create a deployable Gateway, Postiz, Trigger.dev, Payload, scanner, object storage, network boundary or ingestion adapter.
+
+## Staging Execution Addendum
+
+This addendum supersedes earlier historical statements in this report that said `0021` was unexecuted or that staging migration was not authorized.
+
+- `0021`-`0024` were applied only to the canonical Supabase staging project through Railway `migrate`; deployment `0bced186-389a-4c08-aea7-2f858ca7e9b6` ended `SUCCESS` with `migrations applied successfully`.
+- The migration ledger has 25 entries. `0024_repair_staging_dry_run_approval_policy.sql` has SHA-256 `f6f67523bd8dbb3324f497e2e340bd15bbcd32d17c761a9cb8a3bad9d1c5216e`, and the recorded hash is present. Staging ACL verification confirmed web `INSERT` on approvals, denied web `INSERT` on publication attempts, and denied web/worker `SET ROLE selena_schema_owner`.
+- `0024` was generated through `drizzle-kit generate --custom`, not by hand-editing Drizzle metadata. It reconciles the database approval predicate with the fixed no-publish account: only organization `default`, brand `selena`, platform `linkedin_page_dry_run`, reference `Postiz local dry run`, `provider_integration_id IS NULL`, `DRY_RUN`, and `allowlisted = false` receive the exception. All ordinary accounts still require an active allowlisted account; invalid/expired scanned assets still fail.
+- Disposable PostgreSQL full chain through `0024` passed. Its transaction-scoped RLS smoke inserted the permitted text-only dry-run approval while confirming that web cannot insert a publication attempt or become schema owner. A new disposable-only pgTAP source covers the same case; pgTAP was unavailable in the locally installed Docker images, so that new source was not executed in this addendum.
+- Railway web deployment `e892ec21-7c55-46d9-a0e7-d09524ee02b9` ended `SUCCESS` from the exact `f90eeba5` checkout. The incorrect `selena-ai-visibility` GitHub source binding was disconnected from the staging web service before this deploy, so it cannot overwrite Selena staging automatically.
+- Browser evidence at `https://web-staging-4a8f.up.railway.app/app/selena/control-room` passed for an existing interactive owner session: Selena Systems demo material was visible, approval was recorded, then one internal release intent was queued. Nine additional queue requests left exactly one visible `QUEUED` intent with `PENDING` outbox and no Gateway manifest. This is a no-publish flow, not a real release.
+- During the scenario, Railway DNS logs returned no requests for `postiz.com` or `linkedin.com`. The dry-run account has no integration ID. No Postiz/LinkedIn credential, adapter, OAuth call, signed manifest, dispatch reservation, publication attempt or public post was created.
+- A managed Supabase backup/PITR confirmation was not available in the authenticated dashboard, so the applied staging migration has limited provider-backup evidence. Production remains untouched.
 
 ## Ответы на архитектурные вопросы
 
@@ -39,7 +52,7 @@ DB schema/RLS/role controls получили **PASS только в disposable s
 | Используется Payload; если нет, чем заменён Content Registry? | Payload отсутствует в dependencies/source. ADR-003 фиксирует Payload = DEFER FOR MVP, а не несовместимость с TanStack/Vite: отдельный Next.js/Payload service и REST API технически возможны. До review после первого бренда единственный Registry -- Drizzle/PostgreSQL `selena_registry` tables (`packages/lib/src/db/schema.ts:918-1074`). Он не обладает deployed storage/scanning или production evidence. | PARTIAL |
 | Где original assets и derivatives? | `content_assets` now reserves `storage_key`, `object_version_id`, SHA-256 and scanner-event metadata (`schema.ts:1004-1036`), but buckets, immutable object controls, derivative linkage and signed URLs do not exist. | MISSING |
 | Реализованы sha256, immutable originals, malware/storage scanning? | SHA-256 format/size/MIME checks and a forced `QUARANTINED` web insert state migrated successfully; pgTAP rejects a quarantined asset and restore preserves asset hashes. Approval predicate rejects non-`PASSED` or expired asset metadata (`0021`; `db/tests/0021_selena_control_room.pgtap.sql`). Нет object-byte hashing, immutable storage, MIME sniffing или scanner provider/result. | PARTIAL |
-| Есть PostgreSQL RLS, отдельные service roles и cross-brand negative tests? | Disposable evidence passed: private schemas, no-login web/worker/Gateway/Trigger/ingestion/analytics/scanner/migration/backup roles, grants/revokes, `FORCE RLS`, verified context and `34/34` pgTAP, including forged context and cross-brand DML. Restore smoke reconfirmed all 16 private tables `FORCE RLS`, runtime `NOBYPASSRLS`, `anon/authenticated` denial and no-context web read denial. No staging role identity exists. | PARTIAL |
+| Есть PostgreSQL RLS, отдельные service roles и cross-brand negative tests? | Disposable evidence passed: private schemas, no-login web/worker/Gateway/Trigger/ingestion/analytics/scanner/migration/backup roles, grants/revokes, `FORCE RLS`, verified context and `34/34` pgTAP, including forged context and cross-brand DML. Staging now has a dedicated migrate-only login and verifies web/worker cannot become schema owner; a full staging cross-brand negative test is still absent. | PARTIAL |
 | Есть outbox consumer или только таблица? | Web atomically creates `selena_release.release_intents` and `selena_release.outbox_events` only after fresh approval, account, evidence, rights/consent, asset-scan and kill-switch checks (`apps/web/src/server/selena-control-room.ts:711-903`; `schema.ts`). The contract has unique idempotency keys, but no consumer, lease worker, Trigger queue, retry, approval wait, cancellation or reconciliation runtime. | PARTIAL |
 | Реализован настоящий Postiz adapter? | Нет dependency, client, account mapping, OAuth flow, webhook/reconciler или adapter implementation. | MISSING |
 | Есть ambiguous-result flow без blind retry? | Pure classification returns `RECONCILE_REQUIRED` (`packages/lib/src/selena-control-room.ts:138`, test `:130`), but no Gateway/worker uses it and no reconciliation poller exists. | PARTIAL |
@@ -91,7 +104,7 @@ All rows below are local, unexecuted source evidence from `packages/lib/src/db/m
 
 Role split is defined in `0021:6-56,817-902`: `selena_schema_owner`/`selena_migrator`, `selena_web_runtime`, `selena_registry_worker_runtime`, `selena_gateway_runtime`, `selena_trigger_runtime`, `selena_ingestion_runtime`, `selena_analytics_runtime`, `selena_scanner_runtime`, and `selena_backup_restore`. All ordinary runtime groups are `NOLOGIN NOBYPASSRLS`; Trigger has no database grants; only controlled no-login backup/restore has `BYPASSRLS`. The actual login identities, secret mounts, network policy, Supabase exposed-schema setting, storage bucket policies, and retention configuration remain external work.
 
-Migration `0021` is reauthored clean-install SQL, not a compensating migration. Its final checksum was recorded and validated in disposable PostgreSQL only; it has not been authorized or executed in staging/production.
+Migration `0021` is reauthored clean-install SQL, not a compensating migration. Its final checksum was first validated in disposable PostgreSQL and was later applied only in staging through the controlled runner; it has not been applied to production.
 
 ### E0-E8 execution order
 
@@ -100,12 +113,12 @@ Migration `0021` is reauthored clean-install SQL, not a compensating migration. 
 | E0: freeze external side effects and audit repository/OSS | PASS | None | No migration/deploy/publication; Node 24 validation; ADR and matrix evidence. |
 | E1: obtain owner decisions | PASS | E0 | Trigger.dev Cloud, Supabase staging, Postiz Cloud no-publish spike, and LinkedIn Page pilot are approved. No legal/VPC/self-host request is opened. |
 | E2: reauthor 0021 and final Drizzle schema/roles | PASS (disposable) | E1, ADR-002/003/004 review | Clean Drizzle `0000…0021`, recorded SHA-256, `34/34` pgTAP, upgrade fixture and restore drill pass on Supabase PostgreSQL 17.6.1.143. Staging still needs separately authorized execution. |
-| E3: create approved staging projects and identities | BLOCKED | E2 disposable DB proof and explicit external authorization | Supabase staging project, Trigger project, isolated Selena Systems Postiz Cloud organization, private storage/scanner design, and later role/secret namespaces. |
+| E3: create approved staging projects and identities | PARTIAL | E2 disposable DB proof and explicit external authorization | Supabase staging project and migrate-only identity exist. Trigger project, isolated Selena Systems Postiz Cloud organization, private storage/scanner design, and later role/secret namespaces remain blocked. |
 | E4: implement/deploy Release Gateway | BLOCKED | E2, E3 | Separate Gateway API/worker, KMS signing, nonce/idempotency, allowlist, kill switch, audit, health and contract tests. |
 | E5: implement Trigger durable workflow and outbox consumer | BLOCKED | E3, E4 | Queues, retry classifications, approval wait, cancellation, ten-delivery idempotency and reconciliation. |
 | E6: connect real LinkedIn staging channel via Postiz Cloud | BLOCKED | E3, E4, ADR-005 owner actions | Re-verify callback path, controlled OAuth, one allowed integration ID, Postiz adapter, timeout/reconciliation, and direct-access denial evidence. |
 | E7: implement storage/scanning and platform ingestion/attribution | BLOCKED | E2, E3, E6 | Immutable originals/derivatives, byte hashing/scanning, raw snapshots, normalize/DQ, redirect/lead path. |
-| E8: execute staging vertical-slice and resilience/restore drills | BLOCKED | E4-E7 | All negative tests, cross-brand DB tests, recovery, backup restore and one observed staging publication-to-lead cycle. |
+| E8: execute staging vertical-slice and resilience/restore drills | PARTIAL | E4-E7 | A no-publish Control Room flow passed. All external negative tests, cross-brand staging DB tests, recovery, provider backup restore and an observed publication-to-lead cycle remain blocked. |
 
 ## Phase 0-4 requirements
 
@@ -250,19 +263,19 @@ All final validation commands listed above ran through local NVM Node `v24.18.0`
 
 **Phase 0 architecture status: PASS_WITH_EXTERNAL_SETUP.** Payload is correctly deferred rather than declared incompatible; Postiz Cloud versus self-hosted selection is conditional and corrected; the LinkedIn callback candidate is corrected; the Better Auth/RLS identity model and pgTAP plan are specified; and the 0021 reauthoring plan is defined. This status means the architecture decision gate is complete. It does **not** mean the Postiz/LinkedIn spike, RLS, Gateway, or a vertical slice is complete.
 
-**Evidence-complete MVP progress: approximately 28%.** This is a conservative engineering estimate, not a specification metric. Database/RLS/restore controls now have disposable evidence, but no AC is PASS end-to-end and no external vertical slice has run.
+**Evidence-complete MVP progress: approximately 33%.** This is a conservative engineering estimate, not a specification metric. The staging no-publish user flow and migration/role evidence now pass, but no AC is PASS end-to-end through an external platform and no external vertical slice has run.
 
-**Migration verdict: DISPOSABLE_DB_PASS; STAGING NOT AUTHORIZED.** Final `0021` checksum, clean full-chain migration, migration rerun, `34/34` pgTAP, pre-0021 upgrade fixture and clean restore drill passed on disposable Supabase PostgreSQL `17.6.1.143`. This is evidence for the migration source, not authorization to touch staging.
+**Migration verdict: STAGING_MIGRATION_PASS_WITH_LIMITED_BACKUP_EVIDENCE.** `0021`-`0024` are applied only to staging. `0024` ledger checksum, runtime grants and role-escalation denials were verified; the full-chain and `34/34` pgTAP/restore evidence remains disposable. Managed Supabase backup/PITR evidence is still missing. Production is not authorized or touched.
 
 **Production migration and real publication remain prohibited by:**
 
 - no completed Postiz Cloud contract spike, isolated organization, LinkedIn Page/Developer/OAuth/metrics evidence, or real adapter;
 - no deployable Release Gateway/private network/credential isolation or one-integration allowlist enforcement;
 - no Trigger durable workflow, outbox consumer, retry/cancel/replay/ambiguous-result implementation;
-- no separately provisioned staging database login identities, grants, Data API exposure control or executed staging cross-brand evidence;
+- no production database-role provisioning, Data API exposure control, managed backup/PITR evidence or executed production cross-brand evidence;
 - no private storage, immutable originals, server-side hashing or malware scanner;
 - no ingestion/raw snapshots/normalization/DQ/attribution path;
 - no provider backup/PITR or object-storage restore configuration, operations runbooks, monitoring or on-call evidence;
 - no complete staging vertical cycle from approved content through a confirmed platform object, tracked visit and lead.
 
-**One next implementation step without external side effects:** add a dedicated release-intent/outbox DB test that proves one atomic intent/event pair under repeated requests, then implement the approved Trigger.dev workflow only after its project and secret boundary exist. Do not use staging, production, Postiz, LinkedIn, or any external credential for that step.
+**One next implementation step without external side effects:** implement a separate Release Gateway service contract and its unit/integration tests, keeping it unable to obtain Postiz credentials until the approved Cloud contract spike exists. Do not use production, Postiz, LinkedIn or any external credential for that step.
