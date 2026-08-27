@@ -5,9 +5,9 @@
  * Google OAuth, Resend transactional email, disposable-domain blocking,
  * invite-only signup allowlist, and umbrella org provisioning on signup.
  */
-import { APIError } from "better-auth/api";
 import type { CreateAuthOptions } from "@workspace/lib/auth/server";
 import { provisionUmbrellaOrg } from "@workspace/lib/db/provisioning";
+import { APIError } from "better-auth/api";
 import { createStripeBillingPlugin } from "./billing/plugin";
 import { isDisposableEmail } from "./disposable-domains";
 import { sendEmail } from "./email";
@@ -47,6 +47,18 @@ function getSignupAllowlist(): string[] {
 		.filter(Boolean);
 }
 
+/**
+ * Keep password recovery separate from the complete cloud mode. Selena staging
+ * reuses this narrow hook without enabling cloud signup, billing, or OAuth.
+ */
+export function getResendPasswordRecoveryOptions(productName = "Elmo"): Pick<CreateAuthOptions, "sendResetPassword"> {
+	return {
+		sendResetPassword: async ({ user, url }) => {
+			await sendEmail(user.email, passwordResetEmail({ url, productName }));
+		},
+	};
+}
+
 // ── Auth options ──────────────────────────────────────────────────────
 
 export function getCloudAuthOptions(): CreateAuthOptions {
@@ -61,9 +73,7 @@ export function getCloudAuthOptions(): CreateAuthOptions {
 				await sendEmail(user.email, verificationEmail({ url }));
 			},
 		},
-		sendResetPassword: async ({ user, url }) => {
-			await sendEmail(user.email, passwordResetEmail({ url }));
-		},
+		...getResendPasswordRecoveryOptions(),
 		socialProviders: {
 			google: {
 				clientId: process.env.GOOGLE_CLIENT_ID!,

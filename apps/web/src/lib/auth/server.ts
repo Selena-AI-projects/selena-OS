@@ -7,10 +7,11 @@
  * This is the single source of truth for the server-side auth object.
  * All server functions, middleware, and route handlers import from here.
  */
-import { getCloudAuthOptions } from "@workspace/cloud/auth-hooks";
+import { getCloudAuthOptions, getResendPasswordRecoveryOptions } from "@workspace/cloud/auth-hooks";
 import { type CreateAuthOptions, createAuth } from "@workspace/lib/auth/server";
 import { countUsers, provisionLocalOrg } from "@workspace/lib/db/provisioning";
 import { getWhitelabelAuthOptions } from "@workspace/whitelabel/auth-hooks";
+import { isSelenaStagingPasswordRecoveryEnabled } from "../selena-staging-password-recovery.server";
 
 /**
  * Local mode hooks: enforce "exactly one user, with an admin org created
@@ -22,6 +23,7 @@ import { getWhitelabelAuthOptions } from "@workspace/whitelabel/auth-hooks";
  */
 function getLocalAuthOptions(): CreateAuthOptions {
 	return {
+		...(isSelenaStagingPasswordRecoveryEnabled() ? getResendPasswordRecoveryOptions("Selena Systems") : {}),
 		databaseHooks: {
 			user: {
 				create: {
