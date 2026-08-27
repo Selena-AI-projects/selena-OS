@@ -28,7 +28,8 @@ import {
 } from "@workspace/lib/selena-control-room";
 import { and, desc, eq, isNull, sql } from "drizzle-orm";
 import { z } from "zod";
-import { type AuthContext, canWrite, resolveSessionAuthContext } from "../lib/selena-auth-context";
+import { resolveSessionAuthContext } from "../lib/selena-auth-context.server";
+import { type AuthContext, canWrite } from "../lib/selena-authz";
 
 type ControlRoomDatabase = Pick<typeof db, "execute" | "insert" | "select" | "update">;
 type AuditDatabase = Pick<ControlRoomDatabase, "execute" | "insert" | "select">;
@@ -110,49 +111,6 @@ async function withControlRoomTransaction<T>(
 		// set_request_context is the database boundary: its SECURITY DEFINER
 		// membership/brand check runs before any RLS-protected Control Room query.
 		return operation(tx);
-	});
-}
-
-export async function assertControlRoomContentVersionWriteAccess(
-	context: AuthContext,
-	brandId: string,
-	contentVersionId: string,
-): Promise<void> {
-	assertWritable(context);
-	await withControlRoomTransaction(context, brandId, async (tx) => {
-		const rows = await tx
-			.select({ id: scrContentVersions.id })
-			.from(scrContentVersions)
-			.where(
-				and(
-					eq(scrContentVersions.id, contentVersionId),
-					eq(scrContentVersions.organizationId, context.tenantId),
-					eq(scrContentVersions.brandId, brandId),
-				),
-			)
-			.limit(1);
-		if (rows.length !== 1) throw new Error("Content version is not available for this brand");
-	});
-}
-
-export async function assertControlRoomAssetReadAccess(
-	context: AuthContext,
-	brandId: string,
-	assetId: string,
-): Promise<void> {
-	await withControlRoomTransaction(context, brandId, async (tx) => {
-		const rows = await tx
-			.select({ id: scrContentAssets.id })
-			.from(scrContentAssets)
-			.where(
-				and(
-					eq(scrContentAssets.id, assetId),
-					eq(scrContentAssets.organizationId, context.tenantId),
-					eq(scrContentAssets.brandId, brandId),
-				),
-			)
-			.limit(1);
-		if (rows.length !== 1) throw new Error("Asset is not available for this brand");
 	});
 }
 

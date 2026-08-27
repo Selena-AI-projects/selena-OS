@@ -4,15 +4,7 @@ import { getRequestHeaders } from "@tanstack/react-start/server";
 import { db } from "@workspace/lib/db/db";
 import { member, organization, svApiKeys } from "@workspace/lib/db/schema";
 import { and, eq, gt, isNull, or } from "drizzle-orm";
-
-export type SelenaRole = "owner" | "member" | "viewer";
-export type AuthContext = {
-	actorId: string;
-	tenantId: string;
-	role: SelenaRole;
-	authType: "session" | "api_key";
-	permissions: string[];
-};
+import type { AuthContext, SelenaRole } from "./selena-authz";
 
 const currentRequestHeaders = createServerOnlyFn(() => getRequestHeaders());
 
@@ -71,16 +63,4 @@ export async function resolveApiKeyAuthContext(request: Request): Promise<AuthCo
 		authType: "api_key",
 		permissions: key.permissions,
 	};
-}
-
-export function assertTenantContext(context: AuthContext, requestedTenantId?: string): void {
-	if (requestedTenantId && requestedTenantId !== context.tenantId)
-		throw new Error("Forbidden: tenant_id is controlled by AuthContext");
-}
-
-export function canWrite(context: AuthContext): boolean {
-	return (
-		(context.role === "owner" || context.role === "member") &&
-		(context.authType === "session" || context.permissions.includes("client:write"))
-	);
 }

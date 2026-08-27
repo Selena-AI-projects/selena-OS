@@ -10,7 +10,7 @@ import {
 } from "@workspace/selena-visibility-contracts";
 import { and, eq } from "drizzle-orm";
 import { z } from "zod";
-import { resolveSessionAuthContext } from "../lib/selena-auth-context";
+import { resolveSessionAuthContext } from "../lib/selena-auth-context.server";
 
 const repositories = createSelenaRepositories(db);
 

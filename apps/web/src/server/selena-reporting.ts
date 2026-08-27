@@ -1,7 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { assertCanonicalDataset, ledgerToCsv } from "@workspace/lib/selena-export";
 import { z } from "zod";
-import { resolveSessionAuthContext } from "../lib/selena-auth-context";
+import { resolveSessionAuthContext } from "../lib/selena-auth-context.server";
 
 const ledgerRowSchema = z.object({
 	runId: z.string().min(1),

@@ -3,7 +3,7 @@ import { db } from "@workspace/lib/db/db";
 import { svCycles, svFindings, svRecommendations } from "@workspace/lib/db/schema";
 import { and, eq } from "drizzle-orm";
 import { z } from "zod";
-import { resolveApiKeyAuthContext } from "../../../../lib/selena-auth-context";
+import { resolveApiKeyAuthContext } from "../../../../lib/selena-auth-context.server";
 
 export const Route = createFileRoute("/api/v1/selena/dashboard")({
 	server: {

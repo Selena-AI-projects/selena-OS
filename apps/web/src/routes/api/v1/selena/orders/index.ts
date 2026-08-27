@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { db } from "@workspace/lib/db/db";
 import { createSelenaRepositories } from "@workspace/lib/selena-visibility-repositories";
 import { z } from "zod";
-import { resolveApiKeyAuthContext } from "../../../../../lib/selena-auth-context";
+import { resolveApiKeyAuthContext } from "../../../../../lib/selena-auth-context.server";
 
 const repositories = createSelenaRepositories(db);
 const bodySchema = z.object({

@@ -1,9 +1,9 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { MAX_SELENA_ASSET_BYTES } from "@workspace/lib/selena-private-storage";
 import { z } from "zod";
-import { resolveSessionAuthContext } from "../../../../../../lib/selena-auth-context";
+import { resolveSessionAuthContext } from "../../../../../../lib/selena-auth-context.server";
 import { uploadSelenaPrivateAsset } from "../../../../../../lib/selena-scanner-client";
-import { assertControlRoomContentVersionWriteAccess } from "../../../../../../server/selena-control-room";
+import { assertControlRoomContentVersionWriteAccess } from "../../../../../../server/selena-control-room-access.server";
 
 const metadataSchema = z.object({
 	brandId: z.string().trim().min(1).max(120),

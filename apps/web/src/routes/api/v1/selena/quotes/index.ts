@@ -3,7 +3,7 @@ import { db } from "@workspace/lib/db/db";
 import { createSelenaRepositories } from "@workspace/lib/selena-visibility-repositories";
 import { calculateQuote, quoteCreateSchema, quotePricingSchema } from "@workspace/selena-visibility-contracts";
 import { z } from "zod";
-import { resolveApiKeyAuthContext } from "../../../../../lib/selena-auth-context";
+import { resolveApiKeyAuthContext } from "../../../../../lib/selena-auth-context.server";
 
 const repositories = createSelenaRepositories(db);
 const quoteBody = z.object({

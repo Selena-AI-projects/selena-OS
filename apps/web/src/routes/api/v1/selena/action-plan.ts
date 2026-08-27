@@ -3,7 +3,7 @@ import { buildActionPlan, validateGrounding } from "@workspace/lib/recommendatio
 import { createSelenaDataset } from "@workspace/lib/selena-dataset-gateway";
 import { assertCanonicalDataset, ledgerToCsv } from "@workspace/lib/selena-export";
 import { z } from "zod";
-import { resolveApiKeyAuthContext } from "../../../../lib/selena-auth-context";
+import { resolveApiKeyAuthContext } from "../../../../lib/selena-auth-context.server";
 
 const ledgerRowSchema = z.object({
 	runId: z.string().min(1),

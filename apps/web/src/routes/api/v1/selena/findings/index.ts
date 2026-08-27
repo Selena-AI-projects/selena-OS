@@ -4,7 +4,7 @@ import { svCycles, svFindings, svRecommendations } from "@workspace/lib/db/schem
 import { deriveFindings, deriveRecommendations } from "@workspace/lib/selena-findings";
 import { and, eq } from "drizzle-orm";
 import { z } from "zod";
-import { resolveApiKeyAuthContext } from "../../../../../lib/selena-auth-context";
+import { resolveApiKeyAuthContext } from "../../../../../lib/selena-auth-context.server";
 
 const cycleIdSchema = z.string().uuid();
 const metricsSchema = z.object({

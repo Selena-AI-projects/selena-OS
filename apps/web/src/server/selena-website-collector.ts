@@ -5,7 +5,7 @@ import { buildWebsiteActionPlan, collectWebsite } from "@workspace/lib/website-c
 import { createRecommendationRepositories } from "@workspace/lib/recommendation-persistence";
 import { and, eq } from "drizzle-orm";
 import { z } from "zod";
-import { resolveSessionAuthContext } from "../lib/selena-auth-context";
+import { resolveSessionAuthContext } from "../lib/selena-auth-context.server";
 
 const recommendationRepositories = createRecommendationRepositories(db);
 

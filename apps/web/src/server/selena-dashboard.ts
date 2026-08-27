@@ -3,7 +3,7 @@ import { db } from "@workspace/lib/db/db";
 import { svCycles, svFindings, svRecommendations } from "@workspace/lib/db/schema";
 import { and, eq } from "drizzle-orm";
 import { z } from "zod";
-import { resolveSessionAuthContext } from "../lib/selena-auth-context";
+import { resolveSessionAuthContext } from "../lib/selena-auth-context.server";
 
 export const getSelenaDashboardFn = createServerFn({ method: "GET" })
 	.validator(z.object({ cycleId: z.string().uuid() }))
