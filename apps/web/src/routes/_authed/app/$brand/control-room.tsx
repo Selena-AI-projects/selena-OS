@@ -200,7 +200,7 @@ function ControlRoomPage() {
 						brandId,
 						contentVersionId: approvalVersionId,
 						channelAccountId: approvalAccountId,
-						expiresAt: new Date(approvalExpiry),
+						expiresAt: approvalExpiry,
 					},
 				}),
 			"Human approval recorded",
