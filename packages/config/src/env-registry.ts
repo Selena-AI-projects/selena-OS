@@ -72,6 +72,14 @@ export const ENV_REGISTRY: EnvVarSpec[] = [
 		description: "Supabase root CA used only by the isolated Selena staging migration runner for verify-full TLS.",
 	},
 	{
+		name: "SELENA_RUNTIME_DATABASE_CA_PEM",
+		scope: "server",
+		requiredBy: "optional",
+		credential: true,
+		description:
+			"Supabase root CA materialized only by a Selena staging runtime for verify-full TLS; configure it separately per service.",
+	},
+	{
 		name: "SELENA_STAGING_MVP",
 		scope: "server",
 		requiredBy: "optional",
