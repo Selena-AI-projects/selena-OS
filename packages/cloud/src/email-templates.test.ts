@@ -26,6 +26,12 @@ describe("passwordResetEmail", () => {
 		expect(email.html).toContain(URL);
 		expect(email.text).toContain(URL);
 	});
+
+	it("uses the supplied product name", () => {
+		const email = passwordResetEmail({ url: URL, productName: "Selena Systems" });
+		expect(email.subject).toContain("Selena Systems");
+		expect(email.html).toContain("Selena Systems");
+	});
 });
 
 describe("invitationEmail", () => {

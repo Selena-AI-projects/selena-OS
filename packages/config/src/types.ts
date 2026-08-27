@@ -134,6 +134,8 @@ export interface ClientConfig {
 	canRegister: boolean;
 	/** Whether any user account exists. */
 	hasUsers: boolean;
+	/** Whether the login UI may offer an email password-reset flow. */
+	passwordResetEnabled?: boolean;
 }
 
 // ============================================================================

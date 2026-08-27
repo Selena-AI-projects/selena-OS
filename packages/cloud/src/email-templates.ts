@@ -51,12 +51,13 @@ export function verificationEmail(input: { url: string }): EmailContent {
 	};
 }
 
-export function passwordResetEmail(input: { url: string }): EmailContent {
-	const { url } = input;
+export function passwordResetEmail(input: { url: string; productName?: string }): EmailContent {
+	const { url, productName = "Elmo" } = input;
+	const safeProductName = escapeHtml(productName);
 	return {
-		subject: "Reset your Elmo password",
-		html: wrapHtml("Reset your password", "Click the button below to choose a new password.", url),
-		text: `Reset your Elmo password by visiting this link: ${url}`,
+		subject: `Reset your ${productName} password`,
+		html: wrapHtml(`Reset your ${safeProductName} password`, "Click the button below to choose a new password.", url),
+		text: `Reset your ${productName} password by visiting this link: ${url}`,
 	};
 }
 

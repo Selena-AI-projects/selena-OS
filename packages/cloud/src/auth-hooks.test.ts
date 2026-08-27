@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { getCloudAuthOptions } from "./auth-hooks";
+import { getCloudAuthOptions, getResendPasswordRecoveryOptions } from "./auth-hooks";
 
 function makeUser(email: string) {
 	return {
@@ -55,6 +55,14 @@ describe("getCloudAuthOptions", () => {
 		const before = getCloudAuthOptions().databaseHooks?.user?.create?.before;
 		expect(before).toBeDefined();
 		await expect(before?.(makeUser("x@gmail.com"), null)).resolves.toBeUndefined();
+	});
+});
+
+describe("getResendPasswordRecoveryOptions", () => {
+	it("provides a password-reset sender without enabling cloud-only features", () => {
+		const options = getResendPasswordRecoveryOptions("Selena Systems");
+		expect(options.sendResetPassword).toEqual(expect.any(Function));
+		expect(Object.keys(options)).toEqual(["sendResetPassword"]);
 	});
 });
 
