@@ -41,7 +41,6 @@ function LoginPage() {
 			returnTo={returnTo}
 			isDemo={mode === "demo"}
 			isCloud={mode === "cloud"}
-			passwordResetEnabled={context.clientConfig?.passwordResetEnabled ?? false}
 			canRegister={canRegister}
 		/>
 	);
@@ -92,13 +91,11 @@ export function EmailPasswordLogin({
 	returnTo,
 	isDemo,
 	isCloud,
-	passwordResetEnabled,
 	canRegister,
 }: {
 	returnTo?: string;
 	isDemo?: boolean;
 	isCloud?: boolean;
-	passwordResetEnabled?: boolean;
 	canRegister?: boolean;
 }) {
 	const navigate = useNavigate();
@@ -180,7 +177,7 @@ export function EmailPasswordLogin({
 						<div className="space-y-2">
 							<div className="flex items-center justify-between">
 								<Label htmlFor="password">Password</Label>
-								{passwordResetEnabled && (
+								{isCloud && (
 									<Link to="/auth/forgot-password" className="text-xs text-primary hover:underline">
 										Forgot password?
 									</Link>

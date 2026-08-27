@@ -47,18 +47,6 @@ function getSignupAllowlist(): string[] {
 		.filter(Boolean);
 }
 
-/**
- * Keep password recovery separate from the complete cloud mode. Selena staging
- * reuses this narrow hook without enabling cloud signup, billing, or OAuth.
- */
-export function getResendPasswordRecoveryOptions(productName = "Elmo"): Pick<CreateAuthOptions, "sendResetPassword"> {
-	return {
-		sendResetPassword: async ({ user, url }) => {
-			await sendEmail(user.email, passwordResetEmail({ url, productName }));
-		},
-	};
-}
-
 // ── Auth options ──────────────────────────────────────────────────────
 
 export function getCloudAuthOptions(): CreateAuthOptions {
@@ -73,7 +61,9 @@ export function getCloudAuthOptions(): CreateAuthOptions {
 				await sendEmail(user.email, verificationEmail({ url }));
 			},
 		},
-		...getResendPasswordRecoveryOptions(),
+		sendResetPassword: async ({ user, url }) => {
+			await sendEmail(user.email, passwordResetEmail({ url }));
+		},
 		socialProviders: {
 			google: {
 				clientId: process.env.GOOGLE_CLIENT_ID!,
