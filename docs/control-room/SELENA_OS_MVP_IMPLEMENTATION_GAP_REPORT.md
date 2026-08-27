@@ -243,8 +243,8 @@ All Phase 0 follow-up commands below used the repository `.nvmrc` value through 
 |---|---|
 | `PATH=/Users/msnigmatullaeva/.nvm/versions/node/v24.18.0/bin:$PATH pnpm --filter @workspace/lib check-types` | PASS after final changes. |
 | `PATH=/Users/msnigmatullaeva/.nvm/versions/node/v24.18.0/bin:$PATH pnpm --filter @workspace/web check-types` | PASS after final changes. |
-| `PATH=/Users/msnigmatullaeva/.nvm/versions/node/v24.18.0/bin:$PATH pnpm --filter @workspace/lib test` | PASS after final changes: 47 files, 555 tests. |
-| `PATH=/Users/msnigmatullaeva/.nvm/versions/node/v24.18.0/bin:$PATH pnpm --filter @workspace/web exec biome lint src/server/selena-control-room.ts src/routes/_authed/app/'$brand'/control-room.tsx src/components/app-sidebar.tsx` | PASS after final changes. |
+| `PATH=/Users/msnigmatullaeva/.nvm/versions/node/v24.18.0/bin:$PATH pnpm --filter @workspace/lib test` | PASS after final changes: 47 files, 556 tests. |
+| `PATH=/Users/msnigmatullaeva/.nvm/versions/node/v24.18.0/bin:$PATH pnpm --filter @workspace/web exec biome lint src/server/selena-control-room.ts src/routes/_authed/app/'$brand'/control-room.tsx` | PASS after final changes; 2 changed Control Room files, no diagnostics. |
 | `PATH=/Users/msnigmatullaeva/.nvm/versions/node/v24.18.0/bin:$PATH pnpm --filter @workspace/web build` | PASS after final changes. Warnings: Sentry auth token absent for release/source-map upload; client chunk exceeds 500 kB. |
 | `PATH=/Users/msnigmatullaeva/.nvm/versions/node/v24.18.0/bin:$PATH pnpm --filter @workspace/lib exec drizzle-kit check` | PASS static migration validation. It did not connect to or migrate a database. |
 | `git diff --check` | PASS. |
