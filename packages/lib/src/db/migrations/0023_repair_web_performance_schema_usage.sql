@@ -131,4 +131,5 @@ BEGIN
   END IF;
 END $$;
 
-RESET ROLE;
+-- The staging runner records the Drizzle ledger entry after this SQL completes.
+-- It owns this one-off connection and closes it immediately after that insert.
