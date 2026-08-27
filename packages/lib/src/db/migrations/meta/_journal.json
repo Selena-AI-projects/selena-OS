@@ -169,6 +169,13 @@
       "when": 1787755000000,
       "tag": "0023_repair_web_performance_schema_usage",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1787808833306,
+      "tag": "0024_repair_staging_dry_run_approval_policy",
+      "breakpoints": true
     }
   ]
 }

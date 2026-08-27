@@ -68,7 +68,7 @@ function formatDate(value: Date | string | null | undefined): string {
 	if (!value) return "-";
 	const date = new Date(value);
 	if (Number.isNaN(date.getTime())) return "-";
-	return date.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
+	return date.toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short", timeZone: "UTC" });
 }
 
 function shortHash(value: string): string {
@@ -151,8 +151,8 @@ function ControlRoomPage() {
 				await action();
 				await router.invalidate();
 				setNotice(successMessage);
-			} catch (error) {
-				setNotice(error instanceof Error ? error.message : "Request failed");
+			} catch {
+				setNotice("The request could not be completed. Retry the action; no content was released.");
 			}
 		});
 	}
