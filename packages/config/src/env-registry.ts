@@ -86,11 +86,10 @@ export const ENV_REGISTRY: EnvVarSpec[] = [
 		description: "Enables the isolated Selena staging bootstrap and local no-publish LinkedIn dry run.",
 	},
 	{
-		name: "SELENA_STAGING_PASSWORD_RESET_ENABLED",
+		name: "SELENA_STAGING_PREVIEW_ENABLED",
 		scope: "server",
 		requiredBy: "optional",
-		description:
-			"Enables Selena staging email password recovery only when SELENA_STAGING_MVP and Resend credentials are also configured.",
+		description: "Enables the public, read-only Selena staging preview route with fixture data only.",
 	},
 	{
 		name: "SELENA_SCANNER_URL",
@@ -551,7 +550,6 @@ export const ENV_REGISTRY: EnvVarSpec[] = [
 		name: "RESEND_API_KEY",
 		scope: "server",
 		requiredBy: ["cloud"],
-		credential: true,
 		description: "Resend API key for transactional email.",
 	},
 	{

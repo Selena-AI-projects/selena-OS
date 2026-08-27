@@ -24,7 +24,7 @@ function ForgotPasswordPage() {
 	const [loading, setLoading] = useState(false);
 	const [submitted, setSubmitted] = useState(false);
 
-	if (!context.clientConfig?.passwordResetEnabled) {
+	if (context.clientConfig?.mode !== "cloud") {
 		window.location.href = "/auth/login";
 		return null;
 	}

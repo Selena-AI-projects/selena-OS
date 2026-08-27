@@ -7,7 +7,6 @@ import type { ClientConfig } from "@workspace/config/types";
 import { getDefaultDelayHours } from "@workspace/lib/constants";
 import { countUsers } from "@workspace/lib/db/provisioning";
 import { getDeployment } from "@/lib/config/server";
-import { isSelenaStagingPasswordRecoveryEnabled } from "@/lib/selena-staging-password-recovery.server";
 
 export type PublicClientConfig = Omit<ClientConfig, "branding"> & {
 	branding: Omit<ClientConfig["branding"], "onboardingRedirectUrl">;
@@ -53,7 +52,6 @@ export const getClientConfig = createServerFn({ method: "GET" }).handler(async (
 		defaultDelayHours: getDefaultDelayHours(),
 		canRegister,
 		hasUsers,
-		passwordResetEnabled: deployment.mode === "cloud" || isSelenaStagingPasswordRecoveryEnabled(),
 	};
 });
 

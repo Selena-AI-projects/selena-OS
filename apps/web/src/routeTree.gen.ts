@@ -13,6 +13,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthedRouteImport } from './routes/_authed'
 import { Route as CheckRouteImport } from './routes/check'
 import { Route as SelenaRouteImport } from './routes/selena'
+import { Route as StagingPreviewRouteImport } from './routes/staging-preview'
 import { Route as AuthedAdminRouteImport } from './routes/_authed/admin'
 import { Route as AuthedAppRouteImport } from './routes/_authed/app'
 import { Route as AuthedChoosePlanRouteImport } from './routes/_authed/choose-plan'
@@ -106,6 +107,11 @@ const CheckRoute = CheckRouteImport.update({
 const SelenaRoute = SelenaRouteImport.update({
   id: '/selena',
   path: '/selena',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const StagingPreviewRoute = StagingPreviewRouteImport.update({
+  id: '/staging-preview',
+  path: '/staging-preview',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AuthedAdminRoute = AuthedAdminRouteImport.update({
@@ -517,6 +523,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/check': typeof CheckRoute
   '/selena': typeof SelenaRoute
+  '/staging-preview': typeof StagingPreviewRoute
   '/admin': typeof AuthedAdminRouteWithChildren
   '/app': typeof AuthedAppRouteWithChildren
   '/choose-plan': typeof AuthedChoosePlanRoute
@@ -597,6 +604,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/check': typeof CheckRoute
   '/selena': typeof SelenaRoute
+  '/staging-preview': typeof StagingPreviewRoute
   '/choose-plan': typeof AuthedChoosePlanRoute
   '/app/learn': typeof AppLearnRoute
   '/auth/forgot-password': typeof AuthForgotPasswordRoute
@@ -675,6 +683,7 @@ export interface FileRoutesById {
   '/_authed': typeof AuthedRouteWithChildren
   '/check': typeof CheckRoute
   '/selena': typeof SelenaRoute
+  '/staging-preview': typeof StagingPreviewRoute
   '/_authed/admin': typeof AuthedAdminRouteWithChildren
   '/_authed/app': typeof AuthedAppRouteWithChildren
   '/_authed/choose-plan': typeof AuthedChoosePlanRoute
@@ -757,6 +766,7 @@ export interface FileRouteTypes {
     | '/'
     | '/check'
     | '/selena'
+    | '/staging-preview'
     | '/admin'
     | '/app'
     | '/choose-plan'
@@ -837,6 +847,7 @@ export interface FileRouteTypes {
     | '/'
     | '/check'
     | '/selena'
+    | '/staging-preview'
     | '/choose-plan'
     | '/app/learn'
     | '/auth/forgot-password'
@@ -914,6 +925,7 @@ export interface FileRouteTypes {
     | '/_authed'
     | '/check'
     | '/selena'
+    | '/staging-preview'
     | '/_authed/admin'
     | '/_authed/app'
     | '/_authed/choose-plan'
@@ -996,6 +1008,7 @@ export interface RootRouteChildren {
   AuthedRoute: typeof AuthedRouteWithChildren
   CheckRoute: typeof CheckRoute
   SelenaRoute: typeof SelenaRoute
+  StagingPreviewRoute: typeof StagingPreviewRoute
   AppLearnRoute: typeof AppLearnRoute
   AuthForgotPasswordRoute: typeof AuthForgotPasswordRoute
   AuthLoginRoute: typeof AuthLoginRoute
@@ -1065,6 +1078,13 @@ declare module '@tanstack/react-router' {
       path: '/selena'
       fullPath: '/selena'
       preLoaderRoute: typeof SelenaRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/staging-preview': {
+      id: '/staging-preview'
+      path: '/staging-preview'
+      fullPath: '/staging-preview'
+      preLoaderRoute: typeof StagingPreviewRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_authed/admin': {
@@ -1745,6 +1765,7 @@ const rootRouteChildren: RootRouteChildren = {
   AuthedRoute: AuthedRouteWithChildren,
   CheckRoute: CheckRoute,
   SelenaRoute: SelenaRoute,
+  StagingPreviewRoute: StagingPreviewRoute,
   AppLearnRoute: AppLearnRoute,
   AuthForgotPasswordRoute: AuthForgotPasswordRoute,
   AuthLoginRoute: AuthLoginRoute,
