@@ -677,7 +677,7 @@ export const approveContentVersionFn = createServerFn({ method: "POST" })
 			brandId: z.string().min(1),
 			contentVersionId: uuidSchema,
 			channelAccountId: uuidSchema,
-			expiresAt: z.coerce.date(),
+			expiresAt: z.string().datetime({ offset: true }),
 			reason: z.string().trim().max(1000).optional(),
 		}),
 	)
@@ -685,7 +685,8 @@ export const approveContentVersionFn = createServerFn({ method: "POST" })
 		const context = await resolveSessionAuthContext();
 		assertHumanReviewer(context);
 		const now = new Date();
-		if (data.expiresAt <= now) throw new Error("Approval expiry must be in the future");
+		const expiresAt = new Date(data.expiresAt);
+		if (expiresAt <= now) throw new Error("Approval expiry must be in the future");
 		return withControlRoomTransaction(context, data.brandId, async (tx) => {
 			const db = tx;
 			const [[version], [account], assets] = await Promise.all([
@@ -795,7 +796,7 @@ export const approveContentVersionFn = createServerFn({ method: "POST" })
 					disclosureHash: sha256(version.disclosure),
 					approverId: context.actorId,
 					reason: data.reason,
-					expiresAt: data.expiresAt,
+					expiresAt,
 				})
 				.returning();
 			await tx
@@ -812,7 +813,7 @@ export const approveContentVersionFn = createServerFn({ method: "POST" })
 					bindingHash,
 					contentVersionId: version.id,
 					channelAccountId: account.id,
-					expiresAt: data.expiresAt.toISOString(),
+					expiresAt: expiresAt.toISOString(),
 				},
 			});
 			return approval;
