@@ -4,27 +4,19 @@ import { IconAlertTriangle, IconFileText, IconLockCheck, IconPlus, IconRefresh }
 import { Badge } from "@workspace/ui/components/badge";
 import { Button } from "@workspace/ui/components/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@workspace/ui/components/card";
-import {
-	Dialog,
-	DialogContent,
-	DialogDescription,
-	DialogFooter,
-	DialogHeader,
-	DialogTitle,
-} from "@workspace/ui/components/dialog";
 import { Input } from "@workspace/ui/components/input";
 import { Label } from "@workspace/ui/components/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@workspace/ui/components/table";
 import { Textarea } from "@workspace/ui/components/textarea";
 import { buildTitle, getAppName, getBrandName } from "@/lib/route-head";
 import {
+	addReviewEvidenceFn,
 	approveContentVersionFn,
 	createContentVersionFn,
 	createControlRoomContentFn,
 	getControlRoomWorkspaceFn,
 	queueReleaseIntentFn,
 	revokeApprovalFn,
-	setReleaseKillSwitchFn,
 } from "@/server/selena-control-room";
 
 export const Route = createFileRoute("/_authed/app/$brand/control-room")({
@@ -175,21 +167,18 @@ function ControlRoomPage() {
 	const [contentTitle, setContentTitle] = useState("");
 	const [contentBody, setContentBody] = useState("");
 	const [contentCta, setContentCta] = useState("");
-	const [contentEvidenceSource, setContentEvidenceSource] = useState("");
-	const [contentEvidenceExpiry, setContentEvidenceExpiry] = useState("");
 	const contentPolicy = "selena-brand-pack/v1";
 	const [approvalVersionId, setApprovalVersionId] = useState("");
 	const [approvalAccountId, setApprovalAccountId] = useState("");
 	const [approvalExpiry, setApprovalExpiry] = useState("");
+	const [reviewEvidenceVersionId, setReviewEvidenceVersionId] = useState("");
+	const [reviewEvidenceSource, setReviewEvidenceSource] = useState("");
+	const [reviewEvidenceExpiry, setReviewEvidenceExpiry] = useState("");
 	const [releaseApprovalId, setReleaseApprovalId] = useState("");
 	const [revisionContentId, setRevisionContentId] = useState("");
 	const [revisionBody, setRevisionBody] = useState("");
 	const [revisionCta, setRevisionCta] = useState("");
-	const [revisionEvidenceSource, setRevisionEvidenceSource] = useState("");
-	const [revisionEvidenceExpiry, setRevisionEvidenceExpiry] = useState("");
 	const revisionPolicy = "selena-brand-pack/v1";
-	const [stopBrandOpen, setStopBrandOpen] = useState(false);
-	const [stopBrandConfirmation, setStopBrandConfirmation] = useState("");
 	const contentById = new Map(data.content.map((item) => [item.id, item]));
 	const versionById = new Map(data.versions.map((item) => [item.id, item]));
 	const accountById = new Map(data.accounts.map((item) => [item.id, item]));
@@ -203,6 +192,7 @@ function ControlRoomPage() {
 
 	useEffect(() => {
 		setApprovalVersionId((value) => value || data.versions[0]?.id || "");
+		setReviewEvidenceVersionId((value) => value || data.versions[0]?.id || "");
 		setRevisionContentId((value) => value || data.content[0]?.id || "");
 		setApprovalAccountId((value) => value || data.accounts[0]?.id || "");
 		setReleaseApprovalId(
@@ -217,8 +207,6 @@ function ControlRoomPage() {
 		if (!latestVersion) return;
 		setRevisionBody(latestVersion.body);
 		setRevisionCta(latestVersion.ctaUrl);
-		setRevisionEvidenceSource(latestVersion.evidenceSource ?? "");
-		setRevisionEvidenceExpiry("");
 	}, [data.versions, revisionContentId]);
 
 	function run(action: () => Promise<unknown>, successMessage: string) {
@@ -243,9 +231,7 @@ function ControlRoomPage() {
 						title: contentTitle,
 						body: contentBody,
 						ctaUrl: contentCta,
-						evidence: [{ source: contentEvidenceSource }],
 						policyVersion: contentPolicy,
-						evidenceExpiresAt: new Date(contentEvidenceExpiry).toISOString(),
 					},
 				}),
 			"Material created",
@@ -262,12 +248,26 @@ function ControlRoomPage() {
 						contentId: revisionContentId,
 						body: revisionBody,
 						ctaUrl: revisionCta,
-						evidence: [{ source: revisionEvidenceSource }],
 						policyVersion: revisionPolicy,
-						evidenceExpiresAt: new Date(revisionEvidenceExpiry).toISOString(),
 					},
 				}),
 			"New material version saved",
+		);
+	}
+
+	function submitReviewEvidence(event: FormEvent<HTMLFormElement>) {
+		event.preventDefault();
+		run(
+			() =>
+				addReviewEvidenceFn({
+					data: {
+						brandId,
+						contentVersionId: reviewEvidenceVersionId,
+						source: reviewEvidenceSource,
+						evidenceExpiresAt: new Date(reviewEvidenceExpiry).toISOString(),
+					},
+				}),
+			"Review source added as a new material version",
 		);
 	}
 
@@ -394,25 +394,6 @@ function ControlRoomPage() {
 											onChange={(event) => setContentCta(event.target.value)}
 										/>
 									</Label>
-									<Label className="grid gap-2">
-										Evidence source
-										<Input
-											required
-											type="url"
-											placeholder="https://example.com/source"
-											value={contentEvidenceSource}
-											onChange={(event) => setContentEvidenceSource(event.target.value)}
-										/>
-									</Label>
-									<Label className="grid gap-2">
-										Evidence valid until
-										<Input
-											required
-											type="datetime-local"
-											value={contentEvidenceExpiry}
-											onChange={(event) => setContentEvidenceExpiry(event.target.value)}
-										/>
-									</Label>
 									<Button disabled={pending} type="submit">
 										<IconPlus />
 										Create material
@@ -461,25 +442,6 @@ function ControlRoomPage() {
 											placeholder="https://example.com"
 											value={revisionCta}
 											onChange={(event) => setRevisionCta(event.target.value)}
-										/>
-									</Label>
-									<Label className="grid gap-2">
-										Evidence source
-										<Input
-											required
-											type="url"
-											placeholder="https://example.com/source"
-											value={revisionEvidenceSource}
-											onChange={(event) => setRevisionEvidenceSource(event.target.value)}
-										/>
-									</Label>
-									<Label className="grid gap-2">
-										Evidence valid until
-										<Input
-											required
-											type="datetime-local"
-											value={revisionEvidenceExpiry}
-											onChange={(event) => setRevisionEvidenceExpiry(event.target.value)}
 										/>
 									</Label>
 									<Button disabled={pending} variant="outline" type="submit">
@@ -533,7 +495,7 @@ function ControlRoomPage() {
 									<TableRow>
 										<TableHead>Material</TableHead>
 										<TableHead>Version</TableHead>
-										<TableHead>Evidence valid until</TableHead>
+										<TableHead>Review status</TableHead>
 										<TableHead>Created</TableHead>
 									</TableRow>
 								</TableHeader>
@@ -545,7 +507,9 @@ function ControlRoomPage() {
 											<TableRow key={item.id}>
 												<TableCell className="font-medium">{materialName(item.id)}</TableCell>
 												<TableCell>Version {item.version}</TableCell>
-												<TableCell>{formatDate(item.evidenceExpiresAt)}</TableCell>
+												<TableCell>
+													<StatusBadge value={item.evidenceExpiresAt ? "READY" : "PENDING"} />
+												</TableCell>
 												<TableCell>{formatDate(item.createdAt)}</TableCell>
 											</TableRow>
 										))
@@ -557,6 +521,50 @@ function ControlRoomPage() {
 				</div>}
 
 				{activeSection === "review" && <div className="space-y-5">
+					<Card className="rounded-md shadow-none">
+						<CardHeader>
+							<CardTitle className="text-base">Review source</CardTitle>
+						</CardHeader>
+						<CardContent className="space-y-3">
+							<p className="text-sm text-muted-foreground">
+								Add a verified source only when this material is ready for approval. This creates a new version so the reviewed material cannot change afterward.
+							</p>
+							<form className="grid gap-3 md:grid-cols-[1fr_1fr_1fr_auto]" onSubmit={submitReviewEvidence}>
+								<select
+									required
+									className="border-input h-9 rounded-md border bg-transparent px-3 text-sm"
+									value={reviewEvidenceVersionId}
+									onChange={(event) => setReviewEvidenceVersionId(event.target.value)}
+								>
+									<option value="" disabled>
+										Material version
+									</option>
+									{data.versions.map((item) => (
+										<option value={item.id} key={item.id}>
+											{materialName(item.id)} · Version {item.version}
+										</option>
+									))}
+								</select>
+								<Input
+									required
+									type="url"
+									placeholder="Verified source link"
+									value={reviewEvidenceSource}
+									onChange={(event) => setReviewEvidenceSource(event.target.value)}
+								/>
+								<Input
+									required
+									type="datetime-local"
+									value={reviewEvidenceExpiry}
+									onChange={(event) => setReviewEvidenceExpiry(event.target.value)}
+								/>
+								<Button disabled={pending || !reviewEvidenceVersionId} type="submit">
+									<IconFileText />
+									Create review version
+								</Button>
+							</form>
+						</CardContent>
+					</Card>
 					<Card className="rounded-md shadow-none">
 						<CardHeader>
 							<CardTitle className="text-base">Human approval</CardTitle>
@@ -665,7 +673,7 @@ function ControlRoomPage() {
 				</div>}
 
 				{activeSection === "releases" && <div className="space-y-5">
-					<div className="grid gap-5 xl:grid-cols-[1fr_1fr_auto]">
+					<div className="grid gap-5 xl:grid-cols-2">
 						<Card className="rounded-md shadow-none">
 							<CardHeader>
 								<CardTitle className="text-base">Release queue</CardTitle>
@@ -705,18 +713,6 @@ function ControlRoomPage() {
 										? "This test stops after a queued internal record. It cannot send or publish anything."
 										: "Publishing stays unavailable until the separate safety service is deployed."}
 								</p>
-							</CardContent>
-						</Card>
-						<Card className="rounded-md border-destructive/30 shadow-none">
-							<CardHeader>
-							<CardTitle className="text-base">Stop publishing</CardTitle>
-							</CardHeader>
-							<CardContent>
-								<p className="mb-3 text-sm text-muted-foreground">Pause every future release for this brand.</p>
-								<Button disabled={pending} variant="destructive" onClick={() => setStopBrandOpen(true)}>
-									<IconAlertTriangle />
-									Stop brand
-								</Button>
 							</CardContent>
 						</Card>
 					</div>
@@ -928,54 +924,6 @@ function ControlRoomPage() {
 					</Card>
 				)}
 			</div>
-
-			<Dialog
-				open={stopBrandOpen}
-				onOpenChange={(open) => {
-					setStopBrandOpen(open);
-					if (!open) setStopBrandConfirmation("");
-				}}
-			>
-				<DialogContent>
-					<DialogHeader>
-						<DialogTitle>Stop every future release?</DialogTitle>
-						<DialogDescription>
-							This pauses all future releases for this brand. Materials and approvals are not deleted, but nothing can
-							be sent until an authorized operator clears the stop.
-						</DialogDescription>
-					</DialogHeader>
-					<Label className="grid gap-2">
-						Type STOP to confirm
-						<Input
-							value={stopBrandConfirmation}
-							onChange={(event) => setStopBrandConfirmation(event.target.value)}
-							placeholder="STOP"
-						/>
-					</Label>
-					<DialogFooter>
-						<Button variant="outline" onClick={() => setStopBrandOpen(false)}>
-							Cancel
-						</Button>
-						<Button
-							disabled={pending || stopBrandConfirmation !== "STOP"}
-							variant="destructive"
-							onClick={() => {
-								run(
-									() =>
-										setReleaseKillSwitchFn({
-											data: { brandId, scope: "BRAND", enabled: true, reason: "Stopped from Control Room" },
-										}),
-									"Publishing stopped for this brand",
-								);
-								setStopBrandOpen(false);
-								setStopBrandConfirmation("");
-							}}
-						>
-							Stop publishing
-						</Button>
-					</DialogFooter>
-				</DialogContent>
-			</Dialog>
 		</div>
 	);
 }

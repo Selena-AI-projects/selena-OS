@@ -559,7 +559,7 @@ export const createControlRoomContentFn = createServerFn({ method: "POST" })
 			title: z.string().trim().min(3).max(180),
 			body: z.string().trim().min(1).max(3000),
 			ctaUrl: z.string().url().max(2048),
-			evidence: evidenceSchema,
+			evidence: evidenceSchema.optional().default([]),
 			policyVersion: policyVersionSchema,
 			evidenceExpiresAt: z.coerce.date().optional(),
 		}),
@@ -567,7 +567,8 @@ export const createControlRoomContentFn = createServerFn({ method: "POST" })
 	.handler(async ({ data }) => {
 		const context = await resolveSessionAuthContext();
 		assertWritable(context);
-		const evidenceExpiresAt = validFutureDate(data.evidenceExpiresAt);
+		const evidenceExpiresAt = data.evidence.length > 0 ? validFutureDate(data.evidenceExpiresAt) : null;
+		if (data.evidence.length > 0 && !evidenceExpiresAt) throw new Error("Evidence requires an expiry");
 		const contentHash = contentVersionHash({
 			body: data.body,
 			ctaUrl: data.ctaUrl,
@@ -623,7 +624,7 @@ export const createContentVersionFn = createServerFn({ method: "POST" })
 			contentId: uuidSchema,
 			body: z.string().trim().min(1).max(3000),
 			ctaUrl: z.string().url().max(2048),
-			evidence: evidenceSchema,
+			evidence: evidenceSchema.optional().default([]),
 			policyVersion: policyVersionSchema,
 			evidenceExpiresAt: z.coerce.date().optional(),
 		}),
@@ -631,7 +632,8 @@ export const createContentVersionFn = createServerFn({ method: "POST" })
 	.handler(async ({ data }) => {
 		const context = await resolveSessionAuthContext();
 		assertWritable(context);
-		const evidenceExpiresAt = validFutureDate(data.evidenceExpiresAt);
+		const evidenceExpiresAt = data.evidence.length > 0 ? validFutureDate(data.evidenceExpiresAt) : null;
+		if (data.evidence.length > 0 && !evidenceExpiresAt) throw new Error("Evidence requires an expiry");
 		return withControlRoomTransaction(context, data.brandId, async (tx) => {
 			const [content] = await tx
 				.select()
@@ -693,6 +695,92 @@ export const createContentVersionFn = createServerFn({ method: "POST" })
 				metadata: { contentId: content.id, version: nextVersion, contentHash },
 			});
 			return { versionId: version.id, contentHash: version.contentHash };
+		});
+	});
+
+export const addReviewEvidenceFn = createServerFn({ method: "POST" })
+	.validator(
+		z.object({
+			brandId: z.string().min(1),
+			contentVersionId: uuidSchema,
+			source: z.string().url().max(2048),
+			evidenceExpiresAt: z.coerce.date(),
+		}),
+	)
+	.handler(async ({ data }) => {
+		const context = await resolveSessionAuthContext();
+		assertWritable(context);
+		const evidenceExpiresAt = validFutureDate(data.evidenceExpiresAt);
+		if (!evidenceExpiresAt) throw new Error("A future expiry is required");
+
+		return withControlRoomTransaction(context, data.brandId, async (tx) => {
+			const [version] = await tx
+				.select()
+				.from(scrContentVersions)
+				.where(
+					and(
+						eq(scrContentVersions.id, data.contentVersionId),
+						eq(scrContentVersions.organizationId, context.tenantId),
+						eq(scrContentVersions.brandId, data.brandId),
+					),
+				)
+				.limit(1);
+			if (!version) throw new Error("Content version was not found");
+
+			const [latest] = await tx
+				.select({ id: scrContentVersions.id, version: scrContentVersions.version })
+				.from(scrContentVersions)
+				.where(
+					and(
+						eq(scrContentVersions.contentId, version.contentId),
+						eq(scrContentVersions.organizationId, context.tenantId),
+						eq(scrContentVersions.brandId, data.brandId),
+					),
+				)
+				.orderBy(desc(scrContentVersions.version))
+				.limit(1);
+			if (!latest || latest.id !== version.id) throw new Error("A newer material version needs review instead");
+
+			const evidence = [{ source: data.source }];
+			const contentHash = contentVersionHash({
+				body: version.body,
+				ctaUrl: version.ctaUrl,
+				claims: version.claims,
+				evidence,
+				disclosure: version.disclosure,
+				policyVersion: version.policyVersion,
+			});
+			const [reviewedVersion] = await tx
+				.insert(scrContentVersions)
+				.values({
+					organizationId: context.tenantId,
+					brandId: data.brandId,
+					contentId: version.contentId,
+					version: latest.version + 1,
+					body: version.body,
+					ctaUrl: version.ctaUrl,
+					claims: version.claims,
+					evidence,
+					disclosure: version.disclosure,
+					policyVersion: version.policyVersion,
+					contentHash,
+					evidenceExpiresAt,
+					createdBy: context.actorId,
+				})
+				.returning();
+			await tx
+				.update(scrContentItems)
+				.set({ status: "DRAFT", updatedAt: new Date() })
+				.where(eq(scrContentItems.id, version.contentId));
+			await appendAudit(tx, {
+				context,
+				brandId: data.brandId,
+				action: "content.evidence_verified",
+				aggregateType: "content_version",
+				aggregateId: reviewedVersion.id,
+				metadata: { contentId: version.contentId, version: reviewedVersion.version },
+			});
+			return { versionId: reviewedVersion.id };
 		});
 	});
 

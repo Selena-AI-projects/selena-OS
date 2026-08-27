@@ -193,7 +193,7 @@ export function AppSidebar({
 		}
 
 		groups.push({
-			label: "Dashboard",
+			label: "AI Visibility",
 			items: dashboardItems,
 		});
 
