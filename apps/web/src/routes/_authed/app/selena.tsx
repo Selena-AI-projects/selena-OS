@@ -1,6 +1,7 @@
 import {
 	IconArrowRight,
 	IconCheck,
+	IconChevronDown,
 	IconCircleDashed,
 	IconExternalLink,
 	IconGlobe,
@@ -12,6 +13,15 @@ import {
 import { createFileRoute, useRouter } from "@tanstack/react-router";
 import { authClient } from "@workspace/lib/auth/client";
 import { Button } from "@workspace/ui/components/button";
+import {
+	DropdownMenu,
+	DropdownMenuContent,
+	DropdownMenuGroup,
+	DropdownMenuItem,
+	DropdownMenuLabel,
+	DropdownMenuSeparator,
+	DropdownMenuTrigger,
+} from "@workspace/ui/components/dropdown-menu";
 import { Input } from "@workspace/ui/components/input";
 import { Label } from "@workspace/ui/components/label";
 import { useEffect, useMemo, useState } from "react";
@@ -19,6 +29,7 @@ import { SelenaWordmark } from "@/components/selena-wordmark";
 import { useAuth } from "@/hooks/use-auth";
 import { validateWebsiteUrl } from "@/lib/brand-website";
 import { resetPostHog } from "@/lib/posthog";
+import { getLastSelenaProduct, rememberSelenaProduct, type SelenaProduct } from "@/lib/selena-product-entry";
 import { humanizeSelenaError } from "@/lib/selena-workspace-errors";
 import { createSelenaProjectFn, getSelenaWorkspaceFn } from "../../../server/selena-client";
 import { confirmSelenaProfileFn } from "../../../server/selena-onboarding";
@@ -48,6 +59,7 @@ function SelenaWorkspace() {
 	const { projects } = Route.useLoaderData();
 	const router = useRouter();
 	const { user } = useAuth();
+	const [selectedProduct, setSelectedProduct] = useState<SelenaProduct | null>(null);
 	const [selectedProjectId, setSelectedProjectId] = useState(projects[0]?.project.id ?? "");
 	const [showCreate, setShowCreate] = useState(projects.length === 0);
 	const [projectForm, setProjectForm] = useState(emptyProjectForm);
@@ -76,6 +88,15 @@ function SelenaWorkspace() {
 		setLocale(nextLocale);
 		document.documentElement.lang = nextLocale;
 	}, []);
+
+	useEffect(() => {
+		const product = getLastSelenaProduct();
+		if (product === "content-control") {
+			void router.navigate({ to: "/app/$brand/control-room", params: { brand: "selena" } });
+			return;
+		}
+		if (product === "ai-visibility") setSelectedProduct(product);
+	}, [router]);
 
 	useEffect(() => {
 		if (!selectedProject?.profile) {
@@ -275,6 +296,17 @@ function SelenaWorkspace() {
 		});
 	};
 
+	const chooseProduct = (product: SelenaProduct) => {
+		rememberSelenaProduct(product);
+		if (product === "content-control") {
+			void router.navigate({ to: "/app/$brand/control-room", params: { brand: "selena" } });
+			return;
+		}
+		setSelectedProduct(product);
+	};
+
+	if (!selectedProduct) return <SelenaProductEntry onSelect={chooseProduct} />;
+
 	return (
 		<div className="selena-app min-h-screen">
 			<header className="selena-app-header">
@@ -287,6 +319,7 @@ function SelenaWorkspace() {
 						</span>
 					</div>
 					<div className="flex items-center gap-2">
+						<SelenaProductSwitcher locale={locale} onSelect={chooseProduct} />
 						<a
 							href="https://www.selenasystems.com/visibility"
 							target="_blank"
@@ -412,6 +445,85 @@ function SelenaWorkspace() {
 				</div>
 			</main>
 		</div>
+	);
+}
+
+function SelenaProductEntry({ onSelect }: { onSelect: (product: SelenaProduct) => void }) {
+	return (
+		<div className="selena-app min-h-screen">
+			<main className="mx-auto flex min-h-screen w-full max-w-5xl items-center px-5 py-8 sm:px-8">
+				<section className="w-full">
+					<SelenaWordmark />
+					<h1 className="selena-heading mt-8 text-3xl text-[#181614] sm:text-4xl">Choose your workspace</h1>
+					<p className="mt-3 max-w-2xl text-sm leading-6 text-[#6e6258]">
+						Use one Selena Systems account for evidence-led AI Visibility work and controlled content operations.
+					</p>
+					<div className="mt-8 grid gap-4 md:grid-cols-2">
+						<button
+							className="rounded-lg border border-[#e6ddd1] bg-[#fffdf8] p-6 text-left transition-colors hover:border-[#b9825b] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#8f5c34]"
+							onClick={() => onSelect("ai-visibility")}
+							type="button"
+						>
+							<IconGlobe className="size-5 text-[#8f5c34]" />
+							<h2 className="mt-5 text-lg font-semibold text-[#181614]">AI Visibility</h2>
+							<p className="mt-2 text-sm leading-6 text-[#6e6258]">
+								Review evidence, visibility findings and recommended next actions for your projects.
+							</p>
+							<span className="mt-6 inline-flex min-h-11 items-center gap-2 text-sm font-medium text-[#181614]">
+								Open AI Visibility <IconArrowRight className="size-4" />
+							</span>
+						</button>
+						<button
+							className="rounded-lg border border-[#e6ddd1] bg-[#fffdf8] p-6 text-left transition-colors hover:border-[#b9825b] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#8f5c34]"
+							onClick={() => onSelect("content-control")}
+							type="button"
+						>
+							<IconCheck className="size-5 text-[#8f5c34]" />
+							<h2 className="mt-5 text-lg font-semibold text-[#181614]">Content Control Room</h2>
+							<p className="mt-2 text-sm leading-6 text-[#6e6258]">
+								Create, review and prepare content through approval and a no-publish release workflow.
+							</p>
+							<span className="mt-6 inline-flex min-h-11 items-center gap-2 text-sm font-medium text-[#181614]">
+								Open Content Control <IconArrowRight className="size-4" />
+							</span>
+						</button>
+					</div>
+				</section>
+			</main>
+		</div>
+	);
+}
+
+function SelenaProductSwitcher({
+	locale,
+	onSelect,
+}: {
+	locale: WorkspaceLocale;
+	onSelect: (product: SelenaProduct) => void;
+}) {
+	return (
+		<DropdownMenu>
+			<DropdownMenuTrigger asChild>
+				<Button className="min-h-11 gap-2" type="button" variant="outline">
+					{tr(locale, "AI Visibility", "Видимость в AI")}
+					<IconChevronDown className="size-4" />
+				</Button>
+			</DropdownMenuTrigger>
+			<DropdownMenuContent align="end" className="min-w-60 rounded-lg">
+				<DropdownMenuLabel>Selena Systems products</DropdownMenuLabel>
+				<DropdownMenuSeparator />
+				<DropdownMenuGroup>
+					<DropdownMenuItem className="cursor-pointer" onSelect={() => onSelect("ai-visibility")}>
+						<IconGlobe />
+						AI Visibility
+					</DropdownMenuItem>
+					<DropdownMenuItem className="cursor-pointer" onSelect={() => onSelect("content-control")}>
+						<IconCheck />
+						Content Control Room
+					</DropdownMenuItem>
+				</DropdownMenuGroup>
+			</DropdownMenuContent>
+		</DropdownMenu>
 	);
 }
 
