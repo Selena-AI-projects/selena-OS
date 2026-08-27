@@ -1,10 +1,13 @@
 import {
+	IconAlertTriangle,
 	IconBuilding,
 	IconBuildings,
 	IconChartBar,
+	IconChevronDown,
 	IconCpu,
 	IconCreditCard,
 	IconDashboard,
+	IconFileText,
 	IconKey,
 	IconLink,
 	IconListDetails,
@@ -18,7 +21,7 @@ import {
 	IconTool,
 	IconUsers,
 } from "@tabler/icons-react";
-import { Link, useRouteContext } from "@tanstack/react-router";
+import { Link, useLocation, useParams, useRouteContext } from "@tanstack/react-router";
 import type { ClientConfig } from "@workspace/config/types";
 import type { BrandWithPrompts } from "@workspace/lib/db/schema";
 
@@ -32,6 +35,15 @@ import {
 	SidebarMenuItem,
 	useSidebar,
 } from "@workspace/ui/components/sidebar";
+import {
+	DropdownMenu,
+	DropdownMenuContent,
+	DropdownMenuGroup,
+	DropdownMenuItem,
+	DropdownMenuLabel,
+	DropdownMenuSeparator,
+	DropdownMenuTrigger,
+} from "@workspace/ui/components/dropdown-menu";
 import type * as React from "react";
 import { DemoModePill } from "@/components/demo-mode-pill";
 import { Logo } from "@/components/logo";
@@ -56,6 +68,55 @@ interface AppSidebarProps extends React.ComponentProps<typeof Sidebar> {
 	brand?: BrandWithPrompts | null;
 }
 
+function ProductSwitcher() {
+	const { brand } = useParams({ strict: false }) as { brand?: string };
+	const { pathname } = useLocation();
+	const { setOpenMobile } = useSidebar();
+	const inControlRoom = pathname.includes("/control-room");
+	const activeProduct = inControlRoom ? "Content Control" : "AI Visibility";
+
+	if (!brand) return null;
+
+	return (
+		<SidebarMenu>
+			<SidebarMenuItem>
+				<DropdownMenu>
+					<DropdownMenuTrigger asChild>
+						<SidebarMenuButton size="lg" tooltip="Switch product">
+							{inControlRoom ? <IconShieldCheck /> : <IconChartBar />}
+							<span>{activeProduct}</span>
+							<IconChevronDown className="ml-auto size-4" />
+						</SidebarMenuButton>
+					</DropdownMenuTrigger>
+					<DropdownMenuContent
+						className="w-(--radix-dropdown-menu-trigger-width) min-w-56 rounded-lg"
+						side="right"
+						align="start"
+						sideOffset={8}
+					>
+						<DropdownMenuLabel>Selena Systems products</DropdownMenuLabel>
+						<DropdownMenuSeparator />
+						<DropdownMenuGroup>
+							<DropdownMenuItem asChild className="cursor-pointer">
+								<Link to="/app/$brand" params={{ brand }} onClick={() => setOpenMobile(false)}>
+									<IconChartBar />
+									AI Visibility
+								</Link>
+							</DropdownMenuItem>
+							<DropdownMenuItem asChild className="cursor-pointer">
+								<Link to="/app/$brand/control-room" params={{ brand }} onClick={() => setOpenMobile(false)}>
+									<IconShieldCheck />
+									Content Control
+								</Link>
+							</DropdownMenuItem>
+						</DropdownMenuGroup>
+					</DropdownMenuContent>
+				</DropdownMenu>
+			</SidebarMenuItem>
+		</SidebarMenu>
+	);
+}
+
 export function AppSidebar({
 	isAdmin = false,
 	hasReportAccess = false,
@@ -64,7 +125,9 @@ export function AppSidebar({
 	...props
 }: AppSidebarProps) {
 	const { setOpenMobile } = useSidebar();
+	const { pathname } = useLocation();
 	const context = useRouteContext({ strict: false }) as { clientConfig?: ClientConfig };
+	const isControlRoom = scope === "brand" && pathname.includes("/control-room");
 	// Reports are disabled entirely in cloud; hide the nav entry there.
 	const reportsEnabled = context.clientConfig?.features.reportGeneration ?? true;
 
@@ -75,7 +138,21 @@ export function AppSidebar({
 	const groups: NavGroup[] = [];
 
 	// Dashboard section - only show if we have a brand context
-	if (scope === "brand") {
+	if (scope === "brand" && isControlRoom) {
+		groups.push({
+			label: "Content Control",
+			items: [
+				{ title: "Inbox", url: "/control-room", icon: IconListDetails, hash: "inbox" },
+				{ title: "Content", url: "/control-room", icon: IconFileText, hash: "content" },
+				{ title: "Review", url: "/control-room", icon: IconShieldCheck, hash: "review" },
+				{ title: "Releases", url: "/control-room", icon: IconTimeline, hash: "releases" },
+				{ title: "Publications", url: "/control-room", icon: IconSpeakerphone, hash: "publications" },
+				{ title: "Performance", url: "/control-room", icon: IconChartBar, hash: "performance" },
+				{ title: "Incidents", url: "/control-room", icon: IconAlertTriangle, hash: "incidents" },
+				{ title: "Audit", url: "/control-room", icon: IconListDetails, hash: "audit" },
+			],
+		});
+	} else if (scope === "brand") {
 		const dashboardItems = [
 			{
 				title: "Overview",
@@ -120,17 +197,6 @@ export function AppSidebar({
 			items: dashboardItems,
 		});
 
-		groups.push({
-			label: "Control Room",
-			items: [
-				{
-					title: "Content Control",
-					url: "/control-room",
-					icon: IconShieldCheck,
-				},
-			],
-		});
-
 		// Settings section - only show if onboarded
 		if (brand?.onboarded) {
 			groups.push({
@@ -168,7 +234,7 @@ export function AppSidebar({
 	}
 
 	// Admin section
-	if (showAdminSection) {
+	if (showAdminSection && !isControlRoom) {
 		const reportsItem = {
 			title: "Reports",
 			url: "/reports",
@@ -238,6 +304,7 @@ export function AppSidebar({
 						)}
 					</SidebarMenuItem>
 				</SidebarMenu>
+				{scope === "brand" && <ProductSwitcher />}
 			</SidebarHeader>
 			<SidebarContent>
 				<NavMain groups={groups} />

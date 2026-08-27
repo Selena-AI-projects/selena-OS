@@ -21,6 +21,7 @@ const PAGE_NAMES: Record<string, string> = {
 	opportunities: "Opportunities",
 	prompts: "Prompts",
 	citations: "Citations",
+	"control-room": "Content Control",
 	brand: "Brand",
 	competitors: "Competitors",
 	llms: "LLMs",
@@ -111,7 +112,7 @@ function BrandBreadcrumbs({
 }) {
 	// Extract the page segment from the path (e.g., /app/foo/prompts -> prompts)
 	const pathSegments = pathname.split("/");
-	const brandIndex = pathSegments.findIndex((segment) => segment === "app");
+	const brandIndex = pathSegments.indexOf("app");
 	const pageSegment = brandIndex >= 0 && pathSegments[brandIndex + 2] ? pathSegments[brandIndex + 2] : "";
 	const subSegment = brandIndex >= 0 && pathSegments[brandIndex + 3] ? pathSegments[brandIndex + 3] : "";
 

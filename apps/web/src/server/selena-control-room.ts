@@ -181,8 +181,11 @@ export const getControlRoomWorkspaceFn = createServerFn({ method: "GET" })
 							.select({
 								id: scrReleaseIntents.id,
 								approvalId: scrReleaseIntents.approvalId,
+								contentVersionId: scrReleaseIntents.contentVersionId,
+								channelAccountId: scrReleaseIntents.channelAccountId,
 								platform: scrReleaseIntents.platform,
 								status: scrReleaseIntents.status,
+								notBefore: scrReleaseIntents.notBefore,
 								createdAt: scrReleaseIntents.createdAt,
 							})
 							.from(scrReleaseIntents)
@@ -279,6 +282,8 @@ export const getControlRoomWorkspaceFn = createServerFn({ method: "GET" })
 						db
 							.select({
 								id: scrReleaseManifests.id,
+								contentVersionId: scrReleaseManifests.contentVersionId,
+								channelAccountId: scrReleaseManifests.channelAccountId,
 								status: scrReleaseManifests.status,
 								platform: scrReleaseManifests.platform,
 								manifestHash: scrReleaseManifests.manifestHash,
@@ -297,6 +302,8 @@ export const getControlRoomWorkspaceFn = createServerFn({ method: "GET" })
 						db
 							.select({
 								id: scrPublicationAttempts.id,
+								releaseManifestId: scrPublicationAttempts.releaseManifestId,
+								channelAccountId: scrPublicationAttempts.channelAccountId,
 								status: scrPublicationAttempts.status,
 								platform: scrPublicationAttempts.platform,
 								platformObjectId: scrPublicationAttempts.providerReferenceId,
