@@ -92,6 +92,12 @@ export const ENV_REGISTRY: EnvVarSpec[] = [
 		description: "Enables the public, read-only Selena staging preview route with fixture data only.",
 	},
 	{
+		name: "SELENA_STAGING_GOOGLE_SIGN_IN_ENABLED",
+		scope: "server",
+		requiredBy: "optional",
+		description: "Enables the single-owner Google OAuth bridge for Selena staging when all related values are present.",
+	},
+	{
 		name: "SELENA_SCANNER_URL",
 		scope: "server",
 		requiredBy: "optional",

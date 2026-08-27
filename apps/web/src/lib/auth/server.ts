@@ -11,6 +11,7 @@ import { getCloudAuthOptions } from "@workspace/cloud/auth-hooks";
 import { type CreateAuthOptions, createAuth } from "@workspace/lib/auth/server";
 import { countUsers, provisionLocalOrg } from "@workspace/lib/db/provisioning";
 import { getWhitelabelAuthOptions } from "@workspace/whitelabel/auth-hooks";
+import { getSelenaStagingGoogleSignInOptions } from "../selena-staging-google-auth.server";
 
 /**
  * Local mode hooks: enforce "exactly one user, with an admin org created
@@ -21,6 +22,8 @@ import { getWhitelabelAuthOptions } from "@workspace/whitelabel/auth-hooks";
  * fire regardless of whether signup is triggered from our UI or a curl.
  */
 function getLocalAuthOptions(): CreateAuthOptions {
+	const stagingGoogleSignIn = getSelenaStagingGoogleSignInOptions();
+
 	return {
 		databaseHooks: {
 			user: {
@@ -36,6 +39,7 @@ function getLocalAuthOptions(): CreateAuthOptions {
 				},
 			},
 		},
+		...(stagingGoogleSignIn ?? {}),
 	};
 }
 

@@ -17,6 +17,7 @@ import { ac, adminRole, userRole } from "./permissions";
 
 export interface CreateAuthOptions {
 	databaseHooks?: BetterAuthOptions["databaseHooks"];
+	account?: BetterAuthOptions["account"];
 	sso?: SSOOptions;
 	trustedOrigins?: string[];
 	/** Set to false to disable email/password auth (e.g. whitelabel SSO-only). */
@@ -88,6 +89,7 @@ export function createAuth(options?: CreateAuthOptions) {
 		},
 		...(options?.emailVerification && { emailVerification: options.emailVerification }),
 		...(options?.socialProviders && { socialProviders: options.socialProviders }),
+		...(options?.account && { account: options.account }),
 
 		user: {
 			additionalFields: {

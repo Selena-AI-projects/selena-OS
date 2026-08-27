@@ -31,6 +31,8 @@ function LoginPage() {
 	const context = useRouteContext({ strict: false }) as { clientConfig?: ClientConfig };
 	const mode = context.clientConfig?.mode;
 	const canRegister = context.clientConfig?.canRegister ?? false;
+	const googleSignInEnabled = context.clientConfig?.googleSignInEnabled ?? mode === "cloud";
+	const googleSignInOnly = context.clientConfig?.googleSignInOnly ?? false;
 
 	if (mode === "whitelabel") {
 		return <SSOLogin returnTo={returnTo} />;
@@ -41,6 +43,8 @@ function LoginPage() {
 			returnTo={returnTo}
 			isDemo={mode === "demo"}
 			isCloud={mode === "cloud"}
+			googleSignInEnabled={googleSignInEnabled}
+			googleSignInOnly={googleSignInOnly}
 			canRegister={canRegister}
 		/>
 	);
@@ -91,11 +95,15 @@ export function EmailPasswordLogin({
 	returnTo,
 	isDemo,
 	isCloud,
+	googleSignInEnabled,
+	googleSignInOnly,
 	canRegister,
 }: {
 	returnTo?: string;
 	isDemo?: boolean;
 	isCloud?: boolean;
+	googleSignInEnabled?: boolean;
+	googleSignInOnly?: boolean;
 	canRegister?: boolean;
 }) {
 	const navigate = useNavigate();
@@ -132,18 +140,29 @@ export function EmailPasswordLogin({
 		}
 	}
 
+	async function handleGoogleSignIn() {
+		setError(null);
+		setLoading(true);
+
+		try {
+			const result = await authClient.signIn.social({ provider: "google", callbackURL: safeReturnTo(returnTo) });
+			if (result.error) {
+				setError(result.error.message ?? "Unable to start Google sign-in. Please try again.");
+				setLoading(false);
+			}
+		} catch {
+			setError("Unable to start Google sign-in. Please try again.");
+			setLoading(false);
+		}
+	}
+
 	return (
 		<FullPageCard title="Welcome back" subtitle={isDemo ? undefined : "Sign in to your AI Visibility workspace"}>
-			{isCloud && (
+			{googleSignInEnabled && (
 				<div className="space-y-4 w-full pb-4">
-					<Button
-						type="button"
-						variant="outline"
-						className="w-full"
-						onClick={() => authClient.signIn.social({ provider: "google", callbackURL: safeReturnTo(returnTo) })}
-					>
+					<Button type="button" variant="outline" className="w-full" onClick={handleGoogleSignIn} disabled={loading}>
 						<IconBrandGoogle className="size-4" />
-						Continue with Google
+						{loading ? "Connecting to Google..." : "Continue with Google"}
 					</Button>
 					<div className="flex items-center gap-3">
 						<Separator className="flex-1" />
@@ -152,54 +171,61 @@ export function EmailPasswordLogin({
 					</div>
 				</div>
 			)}
-			<form onSubmit={handleSubmit} className="space-y-4 w-full">
-				{isDemo && <DemoCredentialsCallout />}
-				{error && (
-					<Alert variant="destructive">
-						<AlertDescription>{error}</AlertDescription>
-					</Alert>
-				)}
-				{!isDemo && (
-					<>
-						<div className="space-y-2">
-							<Label htmlFor="email">Email</Label>
-							<Input
-								id="email"
-								type="email"
-								placeholder="you@example.com"
-								value={email}
-								onChange={(e) => setEmail(e.target.value)}
-								required
-								autoComplete="email"
-								autoFocus
-							/>
-						</div>
-						<div className="space-y-2">
-							<div className="flex items-center justify-between">
-								<Label htmlFor="password">Password</Label>
-								{isCloud && (
-									<Link to="/auth/forgot-password" className="text-xs text-primary hover:underline">
-										Forgot password?
-									</Link>
-								)}
+			{googleSignInOnly && error && (
+				<Alert variant="destructive">
+					<AlertDescription>{error}</AlertDescription>
+				</Alert>
+			)}
+			{!googleSignInOnly && (
+				<form onSubmit={handleSubmit} className="space-y-4 w-full">
+					{isDemo && <DemoCredentialsCallout />}
+					{error && (
+						<Alert variant="destructive">
+							<AlertDescription>{error}</AlertDescription>
+						</Alert>
+					)}
+					{!isDemo && (
+						<>
+							<div className="space-y-2">
+								<Label htmlFor="email">Email</Label>
+								<Input
+									id="email"
+									type="email"
+									placeholder="you@example.com"
+									value={email}
+									onChange={(e) => setEmail(e.target.value)}
+									required
+									autoComplete="email"
+									autoFocus
+								/>
 							</div>
-							<Input
-								id="password"
-								type="password"
-								placeholder="Password"
-								value={password}
-								onChange={(e) => setPassword(e.target.value)}
-								required
-								autoComplete="current-password"
-							/>
-						</div>
-					</>
-				)}
-				<Button type="submit" className="w-full" disabled={loading}>
-					{loading ? "Signing in..." : "Sign in"}
-				</Button>
-			</form>
-			{canRegister && (
+							<div className="space-y-2">
+								<div className="flex items-center justify-between">
+									<Label htmlFor="password">Password</Label>
+									{isCloud && (
+										<Link to="/auth/forgot-password" className="text-xs text-primary hover:underline">
+											Forgot password?
+										</Link>
+									)}
+								</div>
+								<Input
+									id="password"
+									type="password"
+									placeholder="Password"
+									value={password}
+									onChange={(e) => setPassword(e.target.value)}
+									required
+									autoComplete="current-password"
+								/>
+							</div>
+						</>
+					)}
+					<Button type="submit" className="w-full" disabled={loading}>
+						{loading ? "Signing in..." : "Sign in"}
+					</Button>
+				</form>
+			)}
+			{canRegister && !googleSignInOnly && (
 				<p className="text-center text-sm text-muted-foreground pt-4">
 					Don't have an account?{" "}
 					<Link
