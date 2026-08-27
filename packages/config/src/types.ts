@@ -134,6 +134,10 @@ export interface ClientConfig {
 	canRegister: boolean;
 	/** Whether any user account exists. */
 	hasUsers: boolean;
+	/** Whether the login form can start a configured Google OAuth flow. */
+	googleSignInEnabled?: boolean;
+	/** Whether staging uses Google sign-in instead of email and password. */
+	googleSignInOnly?: boolean;
 }
 
 // ============================================================================

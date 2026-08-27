@@ -7,6 +7,7 @@ import type { ClientConfig } from "@workspace/config/types";
 import { getDefaultDelayHours } from "@workspace/lib/constants";
 import { countUsers } from "@workspace/lib/db/provisioning";
 import { getDeployment } from "@/lib/config/server";
+import { isSelenaStagingGoogleSignInEnabled } from "@/lib/selena-staging-google-auth.server";
 
 export type PublicClientConfig = Omit<ClientConfig, "branding"> & {
 	branding: Omit<ClientConfig["branding"], "onboardingRedirectUrl">;
@@ -40,6 +41,8 @@ export const getClientConfig = createServerFn({ method: "GET" }).handler(async (
 	// instance is bootstrapped, both the UI and API reject signups.
 	const canRegister = deployment.features.selfServeSignup || (deployment.mode === "local" && !hasUsers);
 
+	const googleSignInOnly = deployment.mode === "local" && isSelenaStagingGoogleSignInEnabled();
+
 	return {
 		mode: deployment.mode,
 		features: deployment.features,
@@ -52,6 +55,8 @@ export const getClientConfig = createServerFn({ method: "GET" }).handler(async (
 		defaultDelayHours: getDefaultDelayHours(),
 		canRegister,
 		hasUsers,
+		googleSignInEnabled: deployment.mode === "cloud" || googleSignInOnly,
+		googleSignInOnly,
 	};
 });
 
