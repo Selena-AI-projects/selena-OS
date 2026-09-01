@@ -28,6 +28,7 @@ import { useEffect, useMemo, useState } from "react";
 import { SelenaWordmark } from "@/components/selena-wordmark";
 import { useAuth } from "@/hooks/use-auth";
 import { validateWebsiteUrl } from "@/lib/brand-website";
+import { CONTENT_PRODUCT_DESCRIPTION, CONTENT_PRODUCT_NAME } from "@/lib/content-product";
 import { resetPostHog } from "@/lib/posthog";
 import { getLastSelenaProduct, rememberSelenaProduct, type SelenaProduct } from "@/lib/selena-product-entry";
 import { humanizeSelenaError } from "@/lib/selena-workspace-errors";
@@ -479,12 +480,10 @@ function SelenaProductEntry({ onSelect }: { onSelect: (product: SelenaProduct) =
 							type="button"
 						>
 							<IconCheck className="size-5 text-[#8f5c34]" />
-							<h2 className="mt-5 text-lg font-semibold text-[#181614]">Content Control Room</h2>
-							<p className="mt-2 text-sm leading-6 text-[#6e6258]">
-								Create, review and prepare content through approval and a no-publish release workflow.
-							</p>
+							<h2 className="mt-5 text-lg font-semibold text-[#181614]">{CONTENT_PRODUCT_NAME}</h2>
+							<p className="mt-2 text-sm leading-6 text-[#6e6258]">{CONTENT_PRODUCT_DESCRIPTION}</p>
 							<span className="mt-6 inline-flex min-h-11 items-center gap-2 text-sm font-medium text-[#181614]">
-								Open Content Control <IconArrowRight className="size-4" />
+								Open {CONTENT_PRODUCT_NAME} <IconArrowRight className="size-4" />
 							</span>
 						</button>
 					</div>
@@ -510,7 +509,7 @@ function SelenaProductSwitcher({
 				</Button>
 			</DropdownMenuTrigger>
 			<DropdownMenuContent align="end" className="min-w-60 rounded-lg">
-				<DropdownMenuLabel>Selena Systems products</DropdownMenuLabel>
+				<DropdownMenuLabel>Products</DropdownMenuLabel>
 				<DropdownMenuSeparator />
 				<DropdownMenuGroup>
 					<DropdownMenuItem className="cursor-pointer" onSelect={() => onSelect("ai-visibility")}>
@@ -519,7 +518,7 @@ function SelenaProductSwitcher({
 					</DropdownMenuItem>
 					<DropdownMenuItem className="cursor-pointer" onSelect={() => onSelect("content-control")}>
 						<IconCheck />
-						Content Control Room
+						{CONTENT_PRODUCT_NAME}
 					</DropdownMenuItem>
 				</DropdownMenuGroup>
 			</DropdownMenuContent>

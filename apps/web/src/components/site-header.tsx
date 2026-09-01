@@ -1,7 +1,4 @@
-import { useLocation } from "@tanstack/react-router";
-
-import { Separator } from "@workspace/ui/components/separator";
-import { SidebarTrigger } from "@workspace/ui/components/sidebar";
+import { Link, useLocation } from "@tanstack/react-router";
 import {
 	Breadcrumb,
 	BreadcrumbItem,
@@ -10,8 +7,10 @@ import {
 	BreadcrumbPage,
 	BreadcrumbSeparator,
 } from "@workspace/ui/components/breadcrumb";
+import { Separator } from "@workspace/ui/components/separator";
+import { SidebarTrigger } from "@workspace/ui/components/sidebar";
 import { useBrand } from "@/hooks/use-brands";
-import { Link } from "@tanstack/react-router";
+import { CONTENT_PRODUCT_NAME } from "@/lib/content-product";
 
 /** Map of page segments to display names */
 const PAGE_NAMES: Record<string, string> = {
@@ -21,7 +20,7 @@ const PAGE_NAMES: Record<string, string> = {
 	opportunities: "Opportunities",
 	prompts: "Prompts",
 	citations: "Citations",
-	"control-room": "Content Control",
+	"control-room": CONTENT_PRODUCT_NAME,
 	brand: "Brand",
 	competitors: "Competitors",
 	llms: "LLMs",

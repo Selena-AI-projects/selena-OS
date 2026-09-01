@@ -138,6 +138,8 @@ export interface ClientConfig {
 	googleSignInEnabled?: boolean;
 	/** Whether staging uses Google sign-in instead of email and password. */
 	googleSignInOnly?: boolean;
+	/** Whether the neutral Content OS Stage 1 shell is explicitly enabled. */
+	contentOsStage1Enabled?: boolean;
 }
 
 // ============================================================================

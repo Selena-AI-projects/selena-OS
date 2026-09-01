@@ -8,6 +8,7 @@ import { Label } from "@workspace/ui/components/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@workspace/ui/components/table";
 import { Textarea } from "@workspace/ui/components/textarea";
 import { type FormEvent, useEffect, useState, useTransition } from "react";
+import { CONTENT_PRODUCT_DESCRIPTION, CONTENT_PRODUCT_NAME } from "@/lib/content-product";
 import { buildTitle, getAppName, getBrandName } from "@/lib/route-head";
 import {
 	addReviewEvidenceFn,
@@ -28,8 +29,8 @@ export const Route = createFileRoute("/_authed/app/$brand/control-room")({
 		const brandName = getBrandName(matches);
 		return {
 			meta: [
-				{ title: buildTitle("Content Control", { appName, brandName }) },
-				{ name: "description", content: "Human-approved content release control plane." },
+				{ title: buildTitle(CONTENT_PRODUCT_NAME, { appName, brandName }) },
+				{ name: "description", content: CONTENT_PRODUCT_DESCRIPTION },
 			],
 		};
 	},
@@ -69,7 +70,7 @@ function ControlRoomLoadError({ error, reset }: { error: unknown; reset: () => v
 				<CardHeader>
 					<div className="flex items-center gap-2 text-destructive">
 						<IconAlertTriangle aria-hidden="true" />
-						<CardTitle className="text-base">Control Room is temporarily unavailable</CardTitle>
+						<CardTitle className="text-base">{CONTENT_PRODUCT_NAME} is temporarily unavailable</CardTitle>
 					</div>
 				</CardHeader>
 				<CardContent className="space-y-4 text-sm text-muted-foreground">
@@ -209,6 +210,7 @@ function EmptyRows({ columns, label }: { columns: number; label: string }) {
 function ControlRoomPage() {
 	const { brand: brandId } = Route.useParams();
 	const data = Route.useLoaderData();
+	const { clientConfig } = Route.useRouteContext();
 	const router = useRouter();
 	const { hash } = useLocation();
 	const activeSection = sectionFromHash(hash);
@@ -440,8 +442,8 @@ function ControlRoomPage() {
 		<div className="mx-auto flex w-full max-w-[1440px] flex-col gap-5">
 			<div className="flex flex-wrap items-end justify-between gap-3">
 				<div>
-					<p className="text-xs font-medium tracking-[0.14em] text-muted-foreground uppercase">Selena OS</p>
-					<h1 className="mt-1 text-2xl font-semibold tracking-normal">Content Control</h1>
+					<p className="text-xs font-medium tracking-[0.14em] text-muted-foreground uppercase">Portfolio workspace</p>
+					<h1 className="mt-1 text-2xl font-semibold tracking-normal">{CONTENT_PRODUCT_NAME}</h1>
 				</div>
 				<div className="flex items-center gap-2">
 					{data.killSwitches.length > 0 && <StatusBadge value="BLOCKED" />}
@@ -449,8 +451,8 @@ function ControlRoomPage() {
 					<Button
 						variant="outline"
 						size="icon"
-						title="Refresh Control Room"
-						onClick={() => run(() => router.invalidate(), "Control Room refreshed")}
+						title={`Refresh ${CONTENT_PRODUCT_NAME}`}
+						onClick={() => run(() => router.invalidate(), `${CONTENT_PRODUCT_NAME} refreshed`)}
 					>
 						<IconRefresh />
 					</Button>
@@ -458,6 +460,15 @@ function ControlRoomPage() {
 			</div>
 
 			{notice && <p className="border-l-2 border-primary bg-muted/40 px-3 py-2 text-sm">{notice}</p>}
+
+			{clientConfig.contentOsStage1Enabled && (
+				<div className="border-l-2 border-primary bg-muted/40 px-3 py-2 text-sm" role="status">
+					<p className="font-medium">Stage 1 foundations enabled</p>
+					<p className="text-muted-foreground">
+						The neutral shell is active. Research, creation, OAuth and external publishing remain disabled.
+					</p>
+				</div>
+			)}
 
 			<div className="space-y-5">
 				{activeSection === "inbox" && (
@@ -628,7 +639,7 @@ function ControlRoomPage() {
 									<p className="mt-3 text-sm text-muted-foreground">
 										{linkedInPageAccount
 											? `${displayChannel(linkedInPageAccount)} is ready for a controlled release after approval.`
-											: "Connect the Selena Systems LinkedIn Page through the controlled Postiz setup. Connection setup does not create a post."}
+											: "Connect the configured LinkedIn Page through the controlled Postiz setup. Connection setup does not create a post."}
 									</p>
 								</CardContent>
 							</Card>

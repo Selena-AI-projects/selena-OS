@@ -98,6 +98,12 @@ export const ENV_REGISTRY: EnvVarSpec[] = [
 		description: "Enables the single-owner Google OAuth bridge for Selena staging when all related values are present.",
 	},
 	{
+		name: "CONTENT_OS_STAGE1_ENABLED",
+		scope: "server",
+		requiredBy: "optional",
+		description: "Enables the neutral Content OS Stage 1 shell only when set to the exact value true.",
+	},
+	{
 		name: "SELENA_SCANNER_URL",
 		scope: "server",
 		requiredBy: "optional",
