@@ -19,6 +19,7 @@ import { createFileRoute, Link, redirect } from "@tanstack/react-router";
 import { Button } from "@workspace/ui/components/button";
 import { type ReactNode, useState } from "react";
 import { SelenaWordmark } from "@/components/selena-wordmark";
+import { CONTENT_PRODUCT_NAME } from "@/lib/content-product";
 import { getSelenaStagingPreviewStateFn } from "@/server/selena-staging-preview";
 
 export const Route = createFileRoute("/staging-preview")({
@@ -82,13 +83,13 @@ function SelenaStagingPreview() {
 							AI Visibility
 						</ProductButton>
 						<ProductButton active={product === "control"} onClick={() => chooseProduct("control")}>
-							Content Control
+							{CONTENT_PRODUCT_NAME}
 						</ProductButton>
 					</fieldset>
 
-					<nav aria-label={product === "control" ? "Content Control navigation" : "AI Visibility navigation"}>
+					<nav aria-label={product === "control" ? `${CONTENT_PRODUCT_NAME} navigation` : "AI Visibility navigation"}>
 						<p className="mb-2 px-2 text-xs font-medium uppercase text-[#6f695f]">
-							{product === "control" ? "Content Control" : "AI Visibility"}
+							{product === "control" ? CONTENT_PRODUCT_NAME : "AI Visibility"}
 						</p>
 						<div className="space-y-1">
 							{navItems.map(({ label, icon: Icon }) => (
@@ -111,7 +112,9 @@ function SelenaStagingPreview() {
 				<section className="min-w-0 px-4 py-7 sm:px-6 lg:px-10">
 					<div className="mb-8 flex flex-wrap items-start justify-between gap-4 border-b border-[#dfdbd2] pb-6">
 						<div>
-							<p className="mb-1 text-sm text-[#6f695f]">Selena Systems</p>
+							<p className="mb-1 text-sm text-[#6f695f]">
+								{product === "control" ? CONTENT_PRODUCT_NAME : "Selena Systems"}
+							</p>
 							<h1 className="text-2xl font-semibold">{activeItem}</h1>
 						</div>
 						<Button variant="outline" disabled title="Preview mode does not create or change data">

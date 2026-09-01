@@ -1,12 +1,22 @@
-# AI Visibility by Selena Systems — Design Language
+# Shared workspace design language
 
-## Product surface
+## Product surfaces
 
-The default customer experience is Selena Systems, not the underlying Elmo administration product. The primary authenticated route is `/app/selena`; legacy `/app` traffic redirects there. Custom white-label deployments may still provide their own name and icon.
+The authenticated application contains two distinct surfaces:
+
+- **AI Visibility**, entered through `/app/$brand`;
+- **Content OS**, entered through `/app/$brand/control-room`.
+
+Content OS is the neutral portfolio content product. It must never be labelled
+Selena OS, Selena Content Control or Content Control Room. Selena may remain as
+company/account attribution in the shared shell and on AI Visibility pages.
+Internal compatibility names are not user-interface labels.
 
 ## Visual direction
 
-The interface extends the existing Selena Systems public site: warm, editorial, calm and evidence-led. It should feel like a trusted advisory workspace rather than a developer console.
+The workspace is warm, editorial, calm and evidence-led. It should feel like a
+trusted working environment rather than a developer console. Both surfaces use
+the existing visual system so switching products feels coherent.
 
 ### Color tokens
 
@@ -19,53 +29,73 @@ The interface extends the existing Selena Systems public site: warm, editorial, 
 - Success: muted green surfaces and text with WCAG AA contrast.
 - Error: muted red surfaces and text with WCAG AA contrast.
 
-Pure black, pure white and blue-purple gradients are not part of the Selena default theme.
+Pure black, pure white and blue-purple gradients are not part of the default
+theme.
 
 ### Typography
 
 - Body and controls use the existing Geist Sans application font.
-- Display headings and the Selena wordmark use a restrained editorial serif stack led by Georgia.
-- “Systems” is letter-spaced uppercase sans text; the copper dot completes the wordmark.
-- Headings use sentence case. Technical identifiers are not exposed as headings or labels.
+- Display headings and the company wordmark use the existing restrained serif
+  stack led by Georgia.
+- Headings use sentence case.
+- Technical identifiers are not exposed as headings or labels.
 
 ## Layout
 
-- Desktop: slim branded header, project rail on the left, single work area on the right.
-- Mobile: header collapses to the wordmark and account action; project rail stacks above the work area.
-- Content width stays readable and stable; forms use two columns only when space permits.
+- Desktop: slim header, project rail on the left and one work area on the right.
+- Mobile: header collapses cleanly and the rail stacks above the work area.
+- Content width stays readable; forms use two columns only when space permits.
 - Cards represent distinct workflow stages. Nested decorative cards are avoided.
+- Content OS grows through focused child routes rather than extending the
+  existing monolithic Control Room screen.
 
-## Customer workflow
+## Content OS workflow
 
-The workspace communicates four stages in plain language:
+The Stage 1 completion path is:
 
-1. Project created.
-2. Brand profile confirmed.
-3. Website evidence collected.
-4. Results available.
+`Profile -> Research -> Opportunity -> Ideas -> Script -> Thumbnail -> Editorial review`
 
-The interface must distinguish website readiness from paid AI visibility measurements. Creating a project or saving a profile never triggers provider calls. A website collection starts only after an explicit customer action. Paid measurements remain behind a separate order, budget and owner-approval boundary.
+Publishing is outside Stage 1. The YouTube target must always state:
+`Draft-only. No account connected. Publishing is unavailable.`
+
+The product distinguishes:
+
+- owner-confirmed facts from unknown, disputed or prohibited claims;
+- research evidence from generated suggestions;
+- editorial approval from release approval;
+- local fixture acceptance from hosted or production acceptance.
+
+## Feature-flag behavior
+
+`CONTENT_OS_STAGE1_ENABLED` is disabled by default. Only the exact server value
+`true` enables the Stage 1 shell. The UI must fail closed when the value is
+absent, malformed or differently cased. Provider adapters, OAuth and publishing
+remain independently disabled even when this flag is enabled.
 
 ## Components and states
 
 - Primary buttons: charcoal fill, paper text, minimum 44 px target.
 - Secondary buttons: paper surface, warm border, charcoal text.
-- Status pills describe customer state (“Profile needed”, “Ready for website scan”), not database enums.
-- Forms include persistent labels, examples and human-readable validation.
+- Status pills use human-readable state, not database enums.
+- Forms include persistent labels, examples and readable validation.
 - Empty states explain the next action and why it is safe.
-- Success and error messages use `role=status` or equivalent accessible semantics.
-- Links that leave the app show a clear external-link affordance.
+- Success and error messages use `role=status` or equivalent semantics.
+- Links leaving the app show a clear external-link affordance.
 
 ## Accessibility and motion
 
 - Main text meets WCAG AA contrast.
-- Interactive targets are at least 44 × 44 px.
-- Focus-visible states must remain obvious on ivory and dark surfaces.
-- Responsive layout must work at 390 px without horizontal scrolling.
-- Motion is subtle and disabled when `prefers-reduced-motion` is set.
+- Interactive targets are at least 44 x 44 px.
+- Focus-visible states remain obvious on ivory and dark surfaces.
+- Responsive layout works at 390 px without horizontal scrolling.
+- Motion is subtle and disabled under `prefers-reduced-motion`.
 
 ## Brand boundaries
 
-- Default metadata, favicon, PWA manifest, Open Graph image, chart exports, authentication and customer workspace use Selena Systems branding.
-- Upstream Elmo references may remain only where they are necessary technical attribution, source documentation or administrator-facing implementation detail.
-- Internal IDs, configuration locks, raw provider credentials, job controls and manual cycle controls do not belong in the customer workspace.
+- Content OS uses its neutral product name everywhere on content routes.
+- The Selena wordmark may identify the company/account or AI Visibility, but not
+  rename Content OS.
+- Existing tokens and components are reused; Stage 1 introduces no new color,
+  font, radius or shadow system.
+- Credentials, raw provider payloads, internal IDs, job controls and release
+  internals never appear in the customer workspace.

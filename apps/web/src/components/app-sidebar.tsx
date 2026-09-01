@@ -49,6 +49,7 @@ import { Logo } from "@/components/logo";
 import { NavAppInfo } from "@/components/nav-app-info";
 import { type NavGroup, NavMain } from "@/components/nav-main";
 import { NavUser } from "@/components/nav-user";
+import { CONTENT_PRODUCT_NAME } from "@/lib/content-product";
 import { rememberSelenaProduct } from "@/lib/selena-product-entry";
 
 /**
@@ -73,7 +74,7 @@ function ProductSwitcher() {
 	const { pathname } = useLocation();
 	const { setOpenMobile } = useSidebar();
 	const inControlRoom = pathname.includes("/control-room");
-	const activeProduct = inControlRoom ? "Content Control" : "AI Visibility";
+	const activeProduct = inControlRoom ? CONTENT_PRODUCT_NAME : "AI Visibility";
 
 	if (!brand) return null;
 
@@ -94,7 +95,7 @@ function ProductSwitcher() {
 						align="start"
 						sideOffset={8}
 					>
-						<DropdownMenuLabel>Selena Systems products</DropdownMenuLabel>
+						<DropdownMenuLabel>Products</DropdownMenuLabel>
 						<DropdownMenuSeparator />
 						<DropdownMenuGroup>
 							<DropdownMenuItem asChild className="cursor-pointer">
@@ -120,7 +121,7 @@ function ProductSwitcher() {
 									}}
 								>
 									<IconShieldCheck />
-									Content Control
+									{CONTENT_PRODUCT_NAME}
 								</Link>
 							</DropdownMenuItem>
 						</DropdownMenuGroup>
@@ -154,7 +155,7 @@ export function AppSidebar({
 	// Dashboard section - only show if we have a brand context
 	if (scope === "brand" && isControlRoom) {
 		groups.push({
-			label: "Content Control",
+			label: CONTENT_PRODUCT_NAME,
 			items: [
 				{ title: "Inbox", url: "/control-room", icon: IconListDetails, hash: "inbox" },
 				{ title: "Content", url: "/control-room", icon: IconFileText, hash: "content" },
