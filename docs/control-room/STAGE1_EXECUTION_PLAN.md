@@ -1,14 +1,15 @@
 # Content OS YouTube Stage 1 execution plan
 
-**Status:** execution control document  
-**Date:** 2026-09-01  
-**Master specification:** `docs/control-room/CONTENT_OS_YOUTUBE_STAGE1_TECHNICAL_SPEC.md`  
-**Slice 0 source commit:** `e63da891023d987f6184ee2bb604e02745c12800`  
-**Slice 0 merge commit:** `39ec0ea3cf9b945babeaa288a49ef31d157035b8`  
-**Canonical Slice 0 PR:** `#26`  
-**Execution plan PR:** `#27`
-**Execution plan merge commit:** `PENDING`
-**Execution boundary:** local and disposable infrastructure only; no external publication
+- **Status:** execution control document
+- **Date:** 2026-09-01
+- **Master specification:** `docs/control-room/CONTENT_OS_YOUTUBE_STAGE1_TECHNICAL_SPEC.md`
+- **Slice 0 review base:** `ab50d742695ff8d8bc728efe217502e121869189`
+- **Slice 0 source commit:** `e63da891023d987f6184ee2bb604e02745c12800`
+- **Slice 0 delivery PR / merge:** `#25` / `ef1ea56f102ed23c7c8ad5cc8d89224a0ddb1399`
+- **Slice 0 empty reconciliation PR / merge:** `#26` / `39ec0ea3cf9b945babeaa288a49ef31d157035b8`
+- **Execution plan PR:** `#27`
+- **Execution plan merge commit:** `PENDING`
+- **Execution boundary:** local and disposable infrastructure only; no external publication
 
 ## 1. Purpose
 
@@ -153,7 +154,10 @@ Every live adapter is disabled by default. No loader, navigation, profile save,
 default scheduler or test may trigger a provider call. A future live call needs
 all gates defined in the master specification, including explicit user action,
 provider-specific flag, credential, call ceiling, cost decision, idempotency and
-durable ledger entry.
+durable ledger entry. Every slice that introduces live-adapter code must include
+server integration tests proving that the adapter fails closed independently
+when its provider flag, cost ceiling or credential is absent; observing zero
+calls without exercising those gates is insufficient acceptance evidence.
 
 ### 3.4 Migration safety
 
@@ -215,8 +219,8 @@ Each slice has one status:
 
 | Step | Outcome | Status | Evidence / next gate |
 |---|---|---|---|
-| 0 | Product contract and neutral shell | `MERGED` | PR #26, source `e63da891`, merge `39ec0ea3`; retrospective review evidence remains incomplete because the observed Claude check was skipped |
-| Plan | Detailed Stage 1 execution control | `CHANGES_REQUESTED` | PR #27; local Claude review of `26625c96`; corrections and fresh exact-SHA review required |
+| 0 | Product contract and neutral shell | `MERGED` | Content delta `ab50d742..ef1ea56f`, PR #25; PR #26 / `39ec0ea3` reconciled the already-merged branch with an empty delta; retrospective review remains incomplete |
+| Plan | Detailed Stage 1 execution control | `CHANGES_REQUESTED` | PR #27; local Claude reviews of `26625c96` and `93bcd76c`; corrections and fresh exact-SHA review required |
 | 1 | Profile and draft YouTube target | `NOT_STARTED` | Plan PR merged; branch from its exact merge SHA; owner start gate, disk and Node preflight |
 | 2 | Research | `NOT_STARTED` | Accepted Slice 1 merge SHA |
 | 3 | Ideas and scripts | `NOT_STARTED` | Accepted Slice 2 merge SHA and source-transfer authorization |
@@ -225,8 +229,11 @@ Each slice has one status:
 
 Before Slice 1, this execution plan must be accepted and merged. Slice 1 starts
 from the execution-plan merge SHA, not directly from the Slice 0 merge SHA. The
-owner also either requests retrospective blind review of the Slice 0 delta or
-explicitly accepts that review gap; the existing merge is not rewritten.
+owner also either requests retrospective blind review of the exact Slice 0
+content delta `ab50d742695ff8d8bc728efe217502e121869189..ef1ea56f102ed23c7c8ad5cc8d89224a0ddb1399`
+or explicitly accepts that review gap. PR #26 / `39ec0ea3` must not be used as
+the review delta because it contains no file changes; the existing history is
+not rewritten.
 
 ## 6. Slice 1 - profile and draft YouTube target
 
@@ -441,7 +448,9 @@ tenant identity.
   `content.opportunity_rejected` through the existing hash-chained audit path.
 - [ ] Add research start, import, get and opportunity-decision handlers in
   `apps/web/src/server/content-research.ts`.
-- [ ] Use opaque IDs only if work is handed to pg-boss.
+- [ ] If work is handed to pg-boss, enqueue opaque IDs only; the worker must set
+  authenticated brand-scoped database context and re-read canonical profile,
+  research and opportunity state before acting.
 
 #### D. UI
 
@@ -467,6 +476,8 @@ tenant identity.
 - [ ] Foreign-brand profiles, sources and opportunities cannot be linked or
   observed.
 - [ ] Duplicate idempotency keys do not duplicate runs.
+- [ ] Queued-worker tests prove canonical state is re-read under brand-scoped
+  database context and foreign-brand opaque IDs are denied.
 - [ ] Local browser flow imports a fixture and saves/rejects an opportunity.
 - [ ] With `CONTENT_OS_STAGE1_ENABLED` unset, the research route and handlers are
   inaccessible and its navigation entry is absent; the exact value `true`
@@ -476,6 +487,9 @@ tenant identity.
   codes and excludes secrets, transcripts, prompts, provider bodies and image
   bytes.
 - [ ] `externalProviderCalls = 0` and cost is zero.
+- [ ] Server integration tests prove `VideoRadarAdapter` fails closed, with zero
+  dispatch and zero call-ledger entry, when the live-provider flag, cost ceiling
+  or credential is absent in separate test cases.
 - [ ] CI and blind review pass the exact head SHA; owner decides merge.
 
 ### 7.5 Slice 2 stop conditions
@@ -514,15 +528,19 @@ server-side; there is no global key configuration.
 
 - [ ] Port approved contracts from `parkourcafe/youtube-pro` at
   `63cd9b9c2ad19b9941a763be3d5cfcbd9bc13b25`.
-- [ ] Place the Apache-2.0 license text with the port or in the repository's
-  established third-party-license location; reproduce the upstream `NOTICE`
-  contents if that exact source commit contains a `NOTICE` file.
+- [ ] Place the Apache-2.0 license text at
+  `packages/content-workflow/THIRD_PARTY_LICENSES/youtube-pro/LICENSE`; reproduce
+  the upstream `NOTICE` at the same location if that exact source commit contains
+  one. This creates an explicit vendored-source convention; none exists today.
 - [ ] Retain upstream copyright and attribution notices, record every ported
   source path and exact commit `63cd9b9c2ad19b9941a763be3d5cfcbd9bc13b25`,
   and state the modifications made to each transferred file.
 - [ ] If relicensing is proposed, stop until the owner records an explicit
   decision and evidence that the owner is the sole relevant copyright holder;
   otherwise preserve Apache-2.0 obligations.
+- [ ] Extend the repository license check so CI fails when the required
+  YouTubePro vendored license, conditional `NOTICE` or provenance/modification
+  record is missing; do not treat the dependency-only audit as sufficient.
 - [ ] Port evidence, idea, script, regeneration, thumbnail validation and
   provider-error contracts needed by the module.
 - [ ] Do not port Express routes, Wouter pages, settings/key persistence,
@@ -574,6 +592,7 @@ server-side; there is no global key configuration.
   Slice 3 surfaces behind the fail-closed `CONTENT_OS_STAGE1_ENABLED` flag.
 - [ ] Add `/app/$brand/control-room/ideas`.
 - [ ] Add `/app/$brand/control-room/scripts`.
+- [ ] Add Ideas and Scripts under the **Create** navigation group.
 - [ ] Show six ideas, evidence lineage and selection state.
 - [ ] Show structured script sections and referenced evidence claims.
 - [ ] Save every accepted edit as a new version; never mutate history.
@@ -587,6 +606,7 @@ server-side; there is no global key configuration.
 - [ ] V1 hashes remain byte-for-byte stable.
 - [ ] V2 hashes change when any specified identity or evidence input changes.
 - [ ] Invalid output cannot become a content version.
+- [ ] An unconfirmed or revoked profile blocks idea and script generation.
 - [ ] Migration chain through `0034` and paired pgTAP pass on a clean disposable
   database; the migration receipt reports the new `0034` journal tag as applied.
 - [ ] Duplicate generation delivery resumes the same run.
@@ -601,8 +621,14 @@ server-side; there is no global key configuration.
 - [ ] License evidence contains the Apache-2.0 text, any required upstream
   `NOTICE`, retained notices, source-path/commit provenance and modification
   record; missing evidence blocks source acceptance.
+- [ ] The extended repository license check passes and demonstrably fails when a
+  required YouTubePro vendored license, conditional `NOTICE` or provenance file
+  is removed in a fixture test.
 - [ ] No live provider call, YouTube account, release intent or publication
   attempt exists.
+- [ ] Server integration tests prove the Gemini adapter fails closed, with zero
+  dispatch and zero call-ledger entry, when its live-provider flag, cost ceiling
+  or credential is absent in separate test cases.
 - [ ] CI and blind review pass the exact head SHA; owner decides merge.
 
 ### 8.5 Slice 3 stop conditions
@@ -627,6 +653,7 @@ editorially by an interactive owner. Approval cannot grant release authority.
   behind the fail-closed `CONTENT_OS_STAGE1_ENABLED` flag.
 - [ ] Complete thumbnail contracts in the creation module.
 - [ ] Add `/app/$brand/control-room/thumbnails`.
+- [ ] Add Thumbnails under the **Create** navigation group.
 - [ ] Reuse private storage, MIME, size, rights, consent and scanner checks.
 - [ ] Persist opaque storage references and SHA-256 only; never persist base64
   bytes in content, audit or job payloads.
@@ -647,6 +674,7 @@ editorially by an interactive owner. Approval cannot grant release authority.
   `content.editorial_approval_revoked` through the existing hash-chained audit
   path.
 - [ ] Add `/app/$brand/control-room/review`.
+- [ ] Add Review under the **Govern** navigation group.
 - [ ] Show editorial readiness separately from Releases.
 - [ ] Keep Releases read-only and explicitly unavailable for YouTube.
 - [ ] Add a short patch changeset for the user-facing thumbnail/review surface,
@@ -667,6 +695,8 @@ editorially by an interactive owner. Approval cannot grant release authority.
 - [ ] Foreign-brand asset IDs cannot be attached or approved.
 - [ ] Dirty, pending or unavailable assets block approval.
 - [ ] Owner can approve and revoke; member cannot approve.
+- [ ] Missing claim evidence blocks editorial approval whenever the active
+  editorial policy requires evidence.
 - [ ] Approval is bound to the exact hashes and becomes stale after a new
   content or asset version.
 - [ ] Database evidence proves zero release/publication side effects.
@@ -808,7 +838,7 @@ These remain unresolved until the owner decides them explicitly:
 
 | Decision | Needed before | Safe default |
 |---|---|---|
-| Retrospective Slice 0 blind review or accepted review gap | Slice 1 start | Review the merged delta; do not rewrite history |
+| Retrospective Slice 0 blind review or accepted review gap | Slice 1 start | Review `ab50d742..ef1ea56f`; do not use empty PR #26 or rewrite history |
 | Video Radar code-transfer authorization | Slice 2 source port | Do not copy source |
 | Teleprompter in or outside Stage 1 | Slice 3 start | Outside Stage 1 |
 | Relicense any YouTubePro-derived file | Before relicensing | Preserve Apache-2.0; require explicit owner decision and sole-holder evidence |
@@ -830,6 +860,8 @@ and the master specification's definition of done is satisfied. In particular:
 - editorial approval is human-only and cannot publish;
 - cross-organization access is denied;
 - fixture acceptance records zero external calls;
+- live Video Radar and Gemini adapters fail closed independently when their
+  provider flag, cost ceiling or credential is absent;
 - all required `content.*` events are present in the existing hash-chained audit
   log with metadata limited to IDs, hashes, versions, status and normalized
   error codes, never secrets, transcripts, prompts, provider bodies or media;
