@@ -6,6 +6,8 @@
 **Slice 0 source commit:** `e63da891023d987f6184ee2bb604e02745c12800`  
 **Slice 0 merge commit:** `39ec0ea3cf9b945babeaa288a49ef31d157035b8`  
 **Canonical Slice 0 PR:** `#26`  
+**Execution plan PR:** `#27`
+**Execution plan merge commit:** `PENDING`
 **Execution boundary:** local and disposable infrastructure only; no external publication
 
 ## 1. Purpose
@@ -163,9 +165,17 @@ durable ledger entry.
 - Production and shared staging migrations are outside Stage 1.
 - A disposable migration command is run only after the owner authorizes it for
   the active slice.
-- The repository-supported local pgTAP command is currently `UNKNOWN`; discover
-  and record the existing harness before the first migration run. Do not invent
-  a replacement command.
+- The repository currently contains pgTAP suites but no repository-supported
+  runner. Slice 1 must add and document a disposable pgTAP harness before any
+  pgTAP result can be claimed. Adding the harness is an owner-authorized
+  non-production tooling deliverable within Slice 1; if it cannot be added,
+  migration acceptance remains `BLOCKED`.
+- Do not substitute another test type and report it as pgTAP. Record separate
+  evidence for harness bootstrapping and for the actual pgTAP suite execution.
+- Every new migration is registered in
+  `packages/lib/src/db/migrations/meta/_journal.json`. Before each migration,
+  inspect the current Drizzle convention to determine whether that migration
+  also requires a snapshot JSON; do not create or omit one by assumption.
 
 ### 3.5 Environment preflight
 
@@ -203,18 +213,20 @@ Each slice has one status:
 
 ## 5. Program status
 
-| Slice | Outcome | Status | Evidence / next gate |
+| Step | Outcome | Status | Evidence / next gate |
 |---|---|---|---|
 | 0 | Product contract and neutral shell | `MERGED` | PR #26, source `e63da891`, merge `39ec0ea3`; retrospective review evidence remains incomplete because the observed Claude check was skipped |
-| 1 | Profile and draft YouTube target | `NOT_STARTED` | Owner start gate, disk and Node preflight |
+| Plan | Detailed Stage 1 execution control | `CHANGES_REQUESTED` | PR #27; local Claude review of `26625c96`; corrections and fresh exact-SHA review required |
+| 1 | Profile and draft YouTube target | `NOT_STARTED` | Plan PR merged; branch from its exact merge SHA; owner start gate, disk and Node preflight |
 | 2 | Research | `NOT_STARTED` | Accepted Slice 1 merge SHA |
 | 3 | Ideas and scripts | `NOT_STARTED` | Accepted Slice 2 merge SHA and source-transfer authorization |
 | 4 | Thumbnails and editorial approval | `NOT_STARTED` | Accepted Slice 3 merge SHA and private-storage acceptance path |
 | 5 | Local vertical acceptance | `NOT_STARTED` | Accepted Slice 4 merge SHA and disposable environment |
 
-Before Slice 1, the owner either requests retrospective blind review of the
-Slice 0 delta or explicitly accepts the review gap. The merge itself is not
-rewritten.
+Before Slice 1, this execution plan must be accepted and merged. Slice 1 starts
+from the execution-plan merge SHA, not directly from the Slice 0 merge SHA. The
+owner also either requests retrospective blind review of the Slice 0 delta or
+explicitly accepts that review gap; the existing merge is not rewritten.
 
 ## 6. Slice 1 - profile and draft YouTube target
 
@@ -264,6 +276,9 @@ rows. The PostgreSQL implementation is an adapter in `@workspace/lib`.
 - [ ] Inspect migrations `0021`, `0024` and `0031` for current schema, role,
   audit and RLS conventions.
 - [ ] Add `0032_content_project_profiles.sql` without modifying prior files.
+- [ ] Register migration `0032` in
+  `packages/lib/src/db/migrations/meta/_journal.json`; inspect the current
+  Drizzle convention and record whether a matching snapshot JSON is required.
 - [ ] Add `brand_content_profile_versions` with monotonic per-brand versions,
   validated JSON structures, immutable flag and profile hash constraints.
 - [ ] Add append-only `brand_content_profile_decisions` bound to profile hash.
@@ -275,11 +290,15 @@ rows. The PostgreSQL implementation is an adapter in `@workspace/lib`.
   checks required by the invariants.
 - [ ] Enable and force RLS on all three tables.
 - [ ] Add least-privilege grants and append-only mutation guards.
-- [ ] Append neutral audit events for profile creation, decision and draft
-  channel creation without recording full profile bodies.
+- [ ] Append `content.profile_version_created`, `content.profile_confirmed`,
+  `content.profile_revoked` and `content.channel_draft_created` without recording
+  full profile bodies.
 - [ ] Synchronize `packages/lib/src/db/schema.ts` using the repository's existing
   migration/schema convention.
 - [ ] Add `packages/lib/src/db/tests/0032_content_project_profiles.pgtap.sql`.
+- [ ] Add and document the repository's disposable pgTAP runner, including its
+  prerequisites, exact command and non-zero failure behavior; keep this harness
+  separate from the `0032` assertions it executes.
 
 #### C. PostgreSQL adapter and server handlers
 
@@ -299,6 +318,8 @@ rows. The PostgreSQL implementation is an adapter in `@workspace/lib`.
 
 #### D. Routes and UI
 
+- [ ] Gate the child route, navigation entry, handlers and all new Content OS
+  surfaces behind the fail-closed `CONTENT_OS_STAGE1_ENABLED` flag.
 - [ ] Refactor `/app/$brand/control-room` only enough to support focused child
   routes; do not expand the monolith.
 - [ ] Add `/app/$brand/control-room/profile`.
@@ -312,6 +333,8 @@ rows. The PostgreSQL implementation is an adapter in `@workspace/lib`.
   account connected. Publishing is unavailable.`
 - [ ] Verify keyboard access, WCAG AA contrast, 44x44 px targets and 390 px
   layout on the changed route.
+- [ ] Add a short patch changeset for the user-facing profile and navigation
+  surface, scoped to the packages that actually change.
 
 ### 6.4 Slice 1 targeted evidence
 
@@ -319,14 +342,23 @@ rows. The PostgreSQL implementation is an adapter in `@workspace/lib`.
 - [ ] Config/lib/web typechecks for changed packages pass.
 - [ ] Targeted Biome check for changed files passes without new error-level
   findings.
-- [ ] Migration chain through `0032` applies to a clean disposable database.
+- [ ] Migration chain through `0032` applies to a clean disposable database,
+  and the migration receipt reports the new `0032` journal tag as applied.
+- [ ] The disposable pgTAP harness bootstraps successfully, then the actual
+  `0032` pgTAP suite runs and reports its assertions independently.
 - [ ] pgTAP proves RLS, cross-brand denial, append-only versions/decisions,
   interactive-owner decisions and draft-only channel constraints.
 - [ ] Server tests prove member versus owner permissions.
 - [ ] Browser evidence proves create, confirm, revoke and draft-channel flows.
+- [ ] With `CONTENT_OS_STAGE1_ENABLED` unset, the child route and handlers are
+  inaccessible and the navigation entry is absent; with the exact value
+  `true`, the authorized disposable flow becomes available.
 - [ ] Database evidence shows zero YouTube `channel_accounts`, release intents,
   outbox events and publication attempts.
 - [ ] Evidence records `externalProviderCalls = 0`.
+- [ ] Required Slice 1 events are present in `selena_audit.audit_events`; their
+  metadata contains only IDs, hashes, versions, status and normalized error
+  codes, and excludes secrets, profile bodies, prompts and media bytes.
 - [ ] GitHub CI is green for the exact head SHA.
 - [ ] Claude blind delta-review passes the exact head SHA.
 - [ ] Owner decides merge.
@@ -382,6 +414,9 @@ tenant identity.
 #### B. Migration 0033 and persistence
 
 - [ ] Add `0033_content_research_registry.sql`.
+- [ ] Register migration `0033` in
+  `packages/lib/src/db/migrations/meta/_journal.json`; inspect the current
+  Drizzle convention and record whether a matching snapshot JSON is required.
 - [ ] Add brand-scoped research runs, sources, metric snapshots, opportunities
   and opportunity decisions.
 - [ ] Bind each run to an immutable confirmed profile version.
@@ -401,12 +436,17 @@ tenant identity.
 - [ ] Add `VideoRadarAdapter` without enabling a live provider path.
 - [ ] Validate provenance and deduplicate sources before persistence.
 - [ ] Persist sanitized failures and correlation IDs, not raw provider payloads.
+- [ ] Emit `content.research_started`, `content.research_completed`,
+  `content.research_failed`, `content.opportunity_saved` and
+  `content.opportunity_rejected` through the existing hash-chained audit path.
 - [ ] Add research start, import, get and opportunity-decision handlers in
   `apps/web/src/server/content-research.ts`.
 - [ ] Use opaque IDs only if work is handed to pg-boss.
 
 #### D. UI
 
+- [ ] Gate the research route, navigation entry, handlers and all new Slice 2
+  surfaces behind the fail-closed `CONTENT_OS_STAGE1_ENABLED` flag.
 - [ ] Add `/app/$brand/control-room/research`.
 - [ ] Add Research under the **Create** navigation group.
 - [ ] Show run state, confirmed-profile lineage, sources, capture times,
@@ -414,18 +454,27 @@ tenant identity.
 - [ ] Support fixture/import mode before any live action.
 - [ ] Support `NEW`, `SAVED`, `REJECTED` and `SENT_TO_CREATION` decisions.
 - [ ] Do not render raw provider responses.
+- [ ] Add a short patch changeset for the user-facing research surface, scoped
+  to the packages that actually change.
 
 ### 7.4 Slice 2 targeted evidence
 
 - [ ] Ported compatibility tests pass at the research module interface.
 - [ ] Fixture output is deterministic.
 - [ ] Migration chain through `0033` and paired pgTAP pass on a clean disposable
-  database.
+  database; the migration receipt reports the new `0033` journal tag as applied.
 - [ ] Unconfirmed/revoked profiles block research.
 - [ ] Foreign-brand profiles, sources and opportunities cannot be linked or
   observed.
 - [ ] Duplicate idempotency keys do not duplicate runs.
 - [ ] Local browser flow imports a fixture and saves/rejects an opportunity.
+- [ ] With `CONTENT_OS_STAGE1_ENABLED` unset, the research route and handlers are
+  inaccessible and its navigation entry is absent; the exact value `true`
+  enables only the authorized disposable flow.
+- [ ] All five Slice 2 events are present in `selena_audit.audit_events`; event
+  metadata is limited to IDs, hashes, versions, status and normalized error
+  codes and excludes secrets, transcripts, prompts, provider bodies and image
+  bytes.
 - [ ] `externalProviderCalls = 0` and cost is zero.
 - [ ] CI and blind review pass the exact head SHA; owner decides merge.
 
@@ -465,7 +514,15 @@ server-side; there is no global key configuration.
 
 - [ ] Port approved contracts from `parkourcafe/youtube-pro` at
   `63cd9b9c2ad19b9941a763be3d5cfcbd9bc13b25`.
-- [ ] Preserve Apache-2.0 attribution and exact source provenance.
+- [ ] Place the Apache-2.0 license text with the port or in the repository's
+  established third-party-license location; reproduce the upstream `NOTICE`
+  contents if that exact source commit contains a `NOTICE` file.
+- [ ] Retain upstream copyright and attribution notices, record every ported
+  source path and exact commit `63cd9b9c2ad19b9941a763be3d5cfcbd9bc13b25`,
+  and state the modifications made to each transferred file.
+- [ ] If relicensing is proposed, stop until the owner records an explicit
+  decision and evidence that the owner is the sole relevant copyright holder;
+  otherwise preserve Apache-2.0 obligations.
 - [ ] Port evidence, idea, script, regeneration, thumbnail validation and
   provider-error contracts needed by the module.
 - [ ] Do not port Express routes, Wouter pages, settings/key persistence,
@@ -476,8 +533,13 @@ server-side; there is no global key configuration.
 #### B. Migration 0034 and V2 content
 
 - [ ] Add `0034_structured_content_and_editorial_review.sql`.
+- [ ] Register migration `0034` in
+  `packages/lib/src/db/migrations/meta/_journal.json`; inspect the current
+  Drizzle convention and record whether a matching snapshot JSON is required.
 - [ ] Add backward-compatible content kind, channel and workflow-stage fields.
-- [ ] Add structured body and profile/research/generation lineage fields.
+- [ ] Add structured body and profile/research/generation lineage fields, with
+  `format_version` defaulting to `legacy.text/v1` and `hash_version` defaulting
+  to `selena.content/v1` for existing rows.
 - [ ] Preserve all existing V1 hashes without recalculation.
 - [ ] Implement `content.workflow/v2` hashing over the complete specified
   identity and evidence snapshot.
@@ -499,18 +561,25 @@ server-side; there is no global key configuration.
   unselected ideas stay in generation-run output.
 - [ ] Create script and script-revision operations as new immutable versions.
 - [ ] Reject invalid provider output before content-version creation.
+- [ ] Emit `content.generation_started`, `content.generation_completed`,
+  `content.generation_failed` and `content.version_created` through the existing
+  hash-chained audit path.
 - [ ] Add the Gemini adapter code only behind its independent disabled flag;
   do not execute it without a later explicit call authorization and budget.
 - [ ] Add handlers in `apps/web/src/server/content-creation.ts`.
 
 #### D. UI
 
+- [ ] Gate the ideas/scripts routes, navigation entries, handlers and all new
+  Slice 3 surfaces behind the fail-closed `CONTENT_OS_STAGE1_ENABLED` flag.
 - [ ] Add `/app/$brand/control-room/ideas`.
 - [ ] Add `/app/$brand/control-room/scripts`.
 - [ ] Show six ideas, evidence lineage and selection state.
 - [ ] Show structured script sections and referenced evidence claims.
 - [ ] Save every accepted edit as a new version; never mutate history.
 - [ ] Show version lineage and distinguish fixture output from human revisions.
+- [ ] Add a short patch changeset for the user-facing ideas/scripts surface,
+  scoped to the packages that actually change.
 
 ### 8.4 Slice 3 targeted evidence
 
@@ -519,9 +588,19 @@ server-side; there is no global key configuration.
 - [ ] V2 hashes change when any specified identity or evidence input changes.
 - [ ] Invalid output cannot become a content version.
 - [ ] Migration chain through `0034` and paired pgTAP pass on a clean disposable
-  database.
+  database; the migration receipt reports the new `0034` journal tag as applied.
 - [ ] Duplicate generation delivery resumes the same run.
 - [ ] Browser flow covers six ideas, selection, script and immutable revision.
+- [ ] With `CONTENT_OS_STAGE1_ENABLED` unset, the ideas/scripts routes and
+  handlers are inaccessible and their navigation entries are absent; the exact
+  value `true` enables only the authorized disposable flow.
+- [ ] All four Slice 3 events are present in `selena_audit.audit_events`; event
+  metadata is limited to IDs, hashes, versions, status and normalized error
+  codes and excludes secrets, transcripts, prompts, provider bodies and image
+  bytes.
+- [ ] License evidence contains the Apache-2.0 text, any required upstream
+  `NOTICE`, retained notices, source-path/commit provenance and modification
+  record; missing evidence blocks source acceptance.
 - [ ] No live provider call, YouTube account, release intent or publication
   attempt exists.
 - [ ] CI and blind review pass the exact head SHA; owner decides merge.
@@ -544,6 +623,8 @@ editorially by an interactive owner. Approval cannot grant release authority.
 
 #### A. Thumbnail and asset workflow
 
+- [ ] Gate thumbnail routes, handlers, navigation and all new Slice 4 surfaces
+  behind the fail-closed `CONTENT_OS_STAGE1_ENABLED` flag.
 - [ ] Complete thumbnail contracts in the creation module.
 - [ ] Add `/app/$brand/control-room/thumbnails`.
 - [ ] Reuse private storage, MIME, size, rights, consent and scanner checks.
@@ -562,9 +643,14 @@ editorially by an interactive owner. Approval cannot grant release authority.
 - [ ] Require interactive-owner session for approval.
 - [ ] Bind the exact content, profile, evidence and asset-bundle hashes.
 - [ ] Keep editorial approvals append-only.
+- [ ] Emit `content.editorial_approved` and
+  `content.editorial_approval_revoked` through the existing hash-chained audit
+  path.
 - [ ] Add `/app/$brand/control-room/review`.
 - [ ] Show editorial readiness separately from Releases.
 - [ ] Keep Releases read-only and explicitly unavailable for YouTube.
+- [ ] Add a short patch changeset for the user-facing thumbnail/review surface,
+  scoped to the packages that actually change.
 
 #### C. Release containment
 
@@ -586,6 +672,13 @@ editorially by an interactive owner. Approval cannot grant release authority.
 - [ ] Database evidence proves zero release/publication side effects.
 - [ ] Browser evidence covers thumbnail attach, blocked state, clean state,
   editorial approval and revocation.
+- [ ] With `CONTENT_OS_STAGE1_ENABLED` unset, thumbnail/review routes and
+  handlers are inaccessible and their navigation entries are absent; the exact
+  value `true` enables only the authorized disposable flow.
+- [ ] Both Slice 4 events are present in `selena_audit.audit_events`; event
+  metadata is limited to IDs, hashes, versions, status and normalized error
+  codes and excludes secrets, transcripts, prompts, provider bodies and image
+  bytes.
 - [ ] CI and blind review pass the exact head SHA; owner decides merge.
 
 ### 9.4 Slice 4 stop conditions
@@ -607,6 +700,9 @@ evidence. This is local acceptance only.
 - [ ] Start from the accepted Slice 4 merge SHA in a clean branch.
 - [ ] Use Node.js 24.x and at least 10 GiB free disk.
 - [ ] Create a disposable PostgreSQL environment only after owner authorization.
+- [ ] Set `CONTENT_OS_STAGE1_ENABLED=true` only in the disposable local/test
+  configuration used for the enabled acceptance pass; do not change shared or
+  production configuration.
 - [ ] Apply the complete migration chain `0000..0034`.
 - [ ] Seed two organizations, two users and isolated brands with synthetic data.
 - [ ] Use fixture research, creation and thumbnail adapters only.
@@ -614,6 +710,9 @@ evidence. This is local acceptance only.
 
 ### 10.3 Vertical browser path
 
+- [ ] First run with `CONTENT_OS_STAGE1_ENABLED` unset and prove every new child
+  route/handler is inaccessible and every new navigation entry is absent; then
+  run the remaining path with the exact disposable value `true`.
 - [ ] Open Content OS without Selena as the content product name.
 - [ ] Create and owner-confirm a profile.
 - [ ] Add the draft-only YouTube target.
@@ -634,7 +733,8 @@ evidence. This is local acceptance only.
 - [ ] Source evidence: branch, base SHA, head SHA, changed files and local test
   results.
 - [ ] Database evidence: migration receipt, pgTAP result, tenant-denial queries
-  and zero release/outbox/publication rows.
+  and zero release/outbox/publication rows; the receipt must report journal tags
+  `0032`, `0033` and `0034` as applied.
 - [ ] Browser evidence: route-by-route screenshots or trace with no secrets.
 - [ ] Provider evidence: fixture adapters and zero external calls/cost.
 - [ ] GitHub evidence: PR URL, exact SHA and actual CI conclusions.
@@ -664,6 +764,7 @@ Master specification:
 Execution plan:
 
 Source evidence:
+Changeset evidence or explicit non-user-facing rationale:
 Disposable database evidence:
 Local browser evidence:
 GitHub CI evidence:
@@ -710,6 +811,7 @@ These remain unresolved until the owner decides them explicitly:
 | Retrospective Slice 0 blind review or accepted review gap | Slice 1 start | Review the merged delta; do not rewrite history |
 | Video Radar code-transfer authorization | Slice 2 source port | Do not copy source |
 | Teleprompter in or outside Stage 1 | Slice 3 start | Outside Stage 1 |
+| Relicense any YouTubePro-derived file | Before relicensing | Preserve Apache-2.0; require explicit owner decision and sole-holder evidence |
 | Live research/generation provider and budget | Any live adapter call | Disabled; fixtures only |
 | Production thumbnail storage | Production planning | Local/private fixture path only |
 | First real portfolio brands | After disposable acceptance | Synthetic disposable brand |
@@ -728,6 +830,9 @@ and the master specification's definition of done is satisfied. In particular:
 - editorial approval is human-only and cannot publish;
 - cross-organization access is denied;
 - fixture acceptance records zero external calls;
+- all required `content.*` events are present in the existing hash-chained audit
+  log with metadata limited to IDs, hashes, versions, status and normalized
+  error codes, never secrets, transcripts, prompts, provider bodies or media;
 - no secret-like value appears in any delta;
 - each accepted SHA has actual CI and blind-review evidence;
 - the owner, not Codex or Claude, makes every merge and later publication
