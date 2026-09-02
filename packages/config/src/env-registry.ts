@@ -104,6 +104,13 @@ export const ENV_REGISTRY: EnvVarSpec[] = [
 		description: "Enables the neutral Content OS Stage 1 shell only when set to the exact value true.",
 	},
 	{
+		name: "SELENA_RELEASE_PUBLISH_ENABLED",
+		scope: "server",
+		requiredBy: "optional",
+		description:
+			"Lets a production runtime reach a release provider, only when set to the exact value true. Staging and dry-run refuse regardless.",
+	},
+	{
 		name: "SELENA_SCANNER_URL",
 		scope: "server",
 		requiredBy: "optional",

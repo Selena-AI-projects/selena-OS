@@ -16,6 +16,7 @@ import {
 	type ReleaseProviderCapabilities,
 	type ReleaseStatus,
 } from "./selena-release-provider";
+import { rethrowIfRefused } from "./selena-release-publish-policy";
 
 export const POSTIZ_PROVIDER_ID = "postiz";
 
@@ -69,6 +70,7 @@ function asPostizPayload(payload: unknown): PostizReleasePayload {
  * release boundary must reconcile it instead of retrying.
  */
 function classifyDispatchError(error: unknown): ReleaseDispatchOutcome {
+	rethrowIfRefused(error);
 	const retriedByProvider = error instanceof PostizApiError && (error.status === 408 || error.status === 429);
 	if (error instanceof PostizApiError && !retriedByProvider && error.status >= 400 && error.status < 500) {
 		return { outcome: "DEFINITIVE_FAILURE", reason: error.message };

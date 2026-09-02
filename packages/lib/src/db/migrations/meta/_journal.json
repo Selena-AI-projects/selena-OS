@@ -232,6 +232,13 @@
       "when": 1787810820000,
       "tag": "0032_channel_provider_binding",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1787810880000,
+      "tag": "0033_release_provider_allowlist",
+      "breakpoints": true
     }
   ]
 }

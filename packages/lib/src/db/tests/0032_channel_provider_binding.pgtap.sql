@@ -63,7 +63,7 @@ SELECT throws_ok(
   $$INSERT INTO selena_registry.channel_provider_bindings
     (organization_id, brand_id, channel_account_id, provider, environment, active, created_by)
     VALUES ('selena-binding-org', 'selena-binding-brand', '74000000-0000-0000-0000-000000000003',
-      'second-provider', 'STAGING', true, 'seed')$$,
+      'blotato', 'STAGING', true, 'seed')$$,
   '23505',
   NULL,
   'one channel and environment accepts exactly one active provider'
@@ -72,21 +72,21 @@ SELECT lives_ok(
   $$INSERT INTO selena_registry.channel_provider_bindings
     (organization_id, brand_id, channel_account_id, provider, environment, active, created_by)
     VALUES ('selena-binding-org', 'selena-binding-brand', '74000000-0000-0000-0000-000000000003',
-      'second-provider', 'PRODUCTION', true, 'seed')$$,
+      'blotato', 'PRODUCTION', true, 'seed')$$,
   'the same channel may use a different provider in another environment'
 );
 SELECT lives_ok(
   $$INSERT INTO selena_registry.channel_provider_bindings
     (organization_id, brand_id, channel_account_id, provider, environment, active, created_by)
     VALUES ('selena-binding-org', 'selena-binding-brand', '74000000-0000-0000-0000-000000000003',
-      'second-provider', 'STAGING', false, 'seed')$$,
+      'blotato', 'STAGING', false, 'seed')$$,
   'an inactive replacement provider may be staged next to the active one'
 );
 SELECT throws_ok(
   $$INSERT INTO selena_registry.channel_provider_bindings
     (organization_id, brand_id, channel_account_id, provider, environment, active, created_by)
     VALUES ('selena-binding-org', 'selena-binding-other', '74000000-0000-0000-0000-000000000003',
-      'second-provider', 'DRY_RUN', true, 'seed')$$,
+      'blotato', 'DRY_RUN', true, 'seed')$$,
   '23503',
   NULL,
   'a binding cannot claim a channel account from another brand'
