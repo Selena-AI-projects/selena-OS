@@ -28,6 +28,13 @@
 | SHA | Что закрывает |
 |---|---|
 | `0c06f3e` | Пакет доказательств: SNAPSHOT, DECISIONS, RECOVERY, REMAINING_BLOCKERS, унаследованный контекст |
+| `d700c0a` | Указатель доказательств и отчёт по безопасности |
+| `7041b43` | Живая проверка укреплённых эндпоинтов Aether |
+| `d142d34` | Таблица покрытия требований |
+| `c87e2b2` | Provider-neutral контракт, Postiz как адаптер, `0032` |
+| `67fbab8` | Blotato за контрактом, запрет публикации на трёх уровнях, `0033` |
+| `8457bb3` | Раннер миграций: решение по факту базы, а не кластера |
+| `a476076` | Проекция чтения релизов (`0034`) — без неё Control Room не отрисовывался |
 
 ### parkourcafe/selena-ai-visibility
 
@@ -40,10 +47,17 @@
 |---|---|---|
 | `ruff check app tests scripts` | Aether `backend/` | чисто |
 | `pytest -q` | Aether `backend/` | **227 passed** (базовая точка — 137) |
-| `pnpm exec turbo run check-types` | selena-OS | 13 задач, 0 ошибок |
-| `pnpm test` | selena-OS | 94 файла, **1010 passed**, 0 failed, 0 skipped |
+| `pnpm exec turbo run check-types --force` | selena-OS | 13 задач, 0 ошибок |
+| `pnpm exec turbo run test --force` | selena-OS | **1087 passed**, 0 failed (базовая точка 1010) |
 | `pnpm build` | selena-OS | 16 задач, успех |
 | `bash tools/verify-railway-targets.sh` | selena-OS | PASS |
+| pgTAP, 12 наборов на чистой базе | selena-OS | **145 ok, 0 not ok** (базовая точка 115 в 9 наборах) |
+| `biome check` по изменённым файлам | selena-OS | чисто |
+
+Замечание о прогоне pgTAP: роли живут в кластере, а не в базе, поэтому набор
+создаёт роли, которые переживают удаление базы. Прогон подряд без их удаления
+даёт ложные падения `role already exists`. Числа выше сняты с удалением ролей
+между наборами.
 
 Замечание: скрипта `pnpm typecheck` в selena-OS нет, задача называется
 `check-types`. Отчёт о падении `pnpm typecheck` означал бы именно это, а не дефект.
@@ -120,6 +134,8 @@ to_regclass('public.n8n_bridge_outbox') is not null → t  (таблица на 
 |---|---|
 | Сверка реестра Aether | было 7 строк → стало 18; `public` содержит 18 таблиц до и после |
 | Миграция `agent_mcp_servers` | `mcp_servers_column: true`, реестр 19 строк, новейшая запись `20260902102413 agent_mcp_servers` |
+| Миграции `0020`–`0022` к живой базе | реестр 19 → 22; публичных таблиц 18 → 20; `task_approvals` и `bridge_events` с RLS, три триггера одобрений, частичный уникальный индекс, `handle_new_user` читает `raw_app_meta_data` |
+| Развёрнутый Aether после этих миграций | в логе сервиса `GET / 200`, ошибок нет |
 | Домен studio | custom domain `19d3bb27` на порт 8080; в списке доменов сервиса остались `os.selenasystems.com` и Railway-адрес |
 | Проект `selena-os-staging` | `f8d94e6a-d0d9-4166-8ad5-828c1e0679fa`; Postgres `86c716c9` deployment SUCCESS, том `selena-os-staging-pgdata` |
 
@@ -152,6 +168,30 @@ Aether поднят локально на настоящей схеме (при�
 
 Раньше все шесть диагностических эндпоинтов отвечали анонимно, а `/health/agent`
 отдавал четыре последних символа живого ключа и, через маску, его длину.
+
+## Живой запуск Control Room
+
+Свежая база, 35 записей журнала миграций, отдельный ограниченный логин в роли
+`selena_web_runtime`, регистрация владельца через API аутентификации, бренд
+засеян напрямую (онбординг требует внешних вызовов, а их в этом прогоне нет).
+
+```
+GET /app/selena/control-room   200, 43 316 байт
+разделы на странице: Inbox Content Review Releases Publications
+                     Performance Incidents Audit   (8 из 8)
+баннера «could not load» нет
+
+до миграции 0034 тот же запрос: 500
+причина: selena_release.release_manifests — нет права на колонки
+         content_version_id и channel_account_id
+```
+
+Исходящие соединения: **ноль** после старта сервера. Двадцать попыток к
+`telemetry.vercel.com`, зафиксированные прокси, укладываются в окно 12:34–12:45
+UTC — это сборка и тесты; сервер стартовал в 12:47.
+
+Границы этого доказательства: оно показывает, что продукт работает на настоящей
+схеме. Оно **не** доказывает деплой в Railway и не заменяет его.
 
 ## Разделение баз и продуктов
 
