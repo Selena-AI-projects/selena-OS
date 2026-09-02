@@ -239,6 +239,13 @@
       "when": 1787810880000,
       "tag": "0033_release_provider_allowlist",
       "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1787810940000,
+      "tag": "0034_control_room_release_read_grants",
+      "breakpoints": true
     }
   ]
 }
