@@ -48,6 +48,8 @@
 		,"./selena-private-storage": "./src/selena-private-storage.ts"
 		,"./selena-clamav": "./src/selena-clamav.ts"
 		,"./selena-release-gateway": "./src/selena-release-gateway.ts"
+		,"./selena-release-provider": "./src/selena-release-provider.ts"
+		,"./selena-release-provider-postiz": "./src/selena-release-provider-postiz.ts"
 		,"./selena-postiz": "./src/selena-postiz.ts"
 		,"./selena-postiz-ingestion": "./src/selena-postiz-ingestion.ts"
 		,"./public-source-adapters": "./src/public-source-adapters.ts"

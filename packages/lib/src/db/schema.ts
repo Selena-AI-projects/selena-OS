@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import {
 	boolean,
 	index,
@@ -932,6 +933,11 @@ export const scrMetricQualityEnum = selenaPerformanceSchema.enum("metric_quality
 	"QUARANTINED",
 ]);
 export const scrKillSwitchScopeEnum = selenaRegistrySchema.enum("kill_switch_scope", ["GLOBAL", "BRAND", "ACCOUNT"]);
+export const scrReleaseEnvironmentEnum = selenaRegistrySchema.enum("release_environment", [
+	"PRODUCTION",
+	"STAGING",
+	"DRY_RUN",
+]);
 
 export const scrContentPolicies = selenaRegistrySchema
 	.table(
@@ -988,6 +994,42 @@ export const scrChannelAccounts = selenaRegistrySchema
 				table.platform,
 				table.providerAccountRef,
 			),
+		}),
+	)
+	.enableRLS();
+
+export const scrChannelProviderBindings = selenaRegistrySchema
+	.table(
+		"channel_provider_bindings",
+		{
+			id: uuid("id").defaultRandom().primaryKey().notNull(),
+			organizationId: text("organization_id")
+				.notNull()
+				.references(() => organization.id),
+			brandId: text("brand_id")
+				.notNull()
+				.references(() => brands.id),
+			channelAccountId: uuid("channel_account_id")
+				.notNull()
+				.references(() => scrChannelAccounts.id),
+			provider: text("provider").notNull(),
+			environment: scrReleaseEnvironmentEnum("environment").notNull(),
+			active: boolean("active").notNull().default(false),
+			createdBy: text("created_by").notNull(),
+			createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+			updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+		},
+		(table) => ({
+			activeUnique: uniqueIndex("scr_channel_provider_bindings_active_unique")
+				.on(table.channelAccountId, table.environment)
+				.where(sql`active`),
+			providerUnique: uniqueIndex("scr_channel_provider_bindings_provider_unique").on(
+				table.channelAccountId,
+				table.environment,
+				table.provider,
+			),
+			brandIdx: index("scr_channel_provider_bindings_brand_idx").on(table.brandId, table.environment),
+			orgIdx: index("scr_channel_provider_bindings_org_idx").on(table.organizationId),
 		}),
 	)
 	.enableRLS();
