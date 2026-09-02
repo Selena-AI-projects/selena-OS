@@ -40,6 +40,15 @@ function schemaOwnerExists(client) {
 	return client.query("SELECT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'selena_schema_owner') AS exists");
 }
 
+/**
+ * Roles live in the cluster, not in the database. A second database beside an
+ * existing one therefore starts with the roles already present and no ledger of
+ * its own, so the role alone cannot answer "has this database been set up yet".
+ */
+function migrationLedgerExists(client) {
+	return client.query("SELECT to_regclass('drizzle.__drizzle_migrations') IS NOT NULL AS exists");
+}
+
 function createBootstrapMigrationsFolder() {
 	const bootstrapFolder = mkdtempSync(join(tmpdir(), "selena-migration-bootstrap-"));
 	const metaFolder = join(bootstrapFolder, "meta");
@@ -83,10 +92,11 @@ async function main() {
 		}
 
 		const roleCheck = await schemaOwnerExists(client);
-		if (!roleCheck.rows[0]?.exists) {
-			if (isStagingMvp) {
-				throw new Error("staging migration login requires the pre-provisioned selena_schema_owner role");
-			}
+		if (isStagingMvp && !roleCheck.rows[0]?.exists) {
+			throw new Error("staging migration login requires the pre-provisioned selena_schema_owner role");
+		}
+		const ledgerCheck = isStagingMvp ? null : await migrationLedgerExists(client);
+		if (!isStagingMvp && (!ledgerCheck?.rows[0]?.exists || !roleCheck.rows[0]?.exists)) {
 			const bootstrapFolder = createBootstrapMigrationsFolder();
 			try {
 				await migrate(drizzle({ client }), { migrationsFolder: bootstrapFolder });
