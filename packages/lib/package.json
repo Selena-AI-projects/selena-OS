@@ -56,31 +56,31 @@
 		,"./recommendation-engine": "./src/recommendation-engine.ts"
 	},
 	"dependencies": {
-		"@ai-sdk/anthropic": "^4.0.27",
-		"@ai-sdk/openai": "^4.0.27",
-		"@anthropic-ai/sdk": "^0.115.0",
-		"@better-auth/sso": "^1.6.25",
-		"@better-auth/stripe": "^1.6.25",
-		"@brightdata/sdk": "^1.1.0",
+		"@ai-sdk/anthropic": "^4.0.41",
+		"@ai-sdk/openai": "^4.0.46",
+		"@anthropic-ai/sdk": "^0.120.0",
+		"@better-auth/sso": "^1.7.1",
+		"@better-auth/stripe": "^1.7.1",
+		"@brightdata/sdk": "^1.2.0",
 		"@mozilla/readability": "^0.6.0",
 		"@workspace/config": "workspace:*",
 		"@workspace/selena-visibility-contracts": "workspace:*",
-		"ai": "^7.0.48",
-		"better-auth": "^1.6.26",
-		"dataforseo-client": "^2.1.2",
+		"ai": "^7.0.77",
+		"better-auth": "^1.7.1",
+		"dataforseo-client": "^2.1.5",
 		"drizzle-orm": "^0.45.2",
-		"jose": "6.2.7",
+		"jose": "6.2.10",
 		"linkedom": "^0.18.13",
 		"olostep": "^1.2.2",
-		"pg": "^8.22.0",
+		"pg": "^8.23.0",
 		"zod": "^4.4.3"
 	},
 	"devDependencies": {
 		"@better-auth/cli": "^1.4.22",
-		"@types/pg": "^8.20.3",
+		"@types/pg": "^8.23.1",
 		"drizzle-kit": "^0.31.10",
-		"stripe": "^22.4.0",
+		"stripe": "^22.5.0",
 		"typescript": "^7.0.2",
-		"vitest": "^4.1.10"
+		"vitest": "^4.1.11"
 	}
 }
