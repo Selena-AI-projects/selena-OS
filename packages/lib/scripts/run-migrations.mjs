@@ -1,9 +1,10 @@
-import { copyFileSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
 import { Client } from "pg";
+import { databaseNameFrom, provisionRuntimeLogins } from "./provision-runtime-logins.mjs";
 
 const isStagingMvp = process.env.SELENA_STAGING_MVP === "true";
 const databaseUrl = process.env.SELENA_MIGRATION_DATABASE_URL ?? process.env.DATABASE_URL;
@@ -56,7 +57,8 @@ function createBootstrapMigrationsFolder() {
 	const journal = JSON.parse(readFileSync(join(migrationsFolder, "meta", "_journal.json"), "utf8"));
 	const entries = journal.entries.filter((entry) => entry.idx <= 21);
 	writeFileSync(join(metaFolder, "_journal.json"), `${JSON.stringify({ ...journal, entries }, null, 2)}\n`);
-	for (const entry of entries) copyFileSync(join(migrationsFolder, `${entry.tag}.sql`), join(bootstrapFolder, `${entry.tag}.sql`));
+	for (const entry of entries)
+		copyFileSync(join(migrationsFolder, `${entry.tag}.sql`), join(bootstrapFolder, `${entry.tag}.sql`));
 	return bootstrapFolder;
 }
 
@@ -111,6 +113,14 @@ async function main() {
 			migrationsFolder,
 		});
 		console.log("migrations applied successfully");
+
+		// Bringing a database up to what the application needs does not end at
+		// the schema: the runtime roles the migrations create are NOLOGIN groups,
+		// so a deployment still cannot connect until a login exists for them.
+		// Doing it here rather than as a second command keeps the two from
+		// drifting apart, and it is a no-op where no runtime password is set.
+		await client.query("RESET ROLE");
+		await provisionRuntimeLogins(client, databaseNameFrom(databaseUrl));
 	} finally {
 		await client.end();
 	}

@@ -15,6 +15,7 @@
  * or echoed. A login whose password variable is absent is skipped, so a
  * deployment provisions only the identities it actually runs.
  */
+import { pathToFileURL } from "node:url";
 import { Client } from "pg";
 
 const LOGINS = [
@@ -33,62 +34,81 @@ const LOGINS = [
 	},
 ];
 
-const databaseUrl = process.env.DATABASE_URL;
-if (!databaseUrl) throw new Error("DATABASE_URL is required to provision runtime logins");
-
-const databaseName = new URL(databaseUrl).pathname.replace(/^\//, "") || "postgres";
-
-async function main() {
-	const client = new Client({ connectionString: databaseUrl });
-	await client.connect();
+/**
+ * Runs against an already-open connection so the migration runner can call it
+ * as the last step of bringing a database up to what the application needs.
+ * Nothing happens unless a password variable is present, so a deployment that
+ * does not use runtime separation is unaffected.
+ */
+export async function provisionRuntimeLogins(client, databaseName) {
 	const provisioned = [];
 	const skipped = [];
 
-	try {
-		for (const { group, login, passwordEnv } of LOGINS) {
-			const password = process.env[passwordEnv];
-			if (!password) {
-				skipped.push(login);
-				continue;
-			}
-
-			const { rows } = await client.query("SELECT 1 FROM pg_roles WHERE rolname = $1", [group]);
-			if (rows.length === 0) {
-				throw new Error(`${group} does not exist — run the migrations before provisioning logins`);
-			}
-
-			// CREATE ROLE takes no parameters, and the password would land in
-			// pg_stat_activity either way, so it is passed as a quoted literal
-			// through the server's own quoting rather than by string building.
-			const quoted = await client.query("SELECT quote_literal($1::text) AS value, quote_ident($2::text) AS name", [
-				password,
-				login,
-			]);
-			const passwordLiteral = quoted.rows[0].value;
-			const loginIdent = quoted.rows[0].name;
-
-			await client.query(`
-				DO $$
-				BEGIN
-					CREATE ROLE ${loginIdent} LOGIN PASSWORD ${passwordLiteral};
-				EXCEPTION WHEN duplicate_object THEN
-					ALTER ROLE ${loginIdent} LOGIN PASSWORD ${passwordLiteral};
-				END $$;
-			`);
-			await client.query(`GRANT ${group} TO ${loginIdent}`);
-			await client.query(`GRANT CONNECT ON DATABASE ${(await client.query("SELECT quote_ident($1::text) AS name", [databaseName])).rows[0].name} TO ${loginIdent}`);
-			await client.query(`ALTER ROLE ${loginIdent} SET ROLE = ${group}`);
-			provisioned.push(login);
+	for (const { group, login, passwordEnv } of LOGINS) {
+		const password = process.env[passwordEnv];
+		if (!password) {
+			skipped.push(login);
+			continue;
 		}
-	} finally {
-		await client.end();
+
+		const { rows } = await client.query("SELECT 1 FROM pg_roles WHERE rolname = $1", [group]);
+		if (rows.length === 0) {
+			throw new Error(`${group} does not exist — run the migrations before provisioning logins`);
+		}
+
+		// CREATE ROLE takes no parameters, and the password would land in
+		// pg_stat_activity either way, so it is passed as a quoted literal
+		// through the server's own quoting rather than by string building.
+		const quoted = await client.query(
+			"SELECT quote_literal($1::text) AS value, quote_ident($2::text) AS name, quote_ident($3::text) AS db",
+			[password, login, databaseName],
+		);
+		const passwordLiteral = quoted.rows[0].value;
+		const loginIdent = quoted.rows[0].name;
+
+		await client.query(`
+			DO $$
+			BEGIN
+				CREATE ROLE ${loginIdent} LOGIN PASSWORD ${passwordLiteral};
+			EXCEPTION WHEN duplicate_object THEN
+				ALTER ROLE ${loginIdent} LOGIN PASSWORD ${passwordLiteral};
+			END $$;
+		`);
+		await client.query(`GRANT ${group} TO ${loginIdent}`);
+		await client.query(`GRANT CONNECT ON DATABASE ${quoted.rows[0].db} TO ${loginIdent}`);
+		await client.query(`ALTER ROLE ${loginIdent} SET ROLE = ${group}`);
+		provisioned.push(login);
 	}
 
 	console.log(`runtime logins provisioned: ${provisioned.join(", ") || "(none)"}`);
 	if (skipped.length > 0) console.log(`skipped, no password set: ${skipped.join(", ")}`);
+	return { provisioned, skipped };
 }
 
-main().catch((error) => {
-	console.error(error instanceof Error ? error.message : "provisioning failed");
-	process.exitCode = 1;
-});
+export function databaseNameFrom(databaseUrl) {
+	return new URL(databaseUrl).pathname.replace(/^\//, "") || "postgres";
+}
+
+async function main() {
+	const databaseUrl = process.env.DATABASE_URL;
+	if (!databaseUrl) throw new Error("DATABASE_URL is required to provision runtime logins");
+	const client = new Client({ connectionString: databaseUrl });
+	await client.connect();
+	try {
+		await provisionRuntimeLogins(client, databaseNameFrom(databaseUrl));
+	} finally {
+		await client.end();
+	}
+}
+
+// Only when run as a command. The migration runner imports the function, and an
+// unguarded call here would provision twice in one run — concurrently enough for
+// Postgres to refuse the second ALTER ROLE with "tuple concurrently updated".
+const invokedDirectly = process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
+
+if (invokedDirectly) {
+	main().catch((error) => {
+		console.error(error instanceof Error ? error.message : "provisioning failed");
+		process.exitCode = 1;
+	});
+}
