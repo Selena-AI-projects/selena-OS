@@ -131,6 +131,28 @@ to_regclass('public.n8n_bridge_outbox') is not null → t  (таблица на 
 Control Room выключен по умолчанию (`CONTROL_ROOM_BRIDGE_ENABLED` не задан) и
 покрыт тестом `test_bridge_is_off_by_default`.
 
+## Проверка запущенного приложения
+
+Aether поднят локально на настоящей схеме (применены все миграции), с
+`APP_ENV=production`. Это поведенческое доказательство, а не прогон тестов.
+
+```
+без SETTINGS_ENCRYPTION_KEY:
+  EncryptionNotConfigured — приложение отказалось стартовать
+
+с ключом:
+  GET /health           200  {"status":"ok","env":"production"}
+  GET /health/db        200  {"db":"ok","select1":1}   причины нет: вызов анонимный
+  GET /health/agent     401
+  GET /health/channels  401
+  GET /health/queue     401
+
+вхождений ключа шифрования в ответах: 0
+```
+
+Раньше все шесть диагностических эндпоинтов отвечали анонимно, а `/health/agent`
+отдавал четыре последних символа живого ключа и, через маску, его длину.
+
 ## Разделение баз и продуктов
 
 Без раскрытия значений:
