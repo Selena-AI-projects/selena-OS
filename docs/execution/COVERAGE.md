@@ -78,12 +78,14 @@
 | Требование | Состояние | Доказательство |
 |---|---|---|
 | Добавить studio, не меняя назначение app/os | PASS частично | Домен добавлен, `os.` не тронут |
-| Railway domain, DNS, Supabase redirect, cookies, origins, CORS | PASS частично | DNS-запись владельцем создана и распространилась (`PROPAGATED`); redirect в Supabase задан. Но сертификат Railway седьмой час в `VALIDATING_OWNERSHIP` — это уже не ожидание, а отдельная проблема |
+| Railway domain, DNS, Supabase redirect, cookies, origins, CORS | PASS частично | DNS-запись создана и распространилась (`PROPAGATED`); redirect в Supabase задан. Сертификат вторые сутки в `VALIDATING_OWNERSHIP`, `errorMessage` пуст. Запрет на уровне зоны исключён: `os.selenasystems.com` в той же зоне и на том же сервисе имеет **валидный** сертификат, то есть Let's Encrypt для `selenasystems.com` уже выдавал. Причина относится именно к имени `studio` |
 | Не использовать wildcard origins | PASS | Wildcard отвергается конфигурацией; `test_wildcard_origin_is_refused` |
-| Браузерная проверка входа, выхода, refresh, callback | **NOT-VERIFIED** | Невозможна до DNS |
-| Старый адрес остаётся рабочим | PASS | `os.selenasystems.com` и Railway-адрес в списке доменов сервиса |
+| Браузерная проверка входа, выхода, refresh, callback | **NOT-VERIFIED** | Невозможна до сертификата |
+| Старый адрес остаётся рабочим | PASS | `os.selenasystems.com` — сертификат валиден, домен в списке сервиса |
 
-**Gate 4: NOT-VERIFIED** — упирается в DNS-запись.
+**Gate 4: NOT-VERIFIED** — единственный незакрытый гейт. Упирается в выдачу
+сертификата, причину которой не видно ни из Railway (пустой `errorMessage`), ни
+из этой среды (DNS-запросы наружу закрыты сетевой политикой).
 
 ## Gate 5 — staging Control Room
 
