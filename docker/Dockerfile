@@ -167,5 +167,25 @@ ENV SELENA_GATEWAY_PORT=8082
 
 CMD ["node_modules/.bin/tsx", "src/selena-release-gateway.ts"]
 
-# The service name selects the final runtime stage: web, worker, migrate, scanner, or gateway.
+# The Aether bridge receiver is the only runtime that faces the public internet
+# with a shared secret, and it carries the ingestion identity, whose entire
+# reach into the database is one recording function.
+FROM base AS receiver
+WORKDIR /app
+
+ENV NODE_ENV=production
+
+RUN addgroup --system --gid 1004 receiver
+RUN adduser --system --uid 1004 receiver
+
+COPY --from=builder --chown=receiver:receiver /deploy/worker ./
+
+USER receiver
+
+EXPOSE 8083
+ENV SELENA_RECEIVER_PORT=8083
+
+CMD ["node_modules/.bin/tsx", "src/selena-aether-receiver.ts"]
+
+# The service name selects the final runtime stage: web, worker, migrate, scanner, gateway, or receiver.
 FROM ${RAILWAY_SERVICE_NAME} AS final

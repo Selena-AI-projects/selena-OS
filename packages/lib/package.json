@@ -1,91 +1,93 @@
 {
-	"name": "@workspace/lib",
-	"version": "0.2.19",
-	"private": true,
-	"license": "MIT",
-	"scripts": {
-		"check-types": "tsc --noEmit",
-		"test": "vitest run",
-		"compare:onboarding": "tsx scripts/compare-onboarding.ts",
-		"generate:auth-schema": "bash scripts/generate-auth-schema.sh",
-		"verify:membership-dedupe": "tsx scripts/verify-membership-dedupe.ts"
-	},
-	"exports": {
-		"./db/db": "./src/db/db.ts",
-		"./db/schema": "./src/db/schema.ts",
-		"./db/staging-tls": "./src/db/staging-tls.ts",
-		"./db/auth-sync": "./src/db/auth-sync.ts",
-		"./db/provisioning": "./src/db/provisioning.ts",
-		"./auth/server": "./src/auth/server.ts",
-		"./auth/client": "./src/auth/client.ts",
-		"./auth/permissions": "./src/auth/permissions.ts",
-		"./constants": "./src/constants.ts",
-		"./expedite": "./src/expedite.ts",
-		"./run-backoff": "./src/run-backoff.ts",
-		"./text-extraction": "./src/text-extraction.ts",
-		"./onboarding": "./src/onboarding/index.ts",
-		"./tag-utils": "./src/tag-utils.ts",
-		"./bulk-prompts": "./src/bulk-prompts.ts",
-		"./website-excerpt": "./src/website-excerpt.ts",
-		"./report-metrics": "./src/report-metrics.ts",
-		"./secrets": "./src/secrets/index.ts",
-		"./providers": "./src/providers/index.ts",
-		"./providers/types": "./src/providers/types.ts",
-		"./entitlements": "./src/entitlements/index.ts",
-		"./run-policy": "./src/run-policy/index.ts",
-		"./usage": "./src/usage/cost.ts"
-		,"./selena-visibility-repositories": "./src/selena-visibility-repositories.ts",
-		"./selena-export": "./src/selena-export.ts",
-		"./selena-measurement": "./src/selena-measurement.ts",
-		"./selena-findings": "./src/selena-findings.ts"
-		,"./selena-dataset-gateway": "./src/selena-dataset-gateway.ts"
-		,"./recommendation-engine": "./src/recommendation-engine.ts"
-		,"./website-collector": "./src/website-collector.ts"
-		,"./website-security": "./src/website-security.ts"
-		,"./selena-monitoring": "./src/selena-monitoring.ts"
-		,"./selena-flow": "./src/selena-flow.ts"
-		,"./selena-control-room": "./src/selena-control-room.ts"
-		,"./selena-private-storage": "./src/selena-private-storage.ts"
-		,"./selena-clamav": "./src/selena-clamav.ts"
-		,"./selena-release-gateway": "./src/selena-release-gateway.ts"
-		,"./selena-release-provider": "./src/selena-release-provider.ts"
-		,"./selena-release-provider-postiz": "./src/selena-release-provider-postiz.ts"
-		,"./selena-release-provider-blotato": "./src/selena-release-provider-blotato.ts"
-		,"./selena-release-publish-policy": "./src/selena-release-publish-policy.ts"
-		,"./selena-blotato": "./src/selena-blotato.ts"
-		,"./selena-postiz": "./src/selena-postiz.ts"
-		,"./selena-postiz-ingestion": "./src/selena-postiz-ingestion.ts"
-		,"./public-source-adapters": "./src/public-source-adapters.ts"
-		,"./public-provider-gates": "./src/public-provider-gates.ts"
-		,"./recommendation-persistence": "./src/recommendation-persistence.ts"
-		,"./recommendation-engine": "./src/recommendation-engine.ts"
-	},
-	"dependencies": {
-		"@ai-sdk/anthropic": "^4.0.27",
-		"@ai-sdk/openai": "^4.0.27",
-		"@anthropic-ai/sdk": "^0.115.0",
-		"@better-auth/sso": "^1.6.25",
-		"@better-auth/stripe": "^1.6.25",
-		"@brightdata/sdk": "^1.1.0",
-		"@mozilla/readability": "^0.6.0",
-		"@workspace/config": "workspace:*",
-		"@workspace/selena-visibility-contracts": "workspace:*",
-		"ai": "^7.0.48",
-		"better-auth": "^1.6.26",
-		"dataforseo-client": "^2.1.2",
-		"drizzle-orm": "^0.45.2",
-		"jose": "6.2.7",
-		"linkedom": "^0.18.13",
-		"olostep": "^1.2.2",
-		"pg": "^8.22.0",
-		"zod": "^4.4.3"
-	},
-	"devDependencies": {
-		"@better-auth/cli": "^1.4.22",
-		"@types/pg": "^8.20.3",
-		"drizzle-kit": "^0.31.10",
-		"stripe": "^22.4.0",
-		"typescript": "^7.0.2",
-		"vitest": "^4.1.10"
-	}
+  "name": "@workspace/lib",
+  "version": "0.2.19",
+  "private": true,
+  "license": "MIT",
+  "scripts": {
+    "check-types": "tsc --noEmit",
+    "test": "vitest run",
+    "compare:onboarding": "tsx scripts/compare-onboarding.ts",
+    "generate:auth-schema": "bash scripts/generate-auth-schema.sh",
+    "verify:membership-dedupe": "tsx scripts/verify-membership-dedupe.ts"
+  },
+  "exports": {
+    "./db/db": "./src/db/db.ts",
+    "./db/schema": "./src/db/schema.ts",
+    "./db/staging-tls": "./src/db/staging-tls.ts",
+    "./db/auth-sync": "./src/db/auth-sync.ts",
+    "./db/provisioning": "./src/db/provisioning.ts",
+    "./auth/server": "./src/auth/server.ts",
+    "./auth/client": "./src/auth/client.ts",
+    "./auth/permissions": "./src/auth/permissions.ts",
+    "./constants": "./src/constants.ts",
+    "./expedite": "./src/expedite.ts",
+    "./run-backoff": "./src/run-backoff.ts",
+    "./text-extraction": "./src/text-extraction.ts",
+    "./onboarding": "./src/onboarding/index.ts",
+    "./tag-utils": "./src/tag-utils.ts",
+    "./bulk-prompts": "./src/bulk-prompts.ts",
+    "./website-excerpt": "./src/website-excerpt.ts",
+    "./report-metrics": "./src/report-metrics.ts",
+    "./secrets": "./src/secrets/index.ts",
+    "./providers": "./src/providers/index.ts",
+    "./providers/types": "./src/providers/types.ts",
+    "./entitlements": "./src/entitlements/index.ts",
+    "./run-policy": "./src/run-policy/index.ts",
+    "./usage": "./src/usage/cost.ts",
+    "./selena-visibility-repositories": "./src/selena-visibility-repositories.ts",
+    "./selena-export": "./src/selena-export.ts",
+    "./selena-measurement": "./src/selena-measurement.ts",
+    "./selena-findings": "./src/selena-findings.ts",
+    "./selena-dataset-gateway": "./src/selena-dataset-gateway.ts",
+    "./recommendation-engine": "./src/recommendation-engine.ts",
+    "./website-collector": "./src/website-collector.ts",
+    "./website-security": "./src/website-security.ts",
+    "./selena-monitoring": "./src/selena-monitoring.ts",
+    "./selena-flow": "./src/selena-flow.ts",
+    "./selena-control-room": "./src/selena-control-room.ts",
+    "./selena-private-storage": "./src/selena-private-storage.ts",
+    "./selena-clamav": "./src/selena-clamav.ts",
+    "./selena-release-gateway": "./src/selena-release-gateway.ts",
+    "./selena-release-provider": "./src/selena-release-provider.ts",
+    "./selena-release-provider-postiz": "./src/selena-release-provider-postiz.ts",
+    "./selena-release-provider-blotato": "./src/selena-release-provider-blotato.ts",
+    "./selena-release-publish-policy": "./src/selena-release-publish-policy.ts",
+    "./selena-blotato": "./src/selena-blotato.ts",
+    "./selena-postiz": "./src/selena-postiz.ts",
+    "./selena-postiz-ingestion": "./src/selena-postiz-ingestion.ts",
+    "./public-source-adapters": "./src/public-source-adapters.ts",
+    "./public-provider-gates": "./src/public-provider-gates.ts",
+    "./recommendation-persistence": "./src/recommendation-persistence.ts",
+    "./selena-aether-bridge": "./src/selena-aether-bridge.ts",
+    "./contracts/control-room-event.v1.fixtures.json": "./src/contracts/control-room-event.v1.fixtures.json",
+    "./contracts/control-room-event.v1.schema.json": "./src/contracts/control-room-event.v1.schema.json"
+  },
+  "dependencies": {
+    "@ai-sdk/anthropic": "^4.0.27",
+    "@ai-sdk/openai": "^4.0.27",
+    "@anthropic-ai/sdk": "^0.115.0",
+    "@better-auth/sso": "^1.6.25",
+    "@better-auth/stripe": "^1.6.25",
+    "@brightdata/sdk": "^1.1.0",
+    "@mozilla/readability": "^0.6.0",
+    "@workspace/config": "workspace:*",
+    "@workspace/selena-visibility-contracts": "workspace:*",
+    "ai": "^7.0.48",
+    "better-auth": "^1.6.26",
+    "dataforseo-client": "^2.1.2",
+    "drizzle-orm": "^0.45.2",
+    "jose": "6.2.7",
+    "linkedom": "^0.18.13",
+    "olostep": "^1.2.2",
+    "pg": "^8.22.0",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@better-auth/cli": "^1.4.22",
+    "@types/pg": "^8.20.3",
+    "drizzle-kit": "^0.31.10",
+    "stripe": "^22.4.0",
+    "typescript": "^7.0.2",
+    "vitest": "^4.1.10"
+  }
 }
