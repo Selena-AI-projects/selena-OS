@@ -200,3 +200,25 @@ describe("the shared secret", () => {
 		expect(() => receiverSecrets("  ")).toThrow(/empty/);
 	});
 });
+
+describe("what the receiver records about itself", () => {
+	it("logs the verdict and the identifiers, and never the payload", async () => {
+		atSigningTime();
+		const lines: string[] = [];
+		const log = vi.spyOn(console, "log").mockImplementation((line) => {
+			lines.push(String(line));
+		});
+		await withReceiver({ outcome: "duplicate" }, async (base) => {
+			await post(base, ACCEPTED);
+		});
+		log.mockRestore();
+
+		const envelope = JSON.parse(ACCEPTED.body);
+		expect(lines.join("\n")).toContain("duplicate");
+		expect(lines.join("\n")).toContain(envelope.event_id);
+		expect(lines.join("\n")).toContain(`version=${envelope.version}`);
+		// An operator reading the log must not thereby read the event's contents.
+		expect(lines.join("\n")).not.toContain(envelope.payload.title);
+		expect(lines.join("\n")).not.toContain(envelope.payload.summary);
+	});
+});

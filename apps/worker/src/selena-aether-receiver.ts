@@ -166,6 +166,12 @@ export function createReceiverServer(options: { secrets: string[]; pool: Receive
 		const client = await pool.connect();
 		try {
 			const outcome = await recordEvent(client, envelope);
+			// Identifiers and the verdict, never the payload: an operator needs to
+			// know that a redelivery was recognised as one, and answering that from
+			// the log should not mean reading the event's contents out of it.
+			console.log(
+				`aether event ${outcome}: event=${envelope.event_id} aggregate=${envelope.aggregate_id} version=${envelope.version} trace=${envelope.trace_id}`,
+			);
 			// Duplicate and stale are acknowledged, not retried: the sender has
 			// nothing left to do, and an error would keep an already-delivered
 			// event circling until its attempts ran out.
