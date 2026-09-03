@@ -13,8 +13,13 @@ if (!databaseUrl) {
 	throw new Error("DATABASE_URL is required for the migration runner");
 }
 
-function createClient() {
-	if (!isStagingMvp) return new Client({ connectionString: databaseUrl });
+/**
+ * The connection settings every connection to this database must use, so the
+ * runtime logins are verified over the same transport the migrations ran on
+ * rather than an unencrypted one that happened to be easier to build.
+ */
+function connectionSettings() {
+	if (!isStagingMvp) return { connectionString: databaseUrl };
 
 	const rootCertificatePath = process.env.PGSSLROOTCERT;
 	if (!rootCertificatePath) {
@@ -26,13 +31,17 @@ function createClient() {
 		url.searchParams.delete(key);
 	}
 
-	return new Client({
+	return {
 		connectionString: url.toString(),
 		ssl: {
 			ca: readFileSync(rootCertificatePath, "utf8"),
 			rejectUnauthorized: true,
 		},
-	});
+	};
+}
+
+function createClient() {
+	return new Client(connectionSettings());
 }
 
 const migrationsFolder = resolve(process.cwd(), "src/db/migrations");
@@ -120,7 +129,8 @@ async function main() {
 		// Doing it here rather than as a second command keeps the two from
 		// drifting apart, and it is a no-op where no runtime password is set.
 		await client.query("RESET ROLE");
-		await provisionRuntimeLogins(client, databaseNameFrom(databaseUrl));
+		const { connectionString, ssl } = connectionSettings();
+		await provisionRuntimeLogins(client, databaseNameFrom(databaseUrl), { adminUrl: connectionString, ssl });
 	} finally {
 		await client.end();
 	}
