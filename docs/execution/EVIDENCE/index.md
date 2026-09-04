@@ -382,3 +382,43 @@ pgTAP прогоняется одной командой: `packages/lib/scripts/
 
 Четвёртый пункт — не проектное решение, а следствие: публиковать в staging
 нечем даже при отказе первых трёх.
+
+
+## Три рантайма на staging — 04.09, вечер
+
+Доступ к Railway дал ключ проекта, положенный владельцем в API credentials среды:
+значение подставляет прокси Anthropic уже за пределами контейнера, поэтому в
+сессии его нет и в логах он не появляется.
+
+| Сервис | Итог | Чем подтверждено |
+|---|---|---|
+| `migrate` | SUCCESS | `runtime logins provisioned: selena_web_login, selena_gateway_login, selena_ingestion_login`; `skipped, no password set: selena_scanner_login, selena_worker_login` |
+| `worker` | SUCCESS | `pg-boss started` → `All handlers registered, worker is ready` → плановая проверка отработала: `No enabled brands found` |
+| `gateway` | SUCCESS | деплой с `healthcheckPath=/healthz` доходит до зелёного, а `/healthz` начинает отвечать только после `resolveSigningKey`: сервер слушает строкой ниже. Значит пара выпущена и лежит в `selena_release.gateway_signing_keys` |
+| `scanner` | не создан | нужен Supabase Storage, которого у staging нет. Причина и порядок — `docs/control-room/DEPLOYING.md`, §5 |
+
+Пароль логина `selena_gateway_login` создан генератором Railway (`${{secret(32)}}`)
+на сервисе `migrate` и оттуда подставляется ссылкой: значение не проходило ни через
+переписку, ни через репозиторий. То же с `SELENA_GATEWAY_INTERNAL_TOKEN`.
+
+### Что стоило одного лишнего деплоя
+
+`serviceCreate` принимает поле `branch`, молча его игнорирует и подключает
+репозиторий на ветке по умолчанию. Первый деплой `gateway` собрался из `main` и
+упал с `SELENA_GATEWAY_SIGNING_PRIVATE_KEY is required` — то есть кодом **до**
+миграции `0036`. Отказ был правильным: fail-closed сработал.
+
+Починка — `serviceInstanceDeploy(commitSha: …)`. Ключом проекта нельзя ни
+`serviceConnect`, ни `deploymentTriggerCreate` (оба отвечают отказом авторизации),
+поэтому автодеплой по ветке у `worker` и `gateway` **не настроен**: каждый
+следующий деплой этих двух сервисов нужно запускать с явным commit sha, пока
+ветка не слита в `main`.
+
+## Домен кабинета — 04.09
+
+`cabinet.selenasystems.com` добавлен к сервису `web`, `targetPort` взят из его
+`PORT`. Требуемая запись: `CNAME cabinet → jwqocf2e.up.railway.app`.
+
+Записей, как и в случае `studio.`, скорее всего **две**: API возвращает только
+CNAME, а `TXT _railway-verify.cabinet` виден лишь в диалоге «Configure DNS
+Records». Это стоило суток на предыдущем домене, поэтому записано здесь.
