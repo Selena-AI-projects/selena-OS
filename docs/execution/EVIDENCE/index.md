@@ -296,6 +296,61 @@ Uvicorn running on http://0.0.0.0:8080        ✓             ✓
 То есть соединение к базе установлено **с полной проверкой цепочки и имени
 хоста**.
 
+## Сертификат studio.selenasystems.com выдан, 2026-09-04
+
+Домен стоял в `VALIDATING_OWNERSHIP` больше суток при `errorMessage: null`.
+Разбор шёл не туда, потому что API описывал требования домена неполно.
+
+Что было исключено по дороге — с авторитетных серверов зоны, а не из панели:
+
+```
+studio.selenasystems.com — ровно одна запись, CNAME, больше ничего
+os.selenasystems.com     — то же самое по форме, сертификат при этом валиден
+selenasystems.com  CAA   — 0 issue "pki.goog" / "sectigo.com" / "letsencrypt.org"
+```
+
+CAA зоны к делу отношения не имеет дважды: Let's Encrypt в ней разрешён, и по
+RFC 8659 для имени-алиаса центр читает CAA из дерева цели CNAME, общего у обоих
+имён.
+
+**Настоящая причина.** Railway требует две записи, а `domain-status` возвращает
+одну:
+
+```
+dnsRecords: [ { CNAME studio → …up.railway.app, PROPAGATED } ]     ← всё, что отдаёт API
+
+диалог «Configure DNS Records» в панели:
+  ✅ CNAME  studio                  ijo38eh1.up.railway.app
+  ⚠️ TXT    _railway-verify.studio  railway-verify=14a68c3d…      ← её не существовало
+```
+
+Поэтому `errorMessage` был пуст, а запись помечалась `PROPAGATED`: проверялся
+только CNAME, до подтверждения владения дело не доходило. Недостающую запись
+нельзя было увидеть ни одним доступным инструментом — только глазами в панели.
+
+**После правки.** Владелец пересоздала домен (id `19d3bb27…` → `1696026f…`,
+цель `iu5dnw7q` → `ijo38eh1`) и добавила обе записи. Проверка с авторитетного
+сервера зоны `198.51.44.13`:
+
+```
+studio.selenasystems.com                  CNAME  ijo38eh1.up.railway.app.
+_railway-verify.studio.selenasystems.com  TXT    "railway-verify=14a68c3d1d9d7fa79f5bdd7e
+                                                  4779105657b42299d7f32b48320dfec6a7e4ff63"
+```
+
+Railway сразу после этого:
+
+```
+studio.selenasystems.com  verified: true   certificate: CERTIFICATE_STATUS_TYPE_VALID
+                          CNAME required == current == ijo38eh1.up.railway.app  PROPAGATED
+os.selenasystems.com      verified: true   certificate: CERTIFICATE_STATUS_TYPE_VALID
+                          цель прежняя d9vil0x9.up.railway.app — не затронут
+```
+
+Чего это не доказывает: вход, выход, обновление сессии и callback на новом
+адресе в браузере не проверялись. Сетевая политика среды не пропускает запросы
+к `studio.selenasystems.com` — шлюз отвечает `403` на CONNECT.
+
 ## Финальная приёмка, 2026-09-03
 
 Прогоны на текущем состоянии веток:
