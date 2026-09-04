@@ -253,6 +253,13 @@
       "when": 1787811000000,
       "tag": "0035_aether_bridge_inbox",
       "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1787811060000,
+      "tag": "0036_gateway_signing_key_custody",
+      "breakpoints": true
     }
   ]
 }
