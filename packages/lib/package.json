@@ -60,7 +60,9 @@
     "./recommendation-persistence": "./src/recommendation-persistence.ts",
     "./selena-aether-bridge": "./src/selena-aether-bridge.ts",
     "./contracts/control-room-event.v1.fixtures.json": "./src/contracts/control-room-event.v1.fixtures.json",
-    "./contracts/control-room-event.v1.schema.json": "./src/contracts/control-room-event.v1.schema.json"
+    "./contracts/control-room-event.v1.schema.json": "./src/contracts/control-room-event.v1.schema.json",
+    "./contracts/control-room-event.v1.1.fixtures.json": "./src/contracts/control-room-event.v1.1.fixtures.json",
+    "./contracts/control-room-event.v1.1.schema.json": "./src/contracts/control-room-event.v1.1.schema.json"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^4.0.27",
