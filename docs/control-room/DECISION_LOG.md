@@ -65,3 +65,19 @@
 - Authority: required implementation repair inside the authorized Railway
   staging deployment.
 - Affected requirements: S1-08.
+
+## 2026-09-06 — resolve the blind review's migration-numbering finding
+
+- Decision: update the master specification's verified baseline and database
+  headings to reflect the reconciled migration line: staging owns `0032`
+  through `0036`, Slice 1 uses `0037`, and the planned research and creation
+  migrations use `0038` and `0039`.
+- Evidence: the independent Claude Code Max blind review of `594cc3b6` found
+  that sections 2 and 9 still described the pre-reconciliation `0031` baseline
+  and the now-colliding `0032` through `0034` plan. The same review confirmed
+  the implemented Slice 1 profile/RLS/draft-only architecture; its findings
+  about Slices 2 through 4 are expected future work, not Slice 1 regressions.
+- Boundary: no research, creation, provider or publication capability is added.
+- Authority: required response to the exact-head review within the owner's
+  approved Slice 1 delivery loop.
+- Affected requirements: S1-08.
