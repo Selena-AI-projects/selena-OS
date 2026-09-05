@@ -34,28 +34,35 @@
 		"./providers/types": "./src/providers/types.ts",
 		"./entitlements": "./src/entitlements/index.ts",
 		"./run-policy": "./src/run-policy/index.ts",
-		"./usage": "./src/usage/cost.ts"
-		,"./selena-visibility-repositories": "./src/selena-visibility-repositories.ts",
+		"./usage": "./src/usage/cost.ts",
+		"./selena-visibility-repositories": "./src/selena-visibility-repositories.ts",
 		"./selena-export": "./src/selena-export.ts",
 		"./selena-measurement": "./src/selena-measurement.ts",
-		"./selena-findings": "./src/selena-findings.ts"
-		,"./selena-dataset-gateway": "./src/selena-dataset-gateway.ts"
-		,"./recommendation-engine": "./src/recommendation-engine.ts"
-		,"./website-collector": "./src/website-collector.ts"
-		,"./website-security": "./src/website-security.ts"
-		,"./selena-monitoring": "./src/selena-monitoring.ts"
-		,"./selena-flow": "./src/selena-flow.ts"
-		,"./selena-control-room": "./src/selena-control-room.ts"
-		,"./selena-private-storage": "./src/selena-private-storage.ts"
-		,"./selena-clamav": "./src/selena-clamav.ts"
-		,"./selena-release-gateway": "./src/selena-release-gateway.ts"
-		,"./selena-postiz": "./src/selena-postiz.ts"
-		,"./selena-postiz-ingestion": "./src/selena-postiz-ingestion.ts"
-		,"./content-workflow-repositories": "./src/content-workflow-repositories.ts"
-		,"./public-source-adapters": "./src/public-source-adapters.ts"
-		,"./public-provider-gates": "./src/public-provider-gates.ts"
-		,"./recommendation-persistence": "./src/recommendation-persistence.ts"
-		,"./recommendation-engine": "./src/recommendation-engine.ts"
+		"./selena-findings": "./src/selena-findings.ts",
+		"./selena-dataset-gateway": "./src/selena-dataset-gateway.ts",
+		"./recommendation-engine": "./src/recommendation-engine.ts",
+		"./website-collector": "./src/website-collector.ts",
+		"./website-security": "./src/website-security.ts",
+		"./selena-monitoring": "./src/selena-monitoring.ts",
+		"./selena-flow": "./src/selena-flow.ts",
+		"./content-workflow-repositories": "./src/content-workflow-repositories.ts",
+		"./selena-control-room": "./src/selena-control-room.ts",
+		"./selena-private-storage": "./src/selena-private-storage.ts",
+		"./selena-clamav": "./src/selena-clamav.ts",
+		"./selena-release-gateway": "./src/selena-release-gateway.ts",
+		"./selena-release-provider": "./src/selena-release-provider.ts",
+		"./selena-release-provider-postiz": "./src/selena-release-provider-postiz.ts",
+		"./selena-release-provider-blotato": "./src/selena-release-provider-blotato.ts",
+		"./selena-release-publish-policy": "./src/selena-release-publish-policy.ts",
+		"./selena-blotato": "./src/selena-blotato.ts",
+		"./selena-postiz": "./src/selena-postiz.ts",
+		"./selena-postiz-ingestion": "./src/selena-postiz-ingestion.ts",
+		"./public-source-adapters": "./src/public-source-adapters.ts",
+		"./public-provider-gates": "./src/public-provider-gates.ts",
+		"./recommendation-persistence": "./src/recommendation-persistence.ts",
+		"./selena-aether-bridge": "./src/selena-aether-bridge.ts",
+		"./contracts/control-room-event.v1.fixtures.json": "./src/contracts/control-room-event.v1.fixtures.json",
+		"./contracts/control-room-event.v1.schema.json": "./src/contracts/control-room-event.v1.schema.json"
 	},
 	"dependencies": {
 		"@ai-sdk/anthropic": "^4.0.27",

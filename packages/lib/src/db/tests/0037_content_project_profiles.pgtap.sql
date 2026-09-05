@@ -249,10 +249,10 @@ SELECT throws_matching(
 );
 SELECT is(
   (
-    (SELECT count(*) FROM selena_registry.channel_accounts) +
-    (SELECT count(*) FROM selena_release.release_intents) +
-    (SELECT count(*) FROM selena_release.outbox_events) +
-    (SELECT count(*) FROM selena_release.publication_attempts)
+    (SELECT count(*) FROM selena_registry.channel_accounts WHERE organization_id = 'content-org') +
+    (SELECT count(*) FROM selena_release.release_intents WHERE organization_id = 'content-org') +
+    (SELECT count(*) FROM selena_release.outbox_events WHERE organization_id = 'content-org') +
+    (SELECT count(*) FROM selena_release.publication_attempts WHERE organization_id = 'content-org')
   )::integer,
   0,
   'Slice 1 creates no account, release intent, outbox event or publication attempt'

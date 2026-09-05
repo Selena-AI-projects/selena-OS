@@ -15,7 +15,7 @@ Run the Slice 1 assertions from the repository root:
 ```bash
 SELENA_DISPOSABLE_DATABASE_URL=postgres://... \
   pnpm --filter @workspace/lib test:pgtap \
-  src/db/tests/0032_content_project_profiles.pgtap.sql
+  src/db/tests/0037_content_project_profiles.pgtap.sql
 ```
 
 The runner refuses to start without the explicitly named disposable URL,

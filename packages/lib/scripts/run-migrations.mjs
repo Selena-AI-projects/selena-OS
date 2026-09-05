@@ -1,9 +1,10 @@
-import { copyFileSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
 import { Client } from "pg";
+import { databaseNameFrom, provisionRuntimeLogins } from "./provision-runtime-logins.mjs";
 
 const isStagingMvp = process.env.SELENA_STAGING_MVP === "true";
 const databaseUrl = process.env.SELENA_MIGRATION_DATABASE_URL ?? process.env.DATABASE_URL;
@@ -12,8 +13,13 @@ if (!databaseUrl) {
 	throw new Error("DATABASE_URL is required for the migration runner");
 }
 
-function createClient() {
-	if (!isStagingMvp) return new Client({ connectionString: databaseUrl });
+/**
+ * The connection settings every connection to this database must use, so the
+ * runtime logins are verified over the same transport the migrations ran on
+ * rather than an unencrypted one that happened to be easier to build.
+ */
+function connectionSettings() {
+	if (!isStagingMvp) return { connectionString: databaseUrl };
 
 	const rootCertificatePath = process.env.PGSSLROOTCERT;
 	if (!rootCertificatePath) {
@@ -25,19 +31,32 @@ function createClient() {
 		url.searchParams.delete(key);
 	}
 
-	return new Client({
+	return {
 		connectionString: url.toString(),
 		ssl: {
 			ca: readFileSync(rootCertificatePath, "utf8"),
 			rejectUnauthorized: true,
 		},
-	});
+	};
+}
+
+function createClient() {
+	return new Client(connectionSettings());
 }
 
 const migrationsFolder = resolve(process.cwd(), "src/db/migrations");
 
 function schemaOwnerExists(client) {
 	return client.query("SELECT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'selena_schema_owner') AS exists");
+}
+
+/**
+ * Roles live in the cluster, not in the database. A second database beside an
+ * existing one therefore starts with the roles already present and no ledger of
+ * its own, so the role alone cannot answer "has this database been set up yet".
+ */
+function migrationLedgerExists(client) {
+	return client.query("SELECT to_regclass('drizzle.__drizzle_migrations') IS NOT NULL AS exists");
 }
 
 function createBootstrapMigrationsFolder() {
@@ -47,7 +66,8 @@ function createBootstrapMigrationsFolder() {
 	const journal = JSON.parse(readFileSync(join(migrationsFolder, "meta", "_journal.json"), "utf8"));
 	const entries = journal.entries.filter((entry) => entry.idx <= 21);
 	writeFileSync(join(metaFolder, "_journal.json"), `${JSON.stringify({ ...journal, entries }, null, 2)}\n`);
-	for (const entry of entries) copyFileSync(join(migrationsFolder, `${entry.tag}.sql`), join(bootstrapFolder, `${entry.tag}.sql`));
+	for (const entry of entries)
+		copyFileSync(join(migrationsFolder, `${entry.tag}.sql`), join(bootstrapFolder, `${entry.tag}.sql`));
 	return bootstrapFolder;
 }
 
@@ -83,10 +103,11 @@ async function main() {
 		}
 
 		const roleCheck = await schemaOwnerExists(client);
-		if (!roleCheck.rows[0]?.exists) {
-			if (isStagingMvp) {
-				throw new Error("staging migration login requires the pre-provisioned selena_schema_owner role");
-			}
+		if (isStagingMvp && !roleCheck.rows[0]?.exists) {
+			throw new Error("staging migration login requires the pre-provisioned selena_schema_owner role");
+		}
+		const ledgerCheck = isStagingMvp ? null : await migrationLedgerExists(client);
+		if (!isStagingMvp && (!ledgerCheck?.rows[0]?.exists || !roleCheck.rows[0]?.exists)) {
 			const bootstrapFolder = createBootstrapMigrationsFolder();
 			try {
 				await migrate(drizzle({ client }), { migrationsFolder: bootstrapFolder });
@@ -101,6 +122,15 @@ async function main() {
 			migrationsFolder,
 		});
 		console.log("migrations applied successfully");
+
+		// Bringing a database up to what the application needs does not end at
+		// the schema: the runtime roles the migrations create are NOLOGIN groups,
+		// so a deployment still cannot connect until a login exists for them.
+		// Doing it here rather than as a second command keeps the two from
+		// drifting apart, and it is a no-op where no runtime password is set.
+		await client.query("RESET ROLE");
+		const { connectionString, ssl } = connectionSettings();
+		await provisionRuntimeLogins(client, databaseNameFrom(databaseUrl), { adminUrl: connectionString, ssl });
 	} finally {
 		await client.end();
 	}

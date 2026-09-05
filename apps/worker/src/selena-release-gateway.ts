@@ -2,7 +2,11 @@ import { randomUUID, timingSafeEqual } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { assertStagingDatabaseTls } from "@workspace/lib/db/staging-tls";
-import { assertImmutablePublicationPackage, signReleaseManifest } from "@workspace/lib/selena-release-gateway";
+import {
+	assertImmutablePublicationPackage,
+	ensureGatewaySigningKey,
+	signReleaseManifest,
+} from "@workspace/lib/selena-release-gateway";
 import { Pool, type PoolClient } from "pg";
 
 const GATEWAY_CONTEXT = { organizationId: "__gateway__", brandId: "__gateway__" };
@@ -99,6 +103,28 @@ async function createSignedManifest(input: {
 	}
 }
 
+/**
+ * A supplied key still wins, because an operator who already runs a key
+ * management system should keep using it. What changed is the fallback: an
+ * absent key no longer stops the gateway from starting, it makes the gateway
+ * mint one and leave it in the database, where the grants decide who may read
+ * it. The previous fallback was a person pasting a private key into a hosting
+ * panel, which put the value in a clipboard and a deploy log on the way.
+ */
+async function resolveSigningKey(pool: Pool): Promise<{ privateKey: string; version: string }> {
+	const suppliedKey = process.env.SELENA_GATEWAY_SIGNING_PRIVATE_KEY;
+	if (suppliedKey) {
+		return { privateKey: suppliedKey, version: requiredEnv("SELENA_GATEWAY_SIGNING_KEY_VERSION") };
+	}
+	const client = await pool.connect();
+	try {
+		const key = await ensureGatewaySigningKey(client);
+		return { privateKey: key.privateKeyPem, version: key.version };
+	} finally {
+		client.release();
+	}
+}
+
 async function readJson(request: IncomingMessage): Promise<{ releaseIntentId: string }> {
 	const chunks: Buffer[] = [];
 	let size = 0;
@@ -122,9 +148,8 @@ function sendJson(response: ServerResponse, status: number, body: Record<string,
 
 export async function startSelenaReleaseGateway(): Promise<void> {
 	const token = requiredEnv("SELENA_GATEWAY_INTERNAL_TOKEN");
-	const privateKey = requiredEnv("SELENA_GATEWAY_SIGNING_PRIVATE_KEY");
-	const signingKeyVersion = requiredEnv("SELENA_GATEWAY_SIGNING_KEY_VERSION");
 	const pool = createGatewayPool(requiredEnv("DATABASE_URL"));
+	const { privateKey, version: signingKeyVersion } = await resolveSigningKey(pool);
 	const port = Number.parseInt(process.env.SELENA_GATEWAY_PORT ?? "8082", 10);
 	if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error("SELENA_GATEWAY_PORT is invalid");
 

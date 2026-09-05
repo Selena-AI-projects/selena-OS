@@ -3,7 +3,7 @@ import { resolve } from "node:path";
 import { Client } from "pg";
 
 const databaseUrl = process.env.SELENA_DISPOSABLE_DATABASE_URL;
-const suitePath = resolve(process.cwd(), process.argv[2] ?? "src/db/tests/0032_content_project_profiles.pgtap.sql");
+const suitePath = resolve(process.cwd(), process.argv[2] ?? "src/db/tests/0037_content_project_profiles.pgtap.sql");
 
 if (!databaseUrl) {
 	throw new Error(

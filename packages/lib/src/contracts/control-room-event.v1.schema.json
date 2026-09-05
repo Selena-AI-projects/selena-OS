@@ -1,0 +1,71 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://selenasystems.com/contracts/control-room-event.v1.schema.json",
+  "title": "Aether → Control Room event envelope, version 1",
+  "description": "Версионированный конверт события. Меняется только вместе с schema_version: получатель обязан отвергать конверт, версию которого не знает, а не догадываться о смысле полей.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "event_id",
+    "event_type",
+    "project_id",
+    "aggregate_id",
+    "version",
+    "occurred_at",
+    "trace_id",
+    "payload",
+    "payload_hash"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "1",
+      "description": "Версия самого конверта, а не полезной нагрузки."
+    },
+    "event_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Ключ идемпотентности на проводе: повтор с тем же event_id не должен создавать второй Inbox item.",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "event_type": {
+      "type": "string",
+      "enum": ["task.result.ready"],
+      "description": "Результат Aether готов к разбору. Одобрением и публикацией это событие не является."
+    },
+    "project_id": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" },
+    "aggregate_id": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+      "description": "Задача, к которой относится событие."
+    },
+    "version": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Монотонная версия агрегата. Событие с версией не больше уже принятой игнорируется — так порядок доставки перестаёт иметь значение."
+    },
+    "occurred_at": { "type": "string", "format": "date-time" },
+    "trace_id": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+      "description": "Сквозной идентификатор для сопоставления записей в Aether, транспорте и аудите Control Room."
+    },
+    "payload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["title", "status", "summary"],
+      "properties": {
+        "title": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "status": { "type": "string", "enum": ["pending_approval", "approved", "rejected", "done"] },
+        "summary": { "type": "string", "maxLength": 4000 },
+        "artifact_count": { "type": "integer", "minimum": 0 }
+      },
+      "description": "Только то, что нужно для карточки Inbox. Ни рассуждений агента, ни содержимого артефактов, ни персональных данных здесь быть не должно."
+    },
+    "payload_hash": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$",
+      "description": "sha256 канонизированной полезной нагрузки. Получатель обязан пересчитать его сам: совпадение подписи доказывает подлинность отправителя, а хеш — что нагрузку не подменили между сериализацией и отправкой."
+    }
+  }
+}

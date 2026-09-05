@@ -282,8 +282,8 @@ rows. The PostgreSQL implementation is an adapter in `@workspace/lib`.
 
 - [ ] Inspect migrations `0021`, `0024` and `0031` for current schema, role,
   audit and RLS conventions.
-- [ ] Add `0032_content_project_profiles.sql` without modifying prior files.
-- [ ] Register migration `0032` in
+- [ ] Add `0037_content_project_profiles.sql` without modifying prior files.
+- [ ] Register migration `0037` in
   `packages/lib/src/db/migrations/meta/_journal.json`; inspect the current
   Drizzle convention and record whether a matching snapshot JSON is required.
 - [ ] Add `brand_content_profile_versions` with monotonic per-brand versions,
@@ -302,7 +302,7 @@ rows. The PostgreSQL implementation is an adapter in `@workspace/lib`.
   full profile bodies.
 - [ ] Synchronize `packages/lib/src/db/schema.ts` using the repository's existing
   migration/schema convention.
-- [ ] Add `packages/lib/src/db/tests/0032_content_project_profiles.pgtap.sql`.
+- [ ] Add `packages/lib/src/db/tests/0037_content_project_profiles.pgtap.sql`.
 - [ ] Add and document the repository's disposable pgTAP runner, including its
   prerequisites, exact command and non-zero failure behavior; keep this harness
   separate from the `0032` assertions it executes.
@@ -349,8 +349,8 @@ rows. The PostgreSQL implementation is an adapter in `@workspace/lib`.
 - [ ] Config/lib/web typechecks for changed packages pass.
 - [ ] Targeted Biome check for changed files passes without new error-level
   findings.
-- [ ] Migration chain through `0032` applies to a clean disposable database,
-  and the migration receipt reports the new `0032` journal tag as applied.
+- [ ] Migration chain through `0037` applies to a clean disposable database,
+  and the migration receipt reports the new `0037` journal tag as applied.
 - [ ] The disposable pgTAP harness bootstraps successfully, then the actual
   `0032` pgTAP suite runs and reports its assertions independently.
 - [ ] pgTAP proves RLS, cross-brand denial, append-only versions/decisions,
@@ -420,8 +420,8 @@ tenant identity.
 
 #### B. Migration 0033 and persistence
 
-- [ ] Add `0033_content_research_registry.sql`.
-- [ ] Register migration `0033` in
+- [ ] Add `0038_content_research_registry.sql`.
+- [ ] Register migration `0038` in
   `packages/lib/src/db/migrations/meta/_journal.json`; inspect the current
   Drizzle convention and record whether a matching snapshot JSON is required.
 - [ ] Add brand-scoped research runs, sources, metric snapshots, opportunities
@@ -432,7 +432,7 @@ tenant identity.
 - [ ] Preserve transcript permission, language, retrieval and failure state;
   store `UNAVAILABLE` instead of invented text.
 - [ ] Enable and force RLS and add least-privilege grants.
-- [ ] Add `0033_content_research_registry.pgtap.sql` covering cross-brand
+- [ ] Add `0038_content_research_registry.pgtap.sql` covering cross-brand
   read/write/link denial and append-only behavior.
 
 #### C. Adapters and server operations
@@ -470,7 +470,7 @@ tenant identity.
 
 - [ ] Ported compatibility tests pass at the research module interface.
 - [ ] Fixture output is deterministic.
-- [ ] Migration chain through `0033` and paired pgTAP pass on a clean disposable
+- [ ] Migration chain through `0038` and paired pgTAP pass on a clean disposable
   database; the migration receipt reports the new `0033` journal tag as applied.
 - [ ] Unconfirmed/revoked profiles block research.
 - [ ] Foreign-brand profiles, sources and opportunities cannot be linked or
@@ -550,8 +550,8 @@ server-side; there is no global key configuration.
 
 #### B. Migration 0034 and V2 content
 
-- [ ] Add `0034_structured_content_and_editorial_review.sql`.
-- [ ] Register migration `0034` in
+- [ ] Add `0039_structured_content_and_editorial_review.sql`.
+- [ ] Register migration `0039` in
   `packages/lib/src/db/migrations/meta/_journal.json`; inspect the current
   Drizzle convention and record whether a matching snapshot JSON is required.
 - [ ] Add backward-compatible content kind, channel and workflow-stage fields.
@@ -607,7 +607,7 @@ server-side; there is no global key configuration.
 - [ ] V2 hashes change when any specified identity or evidence input changes.
 - [ ] Invalid output cannot become a content version.
 - [ ] An unconfirmed or revoked profile blocks idea and script generation.
-- [ ] Migration chain through `0034` and paired pgTAP pass on a clean disposable
+- [ ] Migration chain through `0039` and paired pgTAP pass on a clean disposable
   database; the migration receipt reports the new `0034` journal tag as applied.
 - [ ] Duplicate generation delivery resumes the same run.
 - [ ] Browser flow covers six ideas, selection, script and immutable revision.

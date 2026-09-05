@@ -18,8 +18,8 @@
 - `pnpm --filter @workspace/web build` — PASS (Node 22.23.0; repository requests Node 24.x, so the engine warning remains)
 - `pnpm --filter @workspace/lib test` — PASS (576 tests)
 - `pnpm --filter @workspace/web test` — PASS (261 tests)
-- clean disposable PostgreSQL 16 migration chain — PASS (33 migrations through `0032`)
-- disposable pgTAP — PASS (44/44 assertions)
+- clean disposable PostgreSQL 16 migration chain — PASS (38 migrations through `0037`)
+- disposable pgTAP — PASS (all 15 suites, 215/215 assertions; Slice 1 is 44/44)
 - real PostgreSQL repository adapter test — PASS (1 integration test; ordinary suites skip it unless an explicit disposable URL is supplied)
 - `npx impeccable detect` on the changed profile UI — PASS (no findings)
 - Railway-compatible Node 24 Docker build for the web image — PASS

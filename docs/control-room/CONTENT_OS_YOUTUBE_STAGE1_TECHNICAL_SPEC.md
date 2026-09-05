@@ -447,20 +447,20 @@ Audit metadata contains IDs, hashes, versions, status and normalized error codes
 - add feature flag `CONTENT_OS_STAGE1_ENABLED`, default false outside explicit local/test configuration;
 - add neutral navigation shell without provider functionality.
 ### Slice 1: profile and draft YouTube target
-- migration `0032` and pgTAP;
+- migration `0037` and pgTAP;
 - profile domain module and server adapter;
 - profile UI and owner confirmation;
 - draft-only YouTube channel card;
 - no provider calls.
 ### Slice 2: research
-- migration `0033` and pgTAP;
+- migration `0038` and pgTAP;
 - port Video Radar core with provenance;
 - brand-scoped Postgres store adapter;
 - fixture/import mode first;
 - research and opportunity UI;
 - optional live adapter remains disabled until an explicit provider budget gate exists.
 ### Slice 3: ideas and scripts
-- migration `0034` and pgTAP;
+- migration `0039` and pgTAP;
 - V2 content hash with V1 compatibility tests;
 - port YouTubePro evidence, idea and script contracts;
 - fixture creation path;

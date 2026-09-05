@@ -35,3 +35,33 @@
   merge, Railway staging deploy, миграцию staging и включение canary-флага.
   YouTube-публикацию не включать”.
 - Affected requirements: S1-02 through S1-08.
+
+## 2026-09-06 — reconcile the deployed staging line before delivery
+
+- Decision: merge the branch currently deployed by the dedicated Railway
+  staging project into the Slice 1 candidate before deployment, then reconcile
+  the canonical `main` branch and staging to the same reviewed SHA.
+- Evidence: Railway deploys `claude/new-session-r64y7u`, which already contains
+  migrations `0032` through `0036`; deploying the pre-reconciliation Slice 1
+  branch would remove live staging code and collide with migration `0032`.
+- Consequence: the project-profile migration is renumbered to `0037`; planned
+  research and structured-content migrations move to `0038` and `0039`.
+- Alternatives rejected: overwrite staging from stale `main`, or keep two
+  different migrations numbered `0032`.
+- Authority: safe implementation step within the owner's authorized staging
+  migration, deploy and merge boundary.
+- Affected requirements: S1-02, S1-07, S1-08.
+
+## 2026-09-06 — make the Railway dependency layer workspace-complete
+
+- Decision: copy every workspace package manifest present in the Docker build
+  context before the frozen install, including `apps/www`, `packages/docs` and
+  `packages/selena-visibility-contracts`.
+- Evidence: the merged staging Dockerfile installed only a partial workspace;
+  after source copy, pnpm tried to resolve the newly discovered packages during
+  the build step. With the complete manifest set, the Node 24 web build runs
+  directly against the frozen dependency layer.
+- Boundary: no dependency or lockfile version was changed.
+- Authority: required implementation repair inside the authorized Railway
+  staging deployment.
+- Affected requirements: S1-08.

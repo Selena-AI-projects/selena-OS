@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { db } from "@workspace/lib/db/db";
 import {
+	brands,
 	svCycles,
 	svOrders,
 	svProjectProfiles,
@@ -18,6 +19,27 @@ const repositories = createSelenaRepositories(db);
 export const listSelenaProjectsFn = createServerFn({ method: "GET" }).handler(async () => {
 	const context = await resolveSessionAuthContext();
 	return repositories.projects.list(context);
+});
+
+/**
+ * The brand Content OS opens, or null when this tenant has none.
+ *
+ * Resolved here rather than from a list of the user's brands, because the
+ * Control Room establishes its database context under one organization: the
+ * one `resolveSessionAuthContext` picks. A brand belonging to any other
+ * organization the same user is a member of passes every check in the
+ * application and is then refused by `selena_registry.set_request_context`,
+ * whose membership lookup joins brand to organization. That refusal surfaces
+ * as a bare 404, so the mismatch has to be prevented here, not diagnosed later.
+ */
+export const getContentOsBrandFn = createServerFn({ method: "GET" }).handler(async () => {
+	const context = await resolveSessionAuthContext();
+	const [brand] = await db
+		.select({ id: brands.id })
+		.from(brands)
+		.where(eq(brands.organizationId, context.tenantId))
+		.limit(1);
+	return { brandId: brand?.id ?? null };
 });
 
 export const getSelenaWorkspaceFn = createServerFn({ method: "GET" }).handler(async () => {
