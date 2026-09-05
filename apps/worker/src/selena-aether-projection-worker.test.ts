@@ -39,9 +39,27 @@ const accepted = (name: string) => {
 		new Date(Date.parse(entry.timestamp)),
 	).envelope;
 };
-const article = accepted("accepted_article");
-const social = accepted("accepted_social");
-const PROJECT_ID = article.project_id;
+// The published fixtures name one fixed project and fixed event ids. A database
+// reused from an earlier run would already hold that project's binding and those
+// events, so every run addresses a project of its own, as the sender would.
+const PROJECT_ID = randomUUID();
+function ownProject<
+	T extends {
+		project_id: string;
+		aggregate_id: string;
+		event_id: string;
+		payload: { brief_ref: string; content_kind: string };
+	},
+>(envelope: T): T {
+	return {
+		...envelope,
+		event_id: randomUUID(),
+		project_id: PROJECT_ID,
+		aggregate_id: materialAggregateId(PROJECT_ID, envelope.payload.brief_ref, envelope.payload.content_kind),
+	};
+}
+const article = ownProject(accepted("accepted_article"));
+const social = ownProject(accepted("accepted_social"));
 
 function loginUrl(login: string): string {
 	const url = new URL(adminUrl as string);
@@ -93,6 +111,10 @@ run("projecting materials as the registry worker", () => {
 
 	beforeAll(async () => {
 		admin = new Pool({ connectionString: adminUrl });
+		// The worker claims the oldest claimable event in the whole inbox, so events
+		// left behind by an earlier run on this disposable database would be answered
+		// before the ones this run records.
+		await admin.query("DELETE FROM selena_ingest_raw.aether_events");
 		for (const [login, group] of [
 			[WORKER_LOGIN, "selena_registry_worker_runtime"],
 			[INGEST_LOGIN, "selena_ingestion_runtime"],
@@ -294,6 +316,32 @@ run("projecting materials as the registry worker", () => {
 		expect(
 			await countRows("SELECT count(*) AS n FROM selena_registry.content_versions WHERE brand_id = $1", [BRAND_A]),
 		).toBe(3);
+	});
+
+	it("defers a material for a bound brand that has no content policy yet", async () => {
+		const BRAND_C = `vitest-brand-c-${SUFFIX}`;
+		await admin.query(
+			"INSERT INTO public.brands (id, name, website, organization_id) VALUES ($1, $1, 'https://c.example.invalid', $2)",
+			[BRAND_C, ORG_A],
+		);
+		const unpoliced = { ...article, event_id: randomUUID(), project_id: randomUUID(), version: 1 };
+		unpoliced.aggregate_id = materialAggregateId(unpoliced.project_id, unpoliced.payload.brief_ref, "ARTICLE");
+		await asOwner(BRAND_C, ORG_A, (client) =>
+			client.query("SELECT selena_registry.confirm_growth_binding($1, $2::uuid, 'selena', 'local')", [
+				BRAND_C,
+				unpoliced.project_id,
+			]),
+		);
+		expect(await receive(unpoliced)).toBe("recorded");
+		expect(await projectOnce(worker, "local")).toMatchObject({
+			kind: "deferred",
+			eventId: unpoliced.event_id,
+			code: "NO_CONTENT_POLICY",
+		});
+		expect(
+			await countRows("SELECT count(*) AS n FROM selena_registry.content_versions WHERE brand_id = $1", [BRAND_C]),
+		).toBe(0);
+		expect(await projectOnce(worker, "local")).toEqual({ kind: "idle" });
 	});
 
 	it("leaves the worker unable to read bindings, approvals or manifests directly", async () => {

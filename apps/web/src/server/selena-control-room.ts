@@ -1155,6 +1155,12 @@ export const queueReleaseIntentFn = createServerFn({ method: "POST" })
 			if (!version || !account || latestDecision?.id !== approval.id || latestDecision.decision !== "APPROVED") {
 				throw new Error("Approval is no longer the current exact release decision");
 			}
+			// A version whose own checks failed or were never done cannot be released, even
+			// with an approval on record: the gate and the approval both say so.
+			const ownChecks = disclosureBlocksApproval(version.disclosure);
+			if (ownChecks.qaFailed || ownChecks.needsVerification) {
+				throw new Error("This version's own checks still block release");
+			}
 			const [policy] = await tx
 				.select({ requireEvidence: scrContentPolicies.requireEvidence })
 				.from(scrContentPolicies)

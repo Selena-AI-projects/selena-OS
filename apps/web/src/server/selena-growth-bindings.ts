@@ -13,6 +13,7 @@ import { scrGrowthProjectBindings } from "@workspace/lib/db/schema";
 import { isInteractiveOwnerSession } from "@workspace/lib/selena-control-room";
 import { and, desc, eq, sql } from "drizzle-orm";
 import { z } from "zod";
+import { assertGrowthSourcesEnabled } from "../lib/growth-engine-stage1.server";
 import { resolveSessionAuthContext } from "../lib/selena-auth-context.server";
 import type { AuthContext } from "../lib/selena-authz";
 
@@ -69,6 +70,8 @@ export const listGrowthBindingsFn = createServerFn({ method: "GET" })
 export const confirmGrowthBindingFn = createServerFn({ method: "POST" })
 	.validator(confirmSchema)
 	.handler(async ({ data }) => {
+		// The UI hides the form while the stage is off; the server function is reachable regardless.
+		assertGrowthSourcesEnabled();
 		const context = await resolveSessionAuthContext();
 		assertOwner(context);
 		return inBrandContext(context, data.brandId, async (tx) => {
@@ -87,6 +90,7 @@ export const confirmGrowthBindingFn = createServerFn({ method: "POST" })
 export const revokeGrowthBindingFn = createServerFn({ method: "POST" })
 	.validator(revokeSchema)
 	.handler(async ({ data }) => {
+		assertGrowthSourcesEnabled();
 		const context = await resolveSessionAuthContext();
 		assertOwner(context);
 		return inBrandContext(context, data.brandId, async (tx) => {

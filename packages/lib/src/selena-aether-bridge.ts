@@ -34,7 +34,7 @@ export const SUPPORTED_SCHEMA_VERSIONS: ReadonlySet<string> = new Set([SCHEMA_VE
 export const EVENT_TASK_RESULT_READY = "task.result.ready";
 export const EVENT_CONTENT_DRAFT_READY = "content.draft_ready";
 /**
- * Material aggregate ids are derived, not chosen: uuid5 of `<brief_ref>:<kind>`
+ * Material aggregate ids are derived, not chosen: uuid5 of `<project_id>:<brief_ref>:<kind>`
  * in this namespace. The sender and the receiver both compute it, so a sender
  * cannot point a material at an aggregate that is not its own.
  */
