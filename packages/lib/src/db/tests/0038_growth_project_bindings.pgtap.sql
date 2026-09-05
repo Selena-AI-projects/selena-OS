@@ -39,7 +39,7 @@ SELECT ok(
 );
 
 -- An owner session in brand A confirms a binding.
-SET ROLE selena_pgtap_gb_web;
+SET SESSION AUTHORIZATION selena_pgtap_gb_web;
 SELECT selena_registry.set_request_context('selena-pgtap-gb-user-a', 'selena-pgtap-gb-org-a', 'selena-pgtap-gb-brand-a',
   'owner', 'aaaaaaaa-0000-4000-8000-000000000001', 'web', 'session');
 SELECT lives_ok(
@@ -83,10 +83,10 @@ SELECT is(
    WHERE brand_id = 'selena-pgtap-gb-brand-a' AND action = 'growth.binding_confirmed'),
   1, 'the confirmation is on the audit chain'
 );
-RESET ROLE;
+RESET SESSION AUTHORIZATION;
 
 -- A member of the same brand is not an owner.
-SET ROLE selena_pgtap_gb_web;
+SET SESSION AUTHORIZATION selena_pgtap_gb_web;
 SELECT selena_registry.set_request_context('selena-pgtap-gb-member', 'selena-pgtap-gb-org-a', 'selena-pgtap-gb-brand-a',
   'member', 'aaaaaaaa-0000-4000-8000-000000000002', 'web', 'session');
 SELECT throws_ok(
@@ -95,10 +95,10 @@ SELECT throws_ok(
   'Only an interactive owner session for this brand may confirm a growth binding',
   'a member cannot confirm a binding'
 );
-RESET ROLE;
+RESET SESSION AUTHORIZATION;
 
 -- The other organization's owner sees nothing and cannot claim the same project.
-SET ROLE selena_pgtap_gb_web;
+SET SESSION AUTHORIZATION selena_pgtap_gb_web;
 SELECT selena_registry.set_request_context('selena-pgtap-gb-user-b', 'selena-pgtap-gb-org-b', 'selena-pgtap-gb-brand-b',
   'owner', 'aaaaaaaa-0000-4000-8000-000000000003', 'web', 'session');
 SELECT is(
@@ -117,10 +117,10 @@ SELECT lives_ok(
     '0b6f1d2e-3c4b-4a59-8d6e-7f8091a2b3c4', 'selena', 'staging')$$,
   'the same project may be bound in a different environment'
 );
-RESET ROLE;
+RESET SESSION AUTHORIZATION;
 
 -- The worker resolves only through its function and only in its own identity.
-SET ROLE selena_pgtap_gb_worker;
+SET SESSION AUTHORIZATION selena_pgtap_gb_worker;
 SELECT throws_ok(
   $$SELECT * FROM selena_registry.resolve_growth_binding('0b6f1d2e-3c4b-4a59-8d6e-7f8091a2b3c4', 'local')$$,
   'Only the registry worker may resolve a growth binding',
@@ -149,19 +149,19 @@ SELECT throws_ok(
   NULL,
   'the worker cannot read the bindings table directly'
 );
-RESET ROLE;
+RESET SESSION AUTHORIZATION;
 
-SET ROLE selena_pgtap_gb_ingestion;
+SET SESSION AUTHORIZATION selena_pgtap_gb_ingestion;
 SELECT throws_ok(
   $$SELECT * FROM selena_registry.resolve_growth_binding('0b6f1d2e-3c4b-4a59-8d6e-7f8091a2b3c4', 'local')$$,
   '42501',
   NULL,
   'the ingestion runtime (the receiver) cannot resolve bindings at all'
 );
-RESET ROLE;
+RESET SESSION AUTHORIZATION;
 
 -- Revocation stops resolution and is the only permitted change.
-SET ROLE selena_pgtap_gb_web;
+SET SESSION AUTHORIZATION selena_pgtap_gb_web;
 SELECT selena_registry.set_request_context('selena-pgtap-gb-user-a', 'selena-pgtap-gb-org-a', 'selena-pgtap-gb-brand-a',
   'owner', 'aaaaaaaa-0000-4000-8000-000000000004', 'web', 'session');
 SELECT lives_ok(
@@ -170,8 +170,8 @@ SELECT lives_ok(
     'pgtap revocation')$$,
   'the owner revokes the binding'
 );
-RESET ROLE;
-SET ROLE selena_pgtap_gb_worker;
+RESET SESSION AUTHORIZATION;
+SET SESSION AUTHORIZATION selena_pgtap_gb_worker;
 SELECT set_config('app.selena_service_identity', 'registry_worker', true);
 SELECT set_config('app.selena_actor_id', 'service:registry-worker', true);
 SELECT set_config('app.selena_auth_type', 'service', true);
@@ -179,7 +179,7 @@ SELECT is(
   (SELECT count(*)::int FROM selena_registry.resolve_growth_binding('0b6f1d2e-3c4b-4a59-8d6e-7f8091a2b3c4', 'local')),
   0, 'a revoked binding no longer resolves'
 );
-RESET ROLE;
+RESET SESSION AUTHORIZATION;
 
 SELECT * FROM finish();
 ROLLBACK;

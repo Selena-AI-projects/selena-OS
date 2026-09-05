@@ -47,6 +47,11 @@ export const SOURCE_KINDS = ["OWN", "EXTERNAL", "SYNTHETIC_FIXTURE"] as const;
 /** Inline body only, measured in UTF-8 bytes; artifact references are not part of 1.1. */
 export const BODY_MARKDOWN_MAX_BYTES = 48_000;
 export const CTA_URL_MAX_LENGTH = 2048;
+/**
+ * The receiver's limit for a whole HTTP body. It sits above the largest envelope
+ * the contract can produce with every field at its limit, and a test keeps it so.
+ */
+export const MAX_EVENT_BODY_BYTES = 512 * 1024;
 export const SIGNATURE_HEADER = "x-selena-signature";
 export const TIMESTAMP_HEADER = "x-selena-timestamp";
 export const TIMESTAMP_TOLERANCE_MS = 5 * 60 * 1000;
@@ -135,18 +140,37 @@ export function uuidV5(namespace: string, name: string): string {
 	return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20, 32)}`;
 }
 
-export function materialAggregateId(briefRef: string, contentKind: string): string {
-	return uuidV5(GROWTH_MATERIAL_NAMESPACE, `${briefRef}:${contentKind}`);
+/** The project is part of the name so that knowing another project's task id buys nothing. */
+export function materialAggregateId(projectId: string, briefRef: string, contentKind: string): string {
+	return uuidV5(GROWTH_MATERIAL_NAMESPACE, `${projectId}:${briefRef}:${contentKind}`);
 }
 
 const LANGUAGE = /^[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8})*$/;
 const BUSINESS_KEY = /^[a-z_]{2,32}$/;
+/** RFC 3339 with a mandatory zone, checked as text: the platforms' date parsers disagree. */
+const RFC3339 = /^\d{4}-\d{2}-\d{2}[Tt]\d{2}:\d{2}:\d{2}(\.\d{1,9})?([Zz]|[+-]\d{2}:\d{2})$/;
+/** The textual https form both sides share: printable ASCII only (IDN as punycode), no `@` in the authority, no `#`. */
+const HTTPS_URL = /^https:\/\/[\x21-\x22\x24-\x2e\x30-\x3e\x41-\x7e]+(?:[/?][\x21-\x22\x24-\x7e]*)?$/;
+
+/** Lengths are code points, as in JSON Schema and on the sender; only the body is counted in bytes. */
+function codePoints(value: string): number {
+	let count = 0;
+	for (const _ of value) count += 1;
+	return count;
+}
 
 function requireString(value: unknown, field: string, min: number, max: number): string {
-	if (typeof value !== "string" || value.length < min || value.length > max) {
+	if (typeof value !== "string") throw new EventRejected("payload", `${field} must be a string`);
+	if (!value.isWellFormed()) throw new EventRejected("payload", `${field} contains a lone surrogate`);
+	const length = codePoints(value);
+	if (length < min || length > max) {
 		throw new EventRejected("payload", `${field} must be a string of ${min}-${max} characters`);
 	}
 	return value;
+}
+
+export function isRfc3339(value: unknown): value is string {
+	return typeof value === "string" && RFC3339.test(value);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -155,7 +179,8 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function requireKeys(value: Record<string, unknown>, field: string, allowed: string[], required: string[]): void {
 	const unknown = Object.keys(value).filter((key) => !allowed.includes(key));
-	if (unknown.length > 0) throw new EventRejected("payload", `${field} has unknown fields: ${unknown.join(", ")}`);
+	// The count, never the names: foreign keys of any length must not reach a log line.
+	if (unknown.length > 0) throw new EventRejected("payload", `${field} has ${unknown.length} unknown field(s)`);
 	const missing = required.filter((key) => !(key in value));
 	if (missing.length > 0) throw new EventRejected("payload", `${field} is missing fields: ${missing.join(", ")}`);
 }
@@ -166,20 +191,30 @@ function requireKeys(value: Record<string, unknown>, field: string, allowed: str
  * credentials, no fragment.
  */
 export function validateCtaUrl(value: unknown): string {
-	if (typeof value !== "string" || value.length === 0 || value.length > CTA_URL_MAX_LENGTH) {
-		throw new EventRejected("payload", "metadata.cta_url is missing or too long");
+	return validateHttpsUrl(value, "metadata.cta_url");
+}
+
+/**
+ * Shared check for every https address in the contract. The textual form comes
+ * first because it is the part both sides agree on exactly; the parser then
+ * rejects what looks like an address but is not one.
+ */
+export function validateHttpsUrl(value: unknown, field: string): string {
+	if (typeof value !== "string" || value.length === 0 || codePoints(value) > CTA_URL_MAX_LENGTH) {
+		throw new EventRejected("payload", `${field} is missing or too long`);
+	}
+	if (!HTTPS_URL.test(value)) {
+		throw new EventRejected("payload", `${field} must be an absolute https url without credentials or fragment`);
 	}
 	let url: URL;
 	try {
 		url = new URL(value);
 	} catch {
-		throw new EventRejected("payload", "metadata.cta_url is not a url");
+		throw new EventRejected("payload", `${field} is not a url`);
 	}
-	if (url.protocol !== "https:" || !url.hostname) {
-		throw new EventRejected("payload", "metadata.cta_url must be an absolute https url");
+	if (url.protocol !== "https:" || !url.hostname || url.username || url.password || url.hash) {
+		throw new EventRejected("payload", `${field} must be an absolute https url without credentials or fragment`);
 	}
-	if (url.username || url.password) throw new EventRejected("payload", "metadata.cta_url must not carry credentials");
-	if (url.hash) throw new EventRejected("payload", "metadata.cta_url must not carry a fragment");
 	return value;
 }
 
@@ -228,6 +263,7 @@ export function validateContentDraftPayload(payload: unknown): ContentDraftPaylo
 
 	const body = payload.body_markdown;
 	if (typeof body !== "string" || body.length === 0) throw new EventRejected("payload", "body_markdown is empty");
+	if (!body.isWellFormed()) throw new EventRejected("payload", "body_markdown contains a lone surrogate");
 	const bodyBytes = Buffer.byteLength(body, "utf8");
 	if (bodyBytes > BODY_MARKDOWN_MAX_BYTES) {
 		throw new EventRejected(
@@ -250,15 +286,14 @@ export function validateContentDraftPayload(payload: unknown): ContentDraftPaylo
 		["meta_title", 200],
 		["meta_description", 500],
 	] as const) {
-		if (field in metadata) requireString(metadata[field], `metadata.${field}`, 0, limit);
+		if (field in metadata) requireString(metadata[field], `metadata.${field}`, 1, limit);
 	}
-	const links = metadata.internal_links ?? [];
-	if (!Array.isArray(links) || links.length > 20)
-		throw new EventRejected("payload", "metadata.internal_links must hold at most 20 urls");
-	for (const link of links) {
-		if (typeof link !== "string" || !link.startsWith("https://") || link.length > CTA_URL_MAX_LENGTH) {
-			throw new EventRejected("payload", "metadata.internal_links accepts only https urls");
+	if ("internal_links" in metadata) {
+		const links = metadata.internal_links;
+		if (!Array.isArray(links) || links.length > 20) {
+			throw new EventRejected("payload", "metadata.internal_links must be a list of at most 20 urls");
 		}
+		for (const link of links) validateHttpsUrl(link, "metadata.internal_links");
 	}
 
 	const claims = payload.claims;
@@ -271,7 +306,7 @@ export function validateContentDraftPayload(payload: unknown): ContentDraftPaylo
 		if (!(CLAIM_STATUSES as readonly string[]).includes(claim.status as string)) {
 			throw new EventRejected("payload", "claims.status is unknown");
 		}
-		if ("source_ref" in claim) requireString(claim.source_ref, "claims.source_ref", 0, 500);
+		if ("source_ref" in claim) requireString(claim.source_ref, "claims.source_ref", 1, 500);
 	}
 
 	const evidence = payload.evidence;
@@ -282,8 +317,8 @@ export function validateContentDraftPayload(payload: unknown): ContentDraftPaylo
 		requireKeys(item, "evidence", ["kind", "ref", "captured_at"], ["kind", "ref", "captured_at"]);
 		requireString(item.kind, "evidence.kind", 1, 50);
 		requireString(item.ref, "evidence.ref", 1, 500);
-		if (typeof item.captured_at !== "string" || Number.isNaN(Date.parse(item.captured_at))) {
-			throw new EventRejected("payload", "evidence.captured_at is not a date");
+		if (!isRfc3339(item.captured_at)) {
+			throw new EventRejected("payload", "evidence.captured_at is not an RFC 3339 date with a zone");
 		}
 	}
 
@@ -395,6 +430,9 @@ function requireUuid(envelope: Record<string, unknown>, field: string): void {
 }
 
 export function parseEnvelope(body: string): EventEnvelope {
+	// A lone surrogate survives JSON.parse but not the database's jsonb, and the
+	// sender could never have hashed it: refuse it here rather than retry forever.
+	if (!body.isWellFormed()) throw new EventRejected("body", "body is not well-formed unicode");
 	let parsed: unknown;
 	try {
 		parsed = JSON.parse(body);
@@ -425,23 +463,25 @@ export function parseEnvelope(body: string): EventEnvelope {
 	if (!Number.isInteger(envelope.version) || (envelope.version as number) < 1) {
 		throw new EventRejected("fields", "aggregate version must be a positive integer");
 	}
-	if (typeof envelope.occurred_at !== "string" || Number.isNaN(Date.parse(envelope.occurred_at))) {
-		throw new EventRejected("fields", "occurred_at is not a date");
+	if (!isRfc3339(envelope.occurred_at)) {
+		throw new EventRejected("fields", "occurred_at is not an RFC 3339 date with a zone");
 	}
 
 	const payload = envelope.payload;
 	if (payload === null || typeof payload !== "object" || Array.isArray(payload)) {
 		throw new EventRejected("payload", "payload is not an object");
 	}
+	// The hash is checked before the payload's own rules, for both versions, so
+	// that a body which merely disagrees with its hash is named for that and not
+	// for a field inside it.
+	if (typeof envelope.payload_hash !== "string" || payloadHash(payload) !== envelope.payload_hash) {
+		throw new EventRejected("payload_hash", "payload_hash does not match the payload");
+	}
 	if (isDraft) {
-		// The hash is checked before the payload's own rules so that a body which
-		// merely disagrees with its hash is named for that, not for a field inside.
-		if (typeof envelope.payload_hash !== "string" || payloadHash(payload) !== envelope.payload_hash) {
-			throw new EventRejected("payload_hash", "payload_hash does not match the payload");
-		}
 		const draft = validateContentDraftPayload(payload);
-		if (envelope.aggregate_id !== materialAggregateId(draft.brief_ref, draft.content_kind)) {
-			throw new EventRejected("payload", "aggregate_id is not derived from brief_ref and content_kind");
+		const expected = materialAggregateId(envelope.project_id as string, draft.brief_ref, draft.content_kind);
+		if (envelope.aggregate_id !== expected) {
+			throw new EventRejected("payload", "aggregate_id is not derived from project_id, brief_ref and content_kind");
 		}
 		return envelope as unknown as EventEnvelope;
 	}
@@ -458,10 +498,6 @@ export function parseEnvelope(body: string): EventEnvelope {
 	}
 	if (artifactCount !== undefined && (!Number.isInteger(artifactCount) || (artifactCount as number) < 0)) {
 		throw new EventRejected("payload", "artifact_count must be a non-negative integer");
-	}
-
-	if (typeof envelope.payload_hash !== "string" || payloadHash(payload) !== envelope.payload_hash) {
-		throw new EventRejected("payload_hash", "payload_hash does not match the payload");
 	}
 
 	return envelope as unknown as EventEnvelope;

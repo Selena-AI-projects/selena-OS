@@ -15,8 +15,10 @@ import {
 	GROWTH_MATERIAL_NAMESPACE,
 	isContentDraftEvent,
 	isStale,
+	MAX_EVENT_BODY_BYTES,
 	materialAggregateId,
 	parseEnvelope,
+	QA_CHECKS,
 	SCHEMA_VERSION_1_1,
 	validateContentDraftPayload,
 	validateCtaUrl,
@@ -44,6 +46,45 @@ describe("what the sender and the receiver agree on for materials", () => {
 	it("shares the namespace and the body limit with the sender", () => {
 		expect(fixtures.material_namespace).toBe(GROWTH_MATERIAL_NAMESPACE);
 		expect(fixtures.body_markdown_max_bytes).toBe(BODY_MARKDOWN_MAX_BYTES);
+		expect(fixtures.max_event_body_bytes).toBe(MAX_EVENT_BODY_BYTES);
+	});
+
+	it("keeps the largest possible envelope under the receiver's body limit", () => {
+		const entry = byName("accepted_article");
+		const envelope = JSON.parse(entry.body) as { payload: Record<string, unknown> };
+		// Every free-text code point is four bytes wide: the worst case by bytes.
+		const w = "😀";
+		const url = `https://${"h".repeat(2039)}/`;
+		const maximal = {
+			...envelope,
+			payload: {
+				...envelope.payload,
+				title: w.repeat(200),
+				language: "ru-Cyrl-RU-1234",
+				body_markdown: "a".repeat(BODY_MARKDOWN_MAX_BYTES),
+				metadata: {
+					cta_url: url,
+					slug: w.repeat(200),
+					meta_title: w.repeat(200),
+					meta_description: w.repeat(500),
+					internal_links: Array.from({ length: 20 }, () => url),
+				},
+				claims: Array.from({ length: 50 }, () => ({
+					text: w.repeat(500),
+					status: "UNKNOWN",
+					source_ref: w.repeat(500),
+				})),
+				evidence: Array.from({ length: 50 }, () => ({
+					kind: w.repeat(50),
+					ref: w.repeat(500),
+					captured_at: "2026-09-06T00:00:00.000000000+00:00",
+				})),
+				qa_results: QA_CHECKS.map((check) => ({ check, verdict: "UNKNOWN", detail: w.repeat(500) })),
+				source: { kind: "SYNTHETIC_FIXTURE", ref: w.repeat(500), rights: w.repeat(200) },
+			},
+		};
+		expect(() => validateContentDraftPayload(maximal.payload)).not.toThrow();
+		expect(Buffer.byteLength(JSON.stringify(maximal), "utf8")).toBeLessThan(MAX_EVENT_BODY_BYTES);
 	});
 
 	it.each(["accepted_article", "accepted_social"])("accepts %s and derives the same aggregate id", (name) => {
@@ -54,7 +95,9 @@ describe("what the sender and the receiver agree on for materials", () => {
 		expect(isContentDraftEvent(envelope)).toBe(true);
 		if (!isContentDraftEvent(envelope)) return;
 		expect(envelope.aggregate_id).toBe(entry.expected_aggregate_id);
-		expect(envelope.aggregate_id).toBe(materialAggregateId(envelope.payload.brief_ref, envelope.payload.content_kind));
+		expect(envelope.aggregate_id).toBe(
+			materialAggregateId(envelope.project_id, envelope.payload.brief_ref, envelope.payload.content_kind),
+		);
 		expect(envelope.payload.source.kind).toBe("SYNTHETIC_FIXTURE");
 	});
 
@@ -138,6 +181,16 @@ describe("every way a material event can be wrong", () => {
 			"qa_check_repeated",
 			"claim_status_unknown_value",
 			"unknown_payload_field",
+			"internal_links_null",
+			"internal_links_too_many",
+			"cta_url_empty_fragment",
+			"cta_url_empty_userinfo",
+			"evidence_captured_at_not_rfc3339",
+			"title_too_long",
+			"language_trailing_newline",
+			"claims_too_many",
+			"source_kind_unknown",
+			"unknown_metadata_field",
 		]);
 	});
 
@@ -184,16 +237,42 @@ describe("every way a material event can be wrong", () => {
 			"not a url",
 			"http://a.b/c",
 			"https://u:p@a.b/c",
+			"https://:@a.b/c",
 			"https://a.b/c#frag",
+			"https://a.b/c#",
+			"https://a b/c",
+			"https://a.b:99999/c",
+			"https://[::1/x",
 			`https://a.b/${"x".repeat(2100)}`,
 		]) {
 			expect(() => validateCtaUrl(bad)).toThrow(EventRejected);
 		}
 	});
 
+	it("measures string limits in code points and refuses lone surrogates", () => {
+		const entry = byName("accepted_article");
+		const payload = (JSON.parse(entry.body) as { payload: Record<string, unknown> }).payload;
+		expect(() => validateContentDraftPayload({ ...payload, title: "😀".repeat(200) })).not.toThrow();
+		expect(() => validateContentDraftPayload({ ...payload, title: "😀".repeat(201) })).toThrow(EventRejected);
+		expect(() => validateContentDraftPayload({ ...payload, title: "bad \ud800 title" })).toThrow(/lone surrogate/);
+		expect(() => parseEnvelope('{"a":"\ud800"}')).toThrow(EventRejected);
+	});
+
+	it("accepts a version 1 task event carried in a 1.1 envelope, on purpose", () => {
+		const entry = byName("task_result_in_1_1_envelope");
+		const { envelope } = acceptEvent(entry.body, headers(entry), SECRETS, now(entry));
+		expect(envelope.event_type).toBe("task.result.ready");
+		expect(envelope.schema_version).toBe(SCHEMA_VERSION_1_1);
+	});
+
+	it("accepts a body of exactly the byte limit", () => {
+		const entry = byName("body_markdown_exactly_at_limit");
+		expect(() => acceptEvent(entry.body, headers(entry), SECRETS, now(entry))).not.toThrow();
+	});
+
 	it("never lets the payload carry an artifact reference in this version", () => {
 		const entry = byName("accepted_article");
 		const payload = (JSON.parse(entry.body) as { payload: Record<string, unknown> }).payload;
-		expect(() => validateContentDraftPayload({ ...payload, artifact_ref: { id: "x" } })).toThrow(/unknown fields/);
+		expect(() => validateContentDraftPayload({ ...payload, artifact_ref: { id: "x" } })).toThrow(/unknown field/);
 	});
 });
