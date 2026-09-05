@@ -33,13 +33,12 @@ import { CONTENT_PRODUCT_DESCRIPTION, CONTENT_PRODUCT_NAME } from "@/lib/content
 import { resetPostHog } from "@/lib/posthog";
 import { getLastSelenaProduct, rememberSelenaProduct, type SelenaProduct } from "@/lib/selena-product-entry";
 import { humanizeSelenaError } from "@/lib/selena-workspace-errors";
-import { getBrands } from "../../../server/brands";
-import { createSelenaProjectFn, getSelenaWorkspaceFn } from "../../../server/selena-client";
+import { createSelenaProjectFn, getContentOsBrandFn, getSelenaWorkspaceFn } from "../../../server/selena-client";
 import { confirmSelenaProfileFn } from "../../../server/selena-onboarding";
 import { collectSelenaWebsiteFn } from "../../../server/selena-website-collector";
 
 export const Route = createFileRoute("/_authed/app/selena")({
-	loader: async () => ({ workspace: await getSelenaWorkspaceFn(), brands: await getBrands() }),
+	loader: async () => ({ workspace: await getSelenaWorkspaceFn(), contentOs: await getContentOsBrandFn() }),
 	pendingComponent: WorkspaceSkeleton,
 	component: SelenaWorkspace,
 });
@@ -59,11 +58,11 @@ const emptyProfileForm = {
 };
 
 function SelenaWorkspace() {
-	const { workspace, brands } = Route.useLoaderData();
+	const { workspace, contentOs } = Route.useLoaderData();
 	const { projects } = workspace;
-	// The first brand is the one Content OS opens; without one there is nothing
-	// to review, so the entry leads to creating a brand rather than to a 404.
-	const contentBrandId = brands[0]?.id ?? null;
+	// Null when this organization has no brand yet, which is the state a fresh
+	// cabinet starts in: the entry then leads to creating one, not to a 404.
+	const contentBrandId = contentOs.brandId;
 	const router = useRouter();
 	const { user } = useAuth();
 	const [selectedProduct, setSelectedProduct] = useState<SelenaProduct | null>(null);
