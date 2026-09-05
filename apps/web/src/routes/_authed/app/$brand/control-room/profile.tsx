@@ -1,12 +1,14 @@
-import { IconCheck, IconCirclePlus, IconLock, IconPlayerPause, IconRefresh } from "@tabler/icons-react";
+import { IconCheck, IconCirclePlus, IconLock, IconPlayerPause, IconRefresh, IconTrash } from "@tabler/icons-react";
 import { createFileRoute, useRouter } from "@tanstack/react-router";
+import type { FactState } from "@workspace/content-workflow/profile";
 import { Badge } from "@workspace/ui/components/badge";
 import { Button } from "@workspace/ui/components/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@workspace/ui/components/card";
 import { Input } from "@workspace/ui/components/input";
 import { Label } from "@workspace/ui/components/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@workspace/ui/components/select";
 import { Textarea } from "@workspace/ui/components/textarea";
-import { useState, useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
 import { CONTENT_PRODUCT_NAME } from "@/lib/content-product";
 import {
 	createContentProfileVersionFn,
@@ -28,16 +30,23 @@ function splitLines(value: string): string[] {
 		.filter(Boolean);
 }
 
-function parseFacts(value: string) {
-	return splitLines(value).map((line) => {
-		const separator = line.indexOf("=");
-		return {
-			id: separator > 0 ? line.slice(0, separator).trim() : line,
-			statement: separator > 0 ? line.slice(separator + 1).trim() : line,
-			state: "UNKNOWN" as const,
-			sourceRefs: [],
-		};
-	});
+type FactDraft = {
+	localId: number;
+	id: string;
+	statement: string;
+	state: FactState;
+	sourceRefs: string;
+};
+
+const FACT_STATES: { value: FactState; label: string; requirement: string }[] = [
+	{ value: "UNKNOWN", label: "Unknown", requirement: "Not eligible for factual claims" },
+	{ value: "VERIFIED", label: "Verified", requirement: "Requires at least one source URL" },
+	{ value: "DISPUTED", label: "Disputed", requirement: "Excluded from factual claims" },
+	{ value: "PROHIBITED", label: "Prohibited", requirement: "Must not have source URLs" },
+];
+
+function blankFact(localId: number): FactDraft {
+	return { localId, id: "", statement: "", state: "UNKNOWN", sourceRefs: "" };
 }
 
 function ProjectProfilePage() {
@@ -52,7 +61,8 @@ function ProjectProfilePage() {
 	const [ctaRules, setCtaRules] = useState("");
 	const [visualRules, setVisualRules] = useState("");
 	const [claimRules, setClaimRules] = useState("Only use confirmed sources for factual claims.");
-	const [facts, setFacts] = useState("");
+	const nextFactId = useRef(1);
+	const [facts, setFacts] = useState<FactDraft[]>([blankFact(0)]);
 	const [sourceRefs, setSourceRefs] = useState("");
 	const [notice, setNotice] = useState<{ kind: "success" | "error"; message: string } | null>(null);
 
@@ -77,6 +87,30 @@ function ProjectProfilePage() {
 			setNotice({ kind: "error", message: "Add at least one language, a primary audience and one voice trait." });
 			return;
 		}
+		const enteredFacts = facts.filter(
+			(fact) => fact.id.trim() || fact.statement.trim() || fact.sourceRefs.trim() || fact.state !== "UNKNOWN",
+		);
+		if (enteredFacts.some((fact) => !fact.id.trim() || !fact.statement.trim())) {
+			setNotice({ kind: "error", message: "Every fact needs both a key and a statement." });
+			return;
+		}
+		if (enteredFacts.some((fact) => fact.state === "VERIFIED" && splitLines(fact.sourceRefs).length === 0)) {
+			setNotice({ kind: "error", message: "Every Verified fact needs at least one source URL." });
+			return;
+		}
+		if (enteredFacts.some((fact) => fact.state === "PROHIBITED" && splitLines(fact.sourceRefs).length > 0)) {
+			setNotice({ kind: "error", message: "A Prohibited fact cannot have source URLs." });
+			return;
+		}
+		const normalizedFacts = enteredFacts.map((fact) => ({
+			id: fact.id.trim(),
+			statement: fact.statement.trim(),
+			state: fact.state,
+			sourceRefs: splitLines(fact.sourceRefs),
+		}));
+		const allSourceRefs = [...splitLines(sourceRefs), ...normalizedFacts.flatMap((fact) => fact.sourceRefs)].filter(
+			(uri, index, values) => values.indexOf(uri) === index,
+		);
 		run(
 			() =>
 				createContentProfileVersionFn({
@@ -89,8 +123,8 @@ function ProjectProfilePage() {
 							ctaRules: splitLines(ctaRules),
 							visualRules: { palette: [], imagery: splitLines(visualRules), avoid: [] },
 							claimRules: { requireSources: true, allowedStates: ["VERIFIED"] },
-							facts: parseFacts(facts),
-							sourceRefs: splitLines(sourceRefs).map((uri) => ({ uri })),
+							facts: normalizedFacts,
+							sourceRefs: allSourceRefs.map((uri) => ({ uri })),
 						},
 					},
 				}),
@@ -141,6 +175,7 @@ function ProjectProfilePage() {
 					<div className="space-y-2">
 						<Label htmlFor="profile-audience">Primary audience</Label>
 						<Input
+							className="min-h-11"
 							id="profile-audience"
 							value={audience}
 							onChange={(event) => setAudience(event.target.value)}
@@ -183,14 +218,118 @@ function ProjectProfilePage() {
 							disabled
 						/>
 					</div>
-					<div className="space-y-2 md:col-span-2">
-						<Label htmlFor="profile-facts">Project facts</Label>
-						<Textarea
-							id="profile-facts"
-							value={facts}
-							onChange={(event) => setFacts(event.target.value)}
-							placeholder="key=value, one fact per line. New facts start as UNKNOWN."
-						/>
+					<div className="space-y-3 md:col-span-2">
+						<div>
+							<p className="text-sm font-medium">Project facts</p>
+							<p className="mt-1 text-xs text-muted-foreground">
+								Set the evidence state for each fact. Only Verified facts with a source can enter future factual claims.
+							</p>
+						</div>
+						{facts.map((fact, index) => {
+							const selectedState = FACT_STATES.find((option) => option.value === fact.state);
+							return (
+								<div className="grid gap-3 rounded-md border p-3 md:grid-cols-2" key={fact.localId}>
+									<div className="space-y-2">
+										<Label htmlFor={`profile-fact-${fact.localId}-key`}>Fact key</Label>
+										<Input
+											className="min-h-11"
+											id={`profile-fact-${fact.localId}-key`}
+											value={fact.id}
+											onChange={(event) =>
+												setFacts((current) =>
+													current.map((entry) =>
+														entry.localId === fact.localId ? { ...entry, id: event.target.value } : entry,
+													),
+												)
+											}
+											placeholder="e.g. opening-location"
+										/>
+									</div>
+									<div className="space-y-2">
+										<Label htmlFor={`profile-fact-${fact.localId}-state`}>Evidence state</Label>
+										<Select
+											value={fact.state}
+											onValueChange={(value: FactState) =>
+												setFacts((current) =>
+													current.map((entry) =>
+														entry.localId === fact.localId
+															? { ...entry, state: value, sourceRefs: value === "PROHIBITED" ? "" : entry.sourceRefs }
+															: entry,
+													),
+												)
+											}
+										>
+											<SelectTrigger className="min-h-11 w-full" id={`profile-fact-${fact.localId}-state`}>
+												<SelectValue />
+											</SelectTrigger>
+											<SelectContent>
+												{FACT_STATES.map((option) => (
+													<SelectItem className="min-h-11" key={option.value} value={option.value}>
+														{option.label}
+													</SelectItem>
+												))}
+											</SelectContent>
+										</Select>
+										<p className="text-xs text-muted-foreground">{selectedState?.requirement}</p>
+									</div>
+									<div className="space-y-2 md:col-span-2">
+										<Label htmlFor={`profile-fact-${fact.localId}-statement`}>Fact statement</Label>
+										<Textarea
+											id={`profile-fact-${fact.localId}-statement`}
+											value={fact.statement}
+											onChange={(event) =>
+												setFacts((current) =>
+													current.map((entry) =>
+														entry.localId === fact.localId ? { ...entry, statement: event.target.value } : entry,
+													),
+												)
+											}
+											placeholder="A factual statement about this project"
+										/>
+									</div>
+									<div className="space-y-2 md:col-span-2">
+										<Label htmlFor={`profile-fact-${fact.localId}-sources`}>Fact source URLs</Label>
+										<Textarea
+											disabled={fact.state === "PROHIBITED"}
+											id={`profile-fact-${fact.localId}-sources`}
+											value={fact.sourceRefs}
+											onChange={(event) =>
+												setFacts((current) =>
+													current.map((entry) =>
+														entry.localId === fact.localId ? { ...entry, sourceRefs: event.target.value } : entry,
+													),
+												)
+											}
+											placeholder="One source URL per line"
+										/>
+									</div>
+									{facts.length > 1 && (
+										<div className="md:col-span-2">
+											<Button
+												className="min-h-11"
+												type="button"
+												onClick={() => setFacts((current) => current.filter((entry) => entry.localId !== fact.localId))}
+												variant="ghost"
+											>
+												<IconTrash aria-hidden="true" /> Remove fact {index + 1}
+											</Button>
+										</div>
+									)}
+								</div>
+							);
+						})}
+						<Button
+							className="min-h-11"
+							type="button"
+							onClick={() => {
+								const localId = nextFactId.current;
+								nextFactId.current += 1;
+								setFacts((current) => [...current, blankFact(localId)]);
+							}}
+							variant="outline"
+						>
+							<IconCirclePlus aria-hidden="true" /> Add another fact
+						</Button>
 					</div>
 					<div className="space-y-2 md:col-span-2">
 						<Label htmlFor="profile-sources">Source references</Label>

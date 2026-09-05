@@ -494,7 +494,7 @@ Audit metadata contains IDs, hashes, versions, status and normalized error codes
 - V2 hashes change when profile, research, content, evidence or asset identity changes;
 - invalid provider output cannot become a content version.
 ### Disposable PostgreSQL and pgTAP
-- migrations `0000..0034` apply on a clean disposable database;
+- migrations `0000..0039` apply on a clean disposable database;
 - new tables have `ENABLE` and `FORCE ROW LEVEL SECURITY`;
 - cross-brand SELECT/INSERT/UPDATE/DELETE is denied;
 - profile and editorial decisions require an interactive owner;

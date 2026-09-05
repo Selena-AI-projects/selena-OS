@@ -9,7 +9,7 @@
 - **Slice 0 empty reconciliation PR / merge:** `#26` / `39ec0ea3cf9b945babeaa288a49ef31d157035b8`
 - **Execution plan PR:** `#27`
 - **Execution plan merge commit:** `PENDING`
-- **Execution boundary:** local and disposable infrastructure only; no external publication
+- **Execution boundary:** local and disposable infrastructure by default; Slice 1 is separately authorized through the dedicated Railway staging project; no production or external publication
 
 ## 1. Purpose
 
@@ -51,6 +51,11 @@ Before a slice starts, the owner confirms:
 
 The Stage 1 defaults are no paid calls, no production or shared staging
 mutation, no OAuth, no publication, no merge by Codex and no deployment.
+These defaults may be overridden only by explicit, per-slice owner authority
+recorded in the decision log. For Slice 1, the owner authorized disposable
+PostgreSQL, commit, push, merge, the dedicated Railway staging migration and
+deployment, and the canary flag on 2026-09-06. That authorization does not
+include production, YouTube OAuth, live provider calls or publication.
 
 ### 2.2 Codex branch and goal
 
@@ -220,8 +225,8 @@ Each slice has one status:
 | Step | Outcome | Status | Evidence / next gate |
 |---|---|---|---|
 | 0 | Product contract and neutral shell | `MERGED` | Content delta `ab50d742..ef1ea56f`, PR #25; PR #26 / `39ec0ea3` reconciled the already-merged branch with an empty delta; retrospective review remains incomplete |
-| Plan | Detailed Stage 1 execution control | `CHANGES_REQUESTED` | PR #27; local Claude reviews of `26625c96` and `93bcd76c`; corrections and fresh exact-SHA review required |
-| 1 | Profile and draft YouTube target | `NOT_STARTED` | Plan PR merged; branch from its exact merge SHA; owner start gate, disk and Node preflight |
+| Plan | Detailed Stage 1 execution control | `PR_OPEN` | PR #27 remains open; its corrected content is also carried in Slice 1 PR #28 and is reviewed with that exact head SHA |
+| 1 | Profile and draft YouTube target | `PR_OPEN` | PR #28; local and disposable PostgreSQL evidence complete; exact-head CI, blind review, owner-authorized merge and dedicated staging canary remain |
 | 2 | Research | `NOT_STARTED` | Accepted Slice 1 merge SHA |
 | 3 | Ideas and scripts | `NOT_STARTED` | Accepted Slice 2 merge SHA and source-transfer authorization |
 | 4 | Thumbnails and editorial approval | `NOT_STARTED` | Accepted Slice 3 merge SHA and private-storage acceptance path |
@@ -278,7 +283,7 @@ rows. The PostgreSQL implementation is an adapter in `@workspace/lib`.
 - [ ] Test the module through its public interface, including normalization,
   hash stability and invalid fact/source combinations.
 
-#### B. Migration 0032 and schema
+#### B. Migration 0037 and schema
 
 - [ ] Inspect migrations `0021`, `0024` and `0031` for current schema, role,
   audit and RLS conventions.
@@ -305,7 +310,7 @@ rows. The PostgreSQL implementation is an adapter in `@workspace/lib`.
 - [ ] Add `packages/lib/src/db/tests/0037_content_project_profiles.pgtap.sql`.
 - [ ] Add and document the repository's disposable pgTAP runner, including its
   prerequisites, exact command and non-zero failure behavior; keep this harness
-  separate from the `0032` assertions it executes.
+  separate from the `0037` assertions it executes.
 
 #### C. PostgreSQL adapter and server handlers
 
@@ -352,7 +357,7 @@ rows. The PostgreSQL implementation is an adapter in `@workspace/lib`.
 - [ ] Migration chain through `0037` applies to a clean disposable database,
   and the migration receipt reports the new `0037` journal tag as applied.
 - [ ] The disposable pgTAP harness bootstraps successfully, then the actual
-  `0032` pgTAP suite runs and reports its assertions independently.
+  `0037` pgTAP suite runs and reports its assertions independently.
 - [ ] pgTAP proves RLS, cross-brand denial, append-only versions/decisions,
   interactive-owner decisions and draft-only channel constraints.
 - [ ] Server tests prove member versus owner permissions.
@@ -418,7 +423,7 @@ tenant identity.
 - [ ] Preserve or replace tests at the research module interface; do not layer
   duplicate tests around shallow helpers.
 
-#### B. Migration 0033 and persistence
+#### B. Migration 0038 and persistence
 
 - [ ] Add `0038_content_research_registry.sql`.
 - [ ] Register migration `0038` in
@@ -471,7 +476,7 @@ tenant identity.
 - [ ] Ported compatibility tests pass at the research module interface.
 - [ ] Fixture output is deterministic.
 - [ ] Migration chain through `0038` and paired pgTAP pass on a clean disposable
-  database; the migration receipt reports the new `0033` journal tag as applied.
+  database; the migration receipt reports the new `0038` journal tag as applied.
 - [ ] Unconfirmed/revoked profiles block research.
 - [ ] Foreign-brand profiles, sources and opportunities cannot be linked or
   observed.
@@ -548,7 +553,7 @@ server-side; there is no global key configuration.
 - [ ] Keep teleprompter functionality outside Stage 1 unless the owner adds it
   to the master specification before this slice starts.
 
-#### B. Migration 0034 and V2 content
+#### B. Migration 0039 and V2 content
 
 - [ ] Add `0039_structured_content_and_editorial_review.sql`.
 - [ ] Register migration `0039` in
@@ -566,7 +571,7 @@ server-side; there is no global key configuration.
 - [ ] Add editorial approvals bound to content, profile, evidence and asset
   bundle hashes, without `channel_account_id`.
 - [ ] Add release fail-closed constraints for `YOUTUBE_VIDEO`.
-- [ ] Enable and force RLS and add paired `0034` pgTAP coverage.
+- [ ] Enable and force RLS and add paired `0039` pgTAP coverage.
 
 #### C. Creation implementation
 
@@ -608,7 +613,7 @@ server-side; there is no global key configuration.
 - [ ] Invalid output cannot become a content version.
 - [ ] An unconfirmed or revoked profile blocks idea and script generation.
 - [ ] Migration chain through `0039` and paired pgTAP pass on a clean disposable
-  database; the migration receipt reports the new `0034` journal tag as applied.
+  database; the migration receipt reports the new `0039` journal tag as applied.
 - [ ] Duplicate generation delivery resumes the same run.
 - [ ] Browser flow covers six ideas, selection, script and immutable revision.
 - [ ] With `CONTENT_OS_STAGE1_ENABLED` unset, the ideas/scripts routes and
@@ -733,7 +738,7 @@ evidence. This is local acceptance only.
 - [ ] Set `CONTENT_OS_STAGE1_ENABLED=true` only in the disposable local/test
   configuration used for the enabled acceptance pass; do not change shared or
   production configuration.
-- [ ] Apply the complete migration chain `0000..0034`.
+- [ ] Apply the complete migration chain `0000..0039`.
 - [ ] Seed two organizations, two users and isolated brands with synthetic data.
 - [ ] Use fixture research, creation and thumbnail adapters only.
 - [ ] Record `externalProviderCalls = 0` before and after the run.
@@ -764,7 +769,7 @@ evidence. This is local acceptance only.
   results.
 - [ ] Database evidence: migration receipt, pgTAP result, tenant-denial queries
   and zero release/outbox/publication rows; the receipt must report journal tags
-  `0032`, `0033` and `0034` as applied.
+  `0037`, `0038` and `0039` as applied.
 - [ ] Browser evidence: route-by-route screenshots or trace with no secrets.
 - [ ] Provider evidence: fixture adapters and zero external calls/cost.
 - [ ] GitHub evidence: PR URL, exact SHA and actual CI conclusions.

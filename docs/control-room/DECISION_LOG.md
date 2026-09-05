@@ -22,6 +22,8 @@
 - Evidence: repository instructions require an explicitly disposable database and separate external gates.
 - Authority: repository safety rules.
 - Affected requirements: S1-02, S1-03, S1-07.
+- Status: superseded for database execution by the explicit 2026-09-06 staging
+  authorization below; the provider prohibition remains active.
 
 ## 2026-09-06 — authorize Slice 1 delivery through staging
 
@@ -81,3 +83,19 @@
 - Authority: required response to the exact-head review within the owner's
   approved Slice 1 delivery loop.
 - Affected requirements: S1-08.
+
+## 2026-09-06 — make fact evidence states authorable in the profile UI
+
+- Decision: replace the facts-only textarea with repeatable fact controls for
+  the fact key, statement, evidence state and fact-specific source URLs.
+- Evidence: the independent Claude Code Max blind review of `9a61082d`
+  confirmed the domain and persistence rules but found that the UI forced all
+  new facts to `UNKNOWN`, leaving no user path to create a sourced `VERIFIED`
+  fact or explicitly record `DISPUTED` and `PROHIBITED` states.
+- Invariants: `VERIFIED` requires a source; `PROHIBITED` cannot carry a source;
+  only sourced `VERIFIED` facts can enter future factual-claim context.
+- Boundary: this changes draft authoring only and adds no provider, OAuth,
+  release or publication capability.
+- Authority: required response to the exact-head review within the owner's
+  approved Slice 1 delivery loop.
+- Affected requirements: S1-01, S1-05, S1-08.

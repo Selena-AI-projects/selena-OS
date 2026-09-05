@@ -24,10 +24,12 @@
 - Railway-compatible Node 24 web compilation inside Docker — PASS; final local image export remains unproven because the isolated Docker VM exhausted its disk while packaging the image
 - secret-pattern diff scan and `git diff --check` — PASS
 - Claude Code Max blind review of `594cc3b6` — COMPLETE (Sonnet, read-only, no tool denials); it confirmed the Slice 1 module/RLS/draft-only architecture and identified the stale migration-numbering prose corrected in the next commit
+- Claude Code Max blind review of `9a61082d` — CHANGES_REQUESTED (Sonnet, read-only, no tool denials); it confirmed the Slice 1 architecture and found stale execution-plan numbering/status plus the missing UI path for per-fact evidence states and source URLs
+- per-fact evidence-state/source authoring correction — PASS (web typecheck, profile-domain tests, targeted Biome, web build and Impeccable detector); exact-head review remains pending
 
 ## Pending execution evidence
 
-- exact-head GitHub CI and a fresh independent review after the specification correction;
+- exact-head GitHub CI and a fresh independent review after the execution-plan and profile-UI correction;
 - verified Railway staging migration, deployment and canary response;
 - browser acceptance where the staging authentication path permits it.
 
@@ -36,7 +38,7 @@ and must remain disabled.
 
 ## Next autonomous action
 
-Push the specification correction, obtain CI and a fresh exact-head blind
-review, then migrate and deploy the exact merged candidate to the dedicated
-Railway staging project. Stop before any production or YouTube publication
-action.
+Commit and push the execution-plan and profile-UI correction, obtain CI and a
+fresh exact-head blind review, then migrate and deploy the exact merged
+candidate to the dedicated Railway staging project. Stop before any production
+or YouTube publication action.
