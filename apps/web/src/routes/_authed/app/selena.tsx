@@ -25,6 +25,7 @@ import {
 import { Input } from "@workspace/ui/components/input";
 import { Label } from "@workspace/ui/components/label";
 import { useEffect, useMemo, useState } from "react";
+import { CONTENT_OS_BRAND_SLUG, CONTENT_PRODUCT_ROUTE as CONTENT_OS_BRAND_ROUTE } from "@/lib/content-product";
 import { SelenaWordmark } from "@/components/selena-wordmark";
 import { useAuth } from "@/hooks/use-auth";
 import { validateWebsiteUrl } from "@/lib/brand-website";
@@ -93,7 +94,7 @@ function SelenaWorkspace() {
 	useEffect(() => {
 		const product = getLastSelenaProduct();
 		if (product === "content-control") {
-			void router.navigate({ to: "/app/$brand/control-room", params: { brand: "selena" } });
+			void router.navigate({ to: CONTENT_OS_BRAND_ROUTE, params: { brand: CONTENT_OS_BRAND_SLUG } });
 			return;
 		}
 		if (product === "ai-visibility") setSelectedProduct(product);
@@ -300,7 +301,7 @@ function SelenaWorkspace() {
 	const chooseProduct = (product: SelenaProduct) => {
 		rememberSelenaProduct(product);
 		if (product === "content-control") {
-			void router.navigate({ to: "/app/$brand/control-room", params: { brand: "selena" } });
+			void router.navigate({ to: CONTENT_OS_BRAND_ROUTE, params: { brand: CONTENT_OS_BRAND_SLUG } });
 			return;
 		}
 		setSelectedProduct(product);
