@@ -148,9 +148,51 @@ export function materialAggregateId(projectId: string, briefRef: string, content
 const LANGUAGE = /^[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8})*$/;
 const BUSINESS_KEY = /^[a-z_]{2,32}$/;
 /** RFC 3339 with a mandatory zone, checked as text: the platforms' date parsers disagree. */
-const RFC3339 = /^\d{4}-\d{2}-\d{2}[Tt]\d{2}:\d{2}:\d{2}(\.\d{1,9})?([Zz]|[+-]\d{2}:\d{2})$/;
-/** The textual https form both sides share: printable ASCII only (IDN as punycode), no `@` in the authority, no `#`. */
-const HTTPS_URL = /^https:\/\/[\x21-\x22\x24-\x2e\x30-\x3e\x41-\x7e]+(?:[/?][\x21-\x22\x24-\x7e]*)?$/;
+const RFC3339 =
+	/^\d{4}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\d|3[01])[Tt](?:[01]\d|2[0-3]):[0-5]\d:(?:[0-5]\d|60)(?:\.\d{1,9})?(?:[Zz]|[+-](?:[01]\d|2[0-3]):[0-5]\d)$/;
+/**
+ * The textual https form both sides share: a host of letters, digits, dots and
+ * hyphens (IDN as punycode) or a bracketed IPv6 without a zone id, a port without
+ * a leading zero, no `@` in the authority, no `#`. The two platforms' URL parsers
+ * disagree on percent signs in the host, zone ids and "almost IPv4" hosts, so
+ * those forms never reach a parser on either side.
+ */
+const HTTPS_URL =
+	/^https:\/\/(?:[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.?|\[[0-9A-Fa-f:.]+\])(?::[1-9][0-9]{0,4})?(?:[/?][\x21-\x22\x24-\x7e]*)?$/;
+/** A host whose last label looks numeric is IPv4 to WHATWG and a name to Python: only the strict a.b.c.d form is accepted. */
+const NUMERIC_LABEL = /^(?:[0-9]+|0[xX][0-9A-Fa-f]*)$/;
+const DOTTED_QUAD =
+	/^(?:25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])(?:\.(?:25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])){3}$/;
+/**
+ * C0 controls other than tab, LF and CR are refused in every payload string:
+ * canonical JSON spends six bytes on each, and without the ban the largest valid
+ * envelope would not fit under the receiver's body limit.
+ */
+function hasForbiddenControl(value: string): boolean {
+	for (let index = 0; index < value.length; index += 1) {
+		const unit = value.charCodeAt(index);
+		if (unit < 0x20 && unit !== 0x09 && unit !== 0x0a && unit !== 0x0d) return true;
+	}
+	return false;
+}
+
+/**
+ * A lone surrogate is a string JSON.parse will produce and no UTF-8 encoder can
+ * carry: the sender could never have hashed it and the database will refuse it.
+ */
+export function isWellFormedUtf16(value: string): boolean {
+	for (let index = 0; index < value.length; index += 1) {
+		const unit = value.charCodeAt(index);
+		if (unit >= 0xd800 && unit <= 0xdbff) {
+			const next = value.charCodeAt(index + 1);
+			if (!(next >= 0xdc00 && next <= 0xdfff)) return false;
+			index += 1;
+		} else if (unit >= 0xdc00 && unit <= 0xdfff) {
+			return false;
+		}
+	}
+	return true;
+}
 
 /** Lengths are code points, as in JSON Schema and on the sender; only the body is counted in bytes. */
 function codePoints(value: string): number {
@@ -159,9 +201,24 @@ function codePoints(value: string): number {
 	return count;
 }
 
+function requireText(value: string, field: string): void {
+	if (!isWellFormedUtf16(value)) throw new EventRejected("payload", `${field} contains a lone surrogate`);
+	if (hasForbiddenControl(value)) throw new EventRejected("payload", `${field} contains a control character`);
+}
+
+function hostIsAcceptable(value: string): boolean {
+	const authority = value.slice("https://".length).split("/", 1)[0].split("?", 1)[0];
+	if (authority.startsWith("[")) return true;
+	const host = authority.includes(":") ? authority.slice(0, authority.lastIndexOf(":")) : authority;
+	const bare = host.replace(/\.$/, "");
+	const labels = bare.split(".");
+	if (!NUMERIC_LABEL.test(labels[labels.length - 1])) return true;
+	return DOTTED_QUAD.test(bare);
+}
+
 function requireString(value: unknown, field: string, min: number, max: number): string {
 	if (typeof value !== "string") throw new EventRejected("payload", `${field} must be a string`);
-	if (!value.isWellFormed()) throw new EventRejected("payload", `${field} contains a lone surrogate`);
+	requireText(value, field);
 	const length = codePoints(value);
 	if (length < min || length > max) {
 		throw new EventRejected("payload", `${field} must be a string of ${min}-${max} characters`);
@@ -203,7 +260,7 @@ export function validateHttpsUrl(value: unknown, field: string): string {
 	if (typeof value !== "string" || value.length === 0 || codePoints(value) > CTA_URL_MAX_LENGTH) {
 		throw new EventRejected("payload", `${field} is missing or too long`);
 	}
-	if (!HTTPS_URL.test(value)) {
+	if (!HTTPS_URL.test(value) || !hostIsAcceptable(value)) {
 		throw new EventRejected("payload", `${field} must be an absolute https url without credentials or fragment`);
 	}
 	let url: URL;
@@ -263,7 +320,7 @@ export function validateContentDraftPayload(payload: unknown): ContentDraftPaylo
 
 	const body = payload.body_markdown;
 	if (typeof body !== "string" || body.length === 0) throw new EventRejected("payload", "body_markdown is empty");
-	if (!body.isWellFormed()) throw new EventRejected("payload", "body_markdown contains a lone surrogate");
+	requireText(body, "body_markdown");
 	const bodyBytes = Buffer.byteLength(body, "utf8");
 	if (bodyBytes > BODY_MARKDOWN_MAX_BYTES) {
 		throw new EventRejected(
@@ -432,7 +489,7 @@ function requireUuid(envelope: Record<string, unknown>, field: string): void {
 export function parseEnvelope(body: string): EventEnvelope {
 	// A lone surrogate survives JSON.parse but not the database's jsonb, and the
 	// sender could never have hashed it: refuse it here rather than retry forever.
-	if (!body.isWellFormed()) throw new EventRejected("body", "body is not well-formed unicode");
+	if (!isWellFormedUtf16(body)) throw new EventRejected("body", "body is not well-formed unicode");
 	let parsed: unknown;
 	try {
 		parsed = JSON.parse(body);
@@ -495,6 +552,14 @@ export function parseEnvelope(body: string): EventEnvelope {
 	}
 	if (typeof summary !== "string" || summary.length > 4000) {
 		throw new EventRejected("payload", "payload summary is missing or too long");
+	}
+	// An escaped lone surrogate (`\ud800` in the JSON text) passes the body check
+	// above and would still be refused by jsonb; the sender could not have hashed it.
+	for (const [field, value] of [
+		["title", title],
+		["summary", summary],
+	] as const) {
+		if (!isWellFormedUtf16(value)) throw new EventRejected("payload", `payload ${field} contains a lone surrogate`);
 	}
 	if (artifactCount !== undefined && (!Number.isInteger(artifactCount) || (artifactCount as number) < 0)) {
 		throw new EventRejected("payload", "artifact_count must be a non-negative integer");

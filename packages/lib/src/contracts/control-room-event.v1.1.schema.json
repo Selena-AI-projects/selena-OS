@@ -24,7 +24,7 @@
     },
     "event_id": {
       "type": "string",
-      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$(?![\\s\\S])",
       "description": "Ключ идемпотентности на проводе."
     },
     "event_type": {
@@ -37,12 +37,12 @@
     },
     "project_id": {
       "type": "string",
-      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$(?![\\s\\S])",
       "description": "Проект Aether. Для материалов — ключ поиска binding в Control Room вместе со средой источника."
     },
     "aggregate_id": {
       "type": "string",
-      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$(?![\\s\\S])",
       "description": "Для task.result.ready — задача. Для content.draft_ready — материал: uuid5(2f7f0f5e-6b1a-5c3a-9c2e-1d4b7a8e9f01, \"<project_id>:<brief_ref>:<content_kind>\"); получатель пересчитывает и сверяет, поэтому чужой агрегат адресовать нельзя."
     },
     "version": {
@@ -53,18 +53,18 @@
     "occurred_at": {
       "type": "string",
       "format": "date-time",
-      "pattern": "^\\d{4}-\\d{2}-\\d{2}[Tt]\\d{2}:\\d{2}:\\d{2}(\\.\\d{1,9})?([Zz]|[+-]\\d{2}:\\d{2})$"
+      "pattern": "^\\d{4}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\\d|3[01])[Tt](?:[01]\\d|2[0-3]):[0-5]\\d:(?:[0-5]\\d|60)(?:\\.\\d{1,9})?(?:[Zz]|[+-](?:[01]\\d|2[0-3]):[0-5]\\d)$(?![\\s\\S])"
     },
     "trace_id": {
       "type": "string",
-      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$(?![\\s\\S])"
     },
     "payload": {
       "type": "object"
     },
     "payload_hash": {
       "type": "string",
-      "pattern": "^[0-9a-f]{64}$",
+      "pattern": "^[0-9a-f]{64}$(?![\\s\\S])",
       "description": "sha256 канонизированной нагрузки; получатель пересчитывает сам."
     }
   },
@@ -105,14 +105,14 @@
   "$defs": {
     "uuid": {
       "type": "string",
-      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$(?![\\s\\S])"
     },
     "https_url": {
       "type": "string",
-      "pattern": "^https://[\\x21-\\x22\\x24-\\x2e\\x30-\\x3e\\x41-\\x7e]+(?:[/?][\\x21-\\x22\\x24-\\x7e]*)?$",
+      "pattern": "^https://(?:[A-Za-z0-9-]+(?:\\.[A-Za-z0-9-]+)*\\.?|\\[[0-9A-Fa-f:.]+\\])(?::[1-9][0-9]{0,4})?(?:[/?][\\x21-\\x22\\x24-\\x7e]*)?$(?![\\s\\S])",
       "minLength": 9,
       "maxLength": 2048,
-      "description": "Абсолютный https-адрес из печатного ASCII (IDN — punycode), без учётных данных, без fragment. Длины во всём контракте — code points; байты считает только body_markdown."
+      "description": "Абсолютный https-адрес: хост из букв, цифр, точек и дефисов (IDN — punycode) или IPv6 в скобках без zone id, порт без ведущего нуля, без учётных данных, без fragment. Хост с числовой последней меткой допускается только как строгий a.b.c.d. Длины во всём контракте — code points; байты считает только body_markdown."
     },
     "task_result_payload": {
       "type": "object",
@@ -177,18 +177,28 @@
         "title": {
           "type": "string",
           "minLength": 1,
-          "maxLength": 200
+          "maxLength": 200,
+          "allOf": [
+            {
+              "$ref": "#/$defs/text"
+            }
+          ]
         },
         "language": {
           "type": "string",
-          "pattern": "^[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8})*$",
+          "pattern": "^[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8})*$(?![\\s\\S])",
           "maxLength": 16
         },
         "body_markdown": {
           "type": "string",
           "minLength": 1,
           "maxLength": 48000,
-          "description": "Только inline-тело. Предел — 48 000 байт UTF-8; схема ограничивает символы, байты проверяет код обеих сторон. Ссылки на артефакты в этой версии не передаются."
+          "description": "Только inline-тело. Предел — 48 000 байт UTF-8; схема ограничивает символы, байты проверяет код обеих сторон. Ссылки на артефакты в этой версии не передаются.",
+          "allOf": [
+            {
+              "$ref": "#/$defs/text"
+            }
+          ]
         },
         "metadata": {
           "type": "object",
@@ -204,17 +214,32 @@
             "slug": {
               "type": "string",
               "minLength": 1,
-              "maxLength": 200
+              "maxLength": 200,
+              "allOf": [
+                {
+                  "$ref": "#/$defs/text"
+                }
+              ]
             },
             "meta_title": {
               "type": "string",
               "minLength": 1,
-              "maxLength": 200
+              "maxLength": 200,
+              "allOf": [
+                {
+                  "$ref": "#/$defs/text"
+                }
+              ]
             },
             "meta_description": {
               "type": "string",
               "minLength": 1,
-              "maxLength": 500
+              "maxLength": 500,
+              "allOf": [
+                {
+                  "$ref": "#/$defs/text"
+                }
+              ]
             },
             "internal_links": {
               "type": "array",
@@ -239,7 +264,12 @@
               "text": {
                 "type": "string",
                 "minLength": 1,
-                "maxLength": 500
+                "maxLength": 500,
+                "allOf": [
+                  {
+                    "$ref": "#/$defs/text"
+                  }
+                ]
               },
               "status": {
                 "type": "string",
@@ -253,7 +283,12 @@
               "source_ref": {
                 "type": "string",
                 "minLength": 1,
-                "maxLength": 500
+                "maxLength": 500,
+                "allOf": [
+                  {
+                    "$ref": "#/$defs/text"
+                  }
+                ]
               }
             }
           }
@@ -273,17 +308,27 @@
               "kind": {
                 "type": "string",
                 "minLength": 1,
-                "maxLength": 50
+                "maxLength": 50,
+                "allOf": [
+                  {
+                    "$ref": "#/$defs/text"
+                  }
+                ]
               },
               "ref": {
                 "type": "string",
                 "minLength": 1,
-                "maxLength": 500
+                "maxLength": 500,
+                "allOf": [
+                  {
+                    "$ref": "#/$defs/text"
+                  }
+                ]
               },
               "captured_at": {
                 "type": "string",
                 "format": "date-time",
-                "pattern": "^\\d{4}-\\d{2}-\\d{2}[Tt]\\d{2}:\\d{2}:\\d{2}(\\.\\d{1,9})?([Zz]|[+-]\\d{2}:\\d{2})$"
+                "pattern": "^\\d{4}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\\d|3[01])[Tt](?:[01]\\d|2[0-3]):[0-5]\\d:(?:[0-5]\\d|60)(?:\\.\\d{1,9})?(?:[Zz]|[+-](?:[01]\\d|2[0-3]):[0-5]\\d)$(?![\\s\\S])"
               }
             }
           }
@@ -322,7 +367,12 @@
               },
               "detail": {
                 "type": "string",
-                "maxLength": 500
+                "maxLength": 500,
+                "allOf": [
+                  {
+                    "$ref": "#/$defs/text"
+                  }
+                ]
               }
             }
           },
@@ -348,12 +398,22 @@
             "ref": {
               "type": "string",
               "minLength": 1,
-              "maxLength": 500
+              "maxLength": 500,
+              "allOf": [
+                {
+                  "$ref": "#/$defs/text"
+                }
+              ]
             },
             "rights": {
               "type": "string",
               "minLength": 1,
-              "maxLength": 200
+              "maxLength": 200,
+              "allOf": [
+                {
+                  "$ref": "#/$defs/text"
+                }
+              ]
             }
           }
         },
@@ -363,10 +423,16 @@
         },
         "business_key": {
           "type": "string",
-          "pattern": "^[a-z_]{2,32}$",
+          "pattern": "^[a-z_]{2,32}$(?![\\s\\S])",
           "description": "Проверочный alias бизнеса. Сверяется с binding, но не выбирает организацию или бренд."
         }
       }
+    },
+    "text": {
+      "type": "string",
+      "pattern": "^[^\\u0000-\\u0008\\u000B\\u000C\\u000E-\\u001F]*$(?![\\s\\S])",
+      "description": "Строка без управляющих символов C0, кроме \\t, \\n и \\r. Каждый такой символ стоит шесть байт в каноническом JSON, и без запрета самый большой валидный конверт не помещается в лимит приёмника."
     }
-  }
+  },
+  "$comment": "Все pattern завершаются `$(?![\\s\\S])`: в ECMA-262 `$` без флага m — конец строки, а в Python re.search `$` совпадает и перед завершающим переводом строки. Лишний lookahead делает оба прочтения одинаковыми. Код обеих сторон проверяет те же формы через fullmatch/anchored RegExp."
 }

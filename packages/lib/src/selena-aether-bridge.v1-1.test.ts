@@ -10,14 +10,17 @@ import fixturesV1 from "./contracts/control-room-event.v1.fixtures.json" with { 
 import {
 	acceptEvent,
 	BODY_MARKDOWN_MAX_BYTES,
+	canonicalJson,
 	EVENT_CONTENT_DRAFT_READY,
 	EventRejected,
 	GROWTH_MATERIAL_NAMESPACE,
 	isContentDraftEvent,
+	isRfc3339,
 	isStale,
 	MAX_EVENT_BODY_BYTES,
 	materialAggregateId,
 	parseEnvelope,
+	payloadHash,
 	QA_CHECKS,
 	SCHEMA_VERSION_1_1,
 	validateContentDraftPayload,
@@ -52,7 +55,10 @@ describe("what the sender and the receiver agree on for materials", () => {
 	it("keeps the largest possible envelope under the receiver's body limit", () => {
 		const entry = byName("accepted_article");
 		const envelope = JSON.parse(entry.body) as { payload: Record<string, unknown> };
-		// Every free-text code point is four bytes wide: the worst case by bytes.
+		// The worst case in canonical JSON bytes from characters the contract allows:
+		// a four-byte code point in fields counted in code points, a double quote in
+		// the body counted in UTF-8 bytes (one byte of UTF-8, two of JSON). C0
+		// controls would cost six bytes per code point and are refused.
 		const w = "😀";
 		const url = `https://${"h".repeat(2039)}/`;
 		const maximal = {
@@ -61,7 +67,7 @@ describe("what the sender and the receiver agree on for materials", () => {
 				...envelope.payload,
 				title: w.repeat(200),
 				language: "ru-Cyrl-RU-1234",
-				body_markdown: "a".repeat(BODY_MARKDOWN_MAX_BYTES),
+				body_markdown: '"'.repeat(BODY_MARKDOWN_MAX_BYTES),
 				metadata: {
 					cta_url: url,
 					slug: w.repeat(200),
@@ -84,7 +90,66 @@ describe("what the sender and the receiver agree on for materials", () => {
 			},
 		};
 		expect(() => validateContentDraftPayload(maximal.payload)).not.toThrow();
-		expect(Buffer.byteLength(JSON.stringify(maximal), "utf8")).toBeLessThan(MAX_EVENT_BODY_BYTES);
+		expect(Buffer.byteLength(canonicalJson(maximal), "utf8")).toBeLessThan(MAX_EVENT_BODY_BYTES);
+	});
+
+	it("spends on each character exactly what the worst case assumes", () => {
+		const empty = Buffer.byteLength('{"a":""}');
+		expect(Buffer.byteLength(canonicalJson({ a: "😀" }), "utf8")).toBe(empty + 4);
+		expect(Buffer.byteLength(canonicalJson({ a: '"' }), "utf8")).toBe(empty + 2);
+		expect(Buffer.byteLength(canonicalJson({ a: "\t" }), "utf8")).toBe(empty + 2);
+		expect(Buffer.byteLength(canonicalJson({ a: "\x01" }), "utf8")).toBe(empty + 6);
+	});
+
+	it("refuses C0 controls in every string but keeps tabs and line breaks", () => {
+		const payload = (JSON.parse(byName("accepted_article").body) as { payload: Record<string, unknown> }).payload;
+		expect(() =>
+			validateContentDraftPayload({ ...payload, title: "t\tt", body_markdown: "a\tb\r\nc\n" }),
+		).not.toThrow();
+		expect(() => validateContentDraftPayload({ ...payload, title: "a\x01" })).toThrow(/control character/);
+		expect(() => validateContentDraftPayload({ ...payload, body_markdown: "a\x00b" })).toThrow(/control character/);
+		expect(() =>
+			validateContentDraftPayload({ ...payload, source: { kind: "OWN", ref: "\x1f", rights: "r" } }),
+		).toThrow(/control character/);
+	});
+
+	it.each([
+		["2026-09-06T00:00:00Z", true],
+		["2026-09-06T23:59:60+23:59", true],
+		["2026-13-06T00:00:00Z", false],
+		["2026-09-32T00:00:00Z", false],
+		["2026-09-06T24:00:00Z", false],
+		["2026-09-06T00:60:00Z", false],
+		["2026-09-06T00:00:00+24:00", false],
+		["2026-09-06T00:00:00Z\n", false],
+	])("reads %s as RFC 3339: %s", (stamp, ok) => {
+		expect(isRfc3339(stamp)).toBe(ok);
+	});
+
+	it.each([
+		["https://www.selenasystems.com/x?y=1", true],
+		["https://example.com./x", true],
+		["https://1.2.3.4/x", true],
+		["https://[::1]/x", true],
+		["https://[::ffff:1.2.3.4]:8443/x", true],
+		["https://a-b.example:65535/", true],
+		["https://a.b%20c/x", false],
+		["https://1.2.3.4.5/x", false],
+		["https://999.1.1.1/x", false],
+		["https://01.2.3.4/x", false],
+		["https://example.0x1/x", false],
+		["https://[fe80::1%25eth0]/x", false],
+		["https://a.b:0/x", false],
+		["https://a.b:0443/x", false],
+		["https://a.b:65536/x", false],
+		["https://a_b.example/x", false],
+		["https://[zz]/x", false],
+		["https://[1::2::3]/x", false],
+		["https://./x", false],
+		["https:///x", false],
+	])("shares the host grammar with the sender for %s: %s", (url, ok) => {
+		if (ok) expect(validateCtaUrl(url)).toBe(url);
+		else expect(() => validateCtaUrl(url)).toThrow(EventRejected);
 	});
 
 	it.each(["accepted_article", "accepted_social"])("accepts %s and derives the same aggregate id", (name) => {
@@ -191,6 +256,13 @@ describe("every way a material event can be wrong", () => {
 			"claims_too_many",
 			"source_kind_unknown",
 			"unknown_metadata_field",
+			"title_with_control_character",
+			"body_markdown_with_control_character",
+			"captured_at_month_13",
+			"cta_url_host_percent",
+			"cta_url_host_almost_ipv4",
+			"cta_url_ipv6_zone_id",
+			"cta_url_port_zero",
 		]);
 	});
 
@@ -255,7 +327,19 @@ describe("every way a material event can be wrong", () => {
 		expect(() => validateContentDraftPayload({ ...payload, title: "😀".repeat(200) })).not.toThrow();
 		expect(() => validateContentDraftPayload({ ...payload, title: "😀".repeat(201) })).toThrow(EventRejected);
 		expect(() => validateContentDraftPayload({ ...payload, title: "bad \ud800 title" })).toThrow(/lone surrogate/);
-		expect(() => parseEnvelope('{"a":"\ud800"}')).toThrow(EventRejected);
+		// The escape form: JSON.parse turns it into a lone surrogate the raw-body check cannot see.
+		expect(() => parseEnvelope('{"a":"\\ud800"}')).toThrow(EventRejected);
+	});
+
+	it("refuses an escaped lone surrogate inside a version 1 title or summary", () => {
+		const entry = byName("v1_event_still_accepted");
+		const envelope = JSON.parse(entry.body) as { payload: Record<string, unknown> };
+		for (const field of ["title", "summary"]) {
+			const payload = { ...envelope.payload, [field]: "bad \ud800 text" };
+			const body = JSON.stringify({ ...envelope, payload, payload_hash: payloadHash(payload) });
+			expect(body).toContain("\\ud800");
+			expect(() => parseEnvelope(body)).toThrow(/lone surrogate/);
+		}
 	});
 
 	it("accepts a version 1 task event carried in a 1.1 envelope, on purpose", () => {
