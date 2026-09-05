@@ -6,6 +6,7 @@ import {
 	classifyPublicationDispatch,
 	contentVersionHash,
 	createOpaqueWorkflowPayload,
+	describeOrigin,
 	evaluateReleaseGate,
 	isInteractiveOwnerSession,
 	releaseIntentIdempotencyKey,
@@ -36,9 +37,7 @@ describe("Selena Control Room release gate", () => {
 
 	it("normalizes Unicode and rejects ambiguous or non-JSON input", () => {
 		expect(canonicalJson({ title: "Cafe\u0301" })).toBe(canonicalJson({ title: "Café" }));
-		expect(() => canonicalJson({ "Café": true, "Cafe\u0301": false })).toThrow(
-			"duplicate normalized object keys",
-		);
+		expect(() => canonicalJson({ Café: true, "Cafe\u0301": false })).toThrow("duplicate normalized object keys");
 		expect(() => canonicalJson(new Date())).toThrow("plain objects");
 	});
 
@@ -93,25 +92,25 @@ describe("Selena Control Room release gate", () => {
 			reason: "ASSET_HASH_MISMATCH",
 		});
 		expect(evaluateReleaseGate({ ...permittedGate, evidenceValid: false })).toEqual({
-				allowed: false,
-				reason: "EVIDENCE_EXPIRED",
-			});
+			allowed: false,
+			reason: "EVIDENCE_EXPIRED",
+		});
 		expect(evaluateReleaseGate({ ...permittedGate, evidencePresent: false })).toEqual({
-				allowed: false,
-				reason: "EVIDENCE_MISSING",
-			});
+			allowed: false,
+			reason: "EVIDENCE_MISSING",
+		});
 		expect(evaluateReleaseGate({ ...permittedGate, rightsPresent: false })).toEqual({
-				allowed: false,
-				reason: "RIGHTS_MISSING",
-			});
+			allowed: false,
+			reason: "RIGHTS_MISSING",
+		});
 		expect(evaluateReleaseGate({ ...permittedGate, consentValid: false })).toEqual({
-				allowed: false,
-				reason: "CONSENT_EXPIRED",
-			});
+			allowed: false,
+			reason: "CONSENT_EXPIRED",
+		});
 		expect(evaluateReleaseGate({ ...permittedGate, consentPresent: false })).toEqual({
-				allowed: false,
-				reason: "CONSENT_MISSING",
-			});
+			allowed: false,
+			reason: "CONSENT_MISSING",
+		});
 	});
 
 	it("binds the target account and disclosure to the approval", () => {
@@ -169,5 +168,39 @@ describe("Selena Control Room release gate", () => {
 	it("requires reconciliation instead of blind retry after an ambiguous provider result", () => {
 		expect(classifyPublicationDispatch("NOT_SENT")).toEqual({ status: "RETRY_SAFE" });
 		expect(classifyPublicationDispatch("AMBIGUOUS")).toEqual({ status: "RECONCILE_REQUIRED" });
+	});
+});
+
+describe("describing where a version came from", () => {
+	it("names Control Room for a version written here", () => {
+		expect(describeOrigin({})).toEqual({
+			source: "Control Room",
+			synthetic: false,
+			qaFailed: false,
+			needsVerification: false,
+		});
+		expect(describeOrigin(null).source).toBe("Control Room");
+	});
+
+	it("names Aether and the kind of source, and says when the source is synthetic", () => {
+		const projected = {
+			origin: { system: "aether", project_id: "p", event_id: "e" },
+			source: { kind: "SYNTHETIC_FIXTURE", ref: "aether://fixtures/growth-draft/v1", rights: "synthetic" },
+			qa_results: [{ check: "NOVELTY", verdict: "UNKNOWN" }],
+			qa_failed: false,
+			needs_verification: true,
+			synthetic: true,
+		};
+		expect(describeOrigin(projected)).toEqual({
+			source: "Aether · SYNTHETIC_FIXTURE",
+			synthetic: true,
+			qaFailed: false,
+			needsVerification: true,
+		});
+		expect(describeOrigin({ ...projected, source: { kind: "OWN" }, synthetic: false, qa_failed: true })).toMatchObject({
+			source: "Aether · OWN",
+			synthetic: false,
+			qaFailed: true,
+		});
 	});
 });

@@ -219,6 +219,30 @@ export function disclosureBlocksApproval(disclosure: unknown): { qaFailed: boole
 	return { qaFailed: record.qa_failed === true, needsVerification: record.needs_verification === true };
 }
 
+/**
+ * Where a version came from and whether its own checks keep it away from approval,
+ * read from the disclosure the writer stamped on it. A version written in Control
+ * Room carries no origin; one projected from Aether names the system and the kind
+ * of source, and a synthetic fixture is said to be one wherever it is shown.
+ */
+export function describeOrigin(disclosure: unknown): {
+	source: string;
+	synthetic: boolean;
+	qaFailed: boolean;
+	needsVerification: boolean;
+} {
+	const record = disclosure && typeof disclosure === "object" ? (disclosure as Record<string, unknown>) : {};
+	const origin = record.origin && typeof record.origin === "object" ? (record.origin as Record<string, unknown>) : {};
+	const source = record.source && typeof record.source === "object" ? (record.source as Record<string, unknown>) : {};
+	const system = typeof origin.system === "string" ? origin.system : null;
+	const sourceKind = typeof source.kind === "string" ? source.kind : null;
+	return {
+		source: system ? `${system === "aether" ? "Aether" : system} · ${sourceKind ?? "unknown source"}` : "Control Room",
+		synthetic: record.synthetic === true || sourceKind === "SYNTHETIC_FIXTURE",
+		...disclosureBlocksApproval(disclosure),
+	};
+}
+
 /** Human approval is deliberately unavailable to API and service identities. */
 export function isInteractiveOwnerSession(actor: HumanApprovalActor): boolean {
 	return actor.authType === "session" && actor.role === "owner";

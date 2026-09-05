@@ -11,6 +11,7 @@ import {
 	IconKey,
 	IconLink,
 	IconListDetails,
+	IconPlugConnected,
 	IconReport,
 	IconShieldCheck,
 	IconSitemap,
@@ -165,6 +166,9 @@ export function AppSidebar({
 				{ title: "Performance", url: "/control-room", icon: IconChartBar, hash: "performance" },
 				{ title: "Incidents", url: "/control-room", icon: IconAlertTriangle, hash: "incidents" },
 				{ title: "Audit", url: "/control-room", icon: IconListDetails, hash: "audit" },
+				...(context.clientConfig?.growthEngineStage1Enabled
+					? [{ title: "Sources", url: "/control-room", icon: IconPlugConnected, hash: "sources" }]
+					: []),
 			],
 		});
 	} else if (scope === "brand") {

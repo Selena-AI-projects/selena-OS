@@ -10,6 +10,7 @@ import {
 	scrContentItems,
 	scrContentPolicies,
 	scrContentVersions,
+	scrGrowthProjectBindings,
 	scrIncidents,
 	scrKillSwitches,
 	scrMetricSnapshots,
@@ -22,6 +23,7 @@ import {
 	approvalBindingHash,
 	assetBundleHash,
 	contentVersionHash,
+	describeOrigin,
 	disclosureBlocksApproval,
 	isInteractiveOwnerSession,
 	releaseIntentIdempotencyKey,
@@ -29,6 +31,7 @@ import {
 } from "@workspace/lib/selena-control-room";
 import { and, desc, eq, isNull, sql } from "drizzle-orm";
 import { z } from "zod";
+import { isGrowthEngineStage1Enabled } from "../lib/growth-engine-stage1.server";
 import { resolveSessionAuthContext } from "../lib/selena-auth-context.server";
 import { type AuthContext, canWrite } from "../lib/selena-authz";
 
@@ -208,6 +211,7 @@ export const getControlRoomWorkspaceFn = createServerFn({ method: "GET" })
 						audits,
 						metrics,
 						killSwitches,
+						growthBindings,
 					] = await Promise.all([
 						db.select().from(scrContentItems).where(scope).orderBy(desc(scrContentItems.updatedAt)).limit(40),
 						db
@@ -259,6 +263,7 @@ export const getControlRoomWorkspaceFn = createServerFn({ method: "GET" })
 								ctaUrl: scrContentVersions.ctaUrl,
 								claims: scrContentVersions.claims,
 								evidence: scrContentVersions.evidence,
+								disclosure: scrContentVersions.disclosure,
 								policyVersion: scrContentVersions.policyVersion,
 								contentHash: scrContentVersions.contentHash,
 								evidenceExpiresAt: scrContentVersions.evidenceExpiresAt,
@@ -417,6 +422,28 @@ export const getControlRoomWorkspaceFn = createServerFn({ method: "GET" })
 							.where(and(eq(scrKillSwitches.organizationId, context.tenantId), eq(scrKillSwitches.active, true)))
 							.orderBy(desc(scrKillSwitches.createdAt))
 							.limit(20),
+						// Which Aether projects may deliver drafts here; empty unless the growth stage is on.
+						isGrowthEngineStage1Enabled()
+							? db
+									.select({
+										id: scrGrowthProjectBindings.id,
+										aetherProjectId: scrGrowthProjectBindings.aetherProjectId,
+										aetherBusinessKey: scrGrowthProjectBindings.aetherBusinessKey,
+										sourceEnvironment: scrGrowthProjectBindings.sourceEnvironment,
+										confirmedAt: scrGrowthProjectBindings.confirmedAt,
+										revokedAt: scrGrowthProjectBindings.revokedAt,
+										revokeReason: scrGrowthProjectBindings.revokeReason,
+									})
+									.from(scrGrowthProjectBindings)
+									.where(
+										and(
+											eq(scrGrowthProjectBindings.organizationId, context.tenantId),
+											eq(scrGrowthProjectBindings.brandId, data.brandId),
+										),
+									)
+									.orderBy(desc(scrGrowthProjectBindings.confirmedAt))
+									.limit(40)
+							: Promise.resolve([]),
 					]);
 
 					const contentById = new Map(content.map((item) => [item.id, item]));
@@ -433,10 +460,12 @@ export const getControlRoomWorkspaceFn = createServerFn({ method: "GET" })
 							latestApprovalByVersion.set(approval.contentVersionId, approval);
 					}
 
-					const clientVersions = versions.map(({ evidence, claims, ...version }) => ({
+					// The disclosure itself stays on the server; the client gets what it shows.
+					const clientVersions = versions.map(({ evidence, claims, disclosure, ...version }) => ({
 						...version,
 						claims: getClaims(claims),
 						evidenceSource: getEvidenceSource(evidence),
+						...describeOrigin(disclosure),
 					}));
 
 					return {
@@ -455,14 +484,17 @@ export const getControlRoomWorkspaceFn = createServerFn({ method: "GET" })
 						audits,
 						metrics,
 						killSwitches,
+						growthBindings,
 						reviewQueue: versions.map((version) => ({
 							id: version.id,
 							title: contentById.get(version.contentId)?.title ?? "Archived content",
+							kind: contentById.get(version.contentId)?.kind ?? null,
 							version: version.version,
 							contentHash: version.contentHash,
 							assetCount: assetsByVersion.get(version.id)?.length ?? 0,
 							latestDecision: latestApprovalByVersion.get(version.id)?.decision ?? null,
 							createdAt: version.createdAt,
+							...describeOrigin(version.disclosure),
 						})),
 					};
 				},
