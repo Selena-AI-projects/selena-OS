@@ -51,6 +51,8 @@ declare global {
 			readonly SELENA_STAGING_PREVIEW_ENABLED?: string;
 			readonly SELENA_STAGING_GOOGLE_SIGN_IN_ENABLED?: string;
 			readonly CONTENT_OS_STAGE1_ENABLED?: string;
+			readonly GROWTH_ENGINE_STAGE1_ENABLED?: string;
+			readonly SELENA_GROWTH_SOURCE_ENVIRONMENT?: string;
 			readonly SELENA_RELEASE_PUBLISH_ENABLED?: string;
 			readonly SELENA_SCANNER_URL?: string;
 			readonly SELENA_SCANNER_INTERNAL_TOKEN?: string;

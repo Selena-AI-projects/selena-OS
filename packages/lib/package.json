@@ -62,7 +62,9 @@
     "./contracts/control-room-event.v1.fixtures.json": "./src/contracts/control-room-event.v1.fixtures.json",
     "./contracts/control-room-event.v1.schema.json": "./src/contracts/control-room-event.v1.schema.json",
     "./contracts/control-room-event.v1.1.fixtures.json": "./src/contracts/control-room-event.v1.1.fixtures.json",
-    "./contracts/control-room-event.v1.1.schema.json": "./src/contracts/control-room-event.v1.1.schema.json"
+    "./contracts/control-room-event.v1.1.schema.json": "./src/contracts/control-room-event.v1.1.schema.json",
+    "./selena-aether-projection": "./src/selena-aether-projection.ts",
+    "./content-workflow-repositories": "./src/content-workflow-repositories.ts"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^4.0.27",

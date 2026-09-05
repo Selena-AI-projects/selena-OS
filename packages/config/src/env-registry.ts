@@ -98,6 +98,20 @@ export const ENV_REGISTRY: EnvVarSpec[] = [
 		description: "Enables the single-owner Google OAuth bridge for Selena staging when all related values are present.",
 	},
 	{
+		name: "GROWTH_ENGINE_STAGE1_ENABLED",
+		scope: "server",
+		requiredBy: "optional",
+		description:
+			"Lets the registry worker project Aether material events into content versions, only when set to the exact value true.",
+	},
+	{
+		name: "SELENA_GROWTH_SOURCE_ENVIRONMENT",
+		scope: "server",
+		requiredBy: "optional",
+		description:
+			"Which source environment (local, staging, production) this deployment's growth bindings answer for; a material from any other environment finds no binding.",
+	},
+	{
 		name: "CONTENT_OS_STAGE1_ENABLED",
 		scope: "server",
 		requiredBy: "optional",

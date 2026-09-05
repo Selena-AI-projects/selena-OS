@@ -8,8 +8,9 @@
  * `packages/lib/src/db/tests/0035_aether_bridge_inbox.pgtap.sql`.
  */
 import type { AddressInfo } from "node:net";
+import fixturesV11 from "@workspace/lib/contracts/control-room-event.v1.1.fixtures.json" with { type: "json" };
 import fixtures from "@workspace/lib/contracts/control-room-event.v1.fixtures.json" with { type: "json" };
-import { SIGNATURE_HEADER, TIMESTAMP_HEADER } from "@workspace/lib/selena-aether-bridge";
+import { MAX_EVENT_BODY_BYTES, SIGNATURE_HEADER, TIMESTAMP_HEADER } from "@workspace/lib/selena-aether-bridge";
 import type { PoolClient } from "pg";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createReceiverServer, type RecordOutcome, receiverSecrets } from "./selena-aether-receiver";
@@ -32,7 +33,7 @@ afterEach(() => {
 	vi.useRealTimers();
 });
 
-type ClientBehaviour = { outcome?: RecordOutcome; failOn?: string };
+type ClientBehaviour = { outcome?: RecordOutcome; failOn?: string; sqlstate?: string };
 
 function fakePool(behaviour: ClientBehaviour = { outcome: "recorded" }) {
 	const statements: string[] = [];
@@ -40,6 +41,9 @@ function fakePool(behaviour: ClientBehaviour = { outcome: "recorded" }) {
 		query: async (text: string) => {
 			statements.push(text);
 			if (behaviour.failOn && text.includes(behaviour.failOn)) throw new Error("database said no");
+			if (behaviour.sqlstate && text.includes("record_aether_event")) {
+				throw Object.assign(new Error("conflict"), { code: behaviour.sqlstate });
+			}
 			if (text.includes("record_aether_event")) return { rows: [{ outcome: behaviour.outcome }] };
 			return { rows: [] };
 		},
@@ -57,6 +61,22 @@ async function withReceiver<T>(
 ): Promise<T> {
 	const { pool, statements } = fakePool(behaviour);
 	const server = createReceiverServer({ secrets: SECRETS, pool });
+	await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+	const { port } = server.address() as AddressInfo;
+	try {
+		return await task(`http://127.0.0.1:${port}`, statements);
+	} finally {
+		await new Promise<void>((resolve) => server.close(() => resolve()));
+	}
+}
+
+async function withReceiverSecrets<T>(
+	secrets: string[],
+	behaviour: ClientBehaviour,
+	task: (base: string, statements: string[]) => Promise<T>,
+): Promise<T> {
+	const { pool, statements } = fakePool(behaviour);
+	const server = createReceiverServer({ secrets, pool });
 	await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
 	const { port } = server.address() as AddressInfo;
 	try {
@@ -220,5 +240,69 @@ describe("what the receiver records about itself", () => {
 		// An operator reading the log must not thereby read the event's contents.
 		expect(lines.join("\n")).not.toContain(envelope.payload.title);
 		expect(lines.join("\n")).not.toContain(envelope.payload.summary);
+	});
+});
+
+describe("contract version 1.1 over the wire", () => {
+	const DRAFT = fixturesV11.cases.find((entry) => entry.name === "accepted_article");
+	if (!DRAFT) throw new Error("the accepted_article fixture is missing");
+
+	function atDraftSigningTime(): void {
+		vi.useFakeTimers();
+		vi.setSystemTime(new Date(Date.parse(DRAFT.timestamp)));
+	}
+
+	it("records a material event and reports the outcome", async () => {
+		atDraftSigningTime();
+		await withReceiverSecrets([fixturesV11.secret], { outcome: "recorded" }, async (base, statements) => {
+			const response = await fetch(`${base}/v1/bridge/aether`, {
+				method: "POST",
+				headers: { [SIGNATURE_HEADER]: DRAFT.signature, [TIMESTAMP_HEADER]: DRAFT.timestamp },
+				body: DRAFT.body,
+			});
+			expect(response.status).toBe(202);
+			expect(await response.json()).toEqual({ outcome: "recorded", event_id: JSON.parse(DRAFT.body).event_id });
+			expect(statements.some((statement) => statement.includes("record_aether_event"))).toBe(true);
+		});
+	});
+
+	it("answers 409 when the database reports a content conflict and does not ask for a retry", async () => {
+		atDraftSigningTime();
+		await withReceiverSecrets([fixturesV11.secret], { sqlstate: "SE409" }, async (base) => {
+			const response = await fetch(`${base}/v1/bridge/aether`, {
+				method: "POST",
+				headers: { [SIGNATURE_HEADER]: DRAFT.signature, [TIMESTAMP_HEADER]: DRAFT.timestamp },
+				body: DRAFT.body,
+			});
+			expect(response.status).toBe(409);
+			const body = (await response.json()) as { error: string; reason: string };
+			expect(body).toMatchObject({ error: "rejected", reason: "conflict" });
+		});
+	});
+
+	it("refuses a body beyond the contract's byte limit with 413 before reading it all", async () => {
+		atDraftSigningTime();
+		await withReceiverSecrets([fixturesV11.secret], { outcome: "recorded" }, async (base, statements) => {
+			const response = await fetch(`${base}/v1/bridge/aether`, {
+				method: "POST",
+				headers: { [SIGNATURE_HEADER]: DRAFT.signature, [TIMESTAMP_HEADER]: DRAFT.timestamp },
+				body: "x".repeat(MAX_EVENT_BODY_BYTES + 1),
+			});
+			expect(response.status).toBe(413);
+			expect(statements).toHaveLength(0);
+		});
+	});
+
+	it("accepts a body one byte under the limit as far as the signature check", async () => {
+		atDraftSigningTime();
+		await withReceiverSecrets([fixturesV11.secret], { outcome: "recorded" }, async (base) => {
+			const response = await fetch(`${base}/v1/bridge/aether`, {
+				method: "POST",
+				headers: { [SIGNATURE_HEADER]: DRAFT.signature, [TIMESTAMP_HEADER]: DRAFT.timestamp },
+				body: "x".repeat(MAX_EVENT_BODY_BYTES - 1),
+			});
+			// Read in full, then refused for what it is: an unsigned body, not a large one.
+			expect(response.status).toBe(401);
+		});
 	});
 });

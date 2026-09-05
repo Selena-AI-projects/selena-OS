@@ -22,6 +22,7 @@ import {
 	approvalBindingHash,
 	assetBundleHash,
 	contentVersionHash,
+	disclosureBlocksApproval,
 	isInteractiveOwnerSession,
 	releaseIntentIdempotencyKey,
 	sha256,
@@ -871,6 +872,9 @@ export const approveContentVersionFn = createServerFn({ method: "POST" })
 					),
 			]);
 			if (!version || !account) throw new Error("Version or target account was not found");
+			const blocked = disclosureBlocksApproval(version.disclosure);
+			if (blocked.qaFailed) throw new Error("A version whose QA failed cannot be approved");
+			if (blocked.needsVerification) throw new Error("A version with unverified claims or checks cannot be approved");
 			const [policy] = await db
 				.select({ requireEvidence: scrContentPolicies.requireEvidence })
 				.from(scrContentPolicies)
