@@ -6,15 +6,16 @@ export const CONTENT_PRODUCT_DESCRIPTION =
 export const CONTENT_PRODUCT_ROUTE = "/app/$brand/control-room" as const;
 
 /**
- * The brand slug Content OS opens.
+ * Content OS opens `/app/$brand/control-room`, and `$brand` is a brand **id**
+ * looked up in the database — not a slug and not a name. So the entry cannot
+ * hold a constant at all: it has to carry the id of a brand the signed-in user
+ * actually has, and send them to create one when they have none.
  *
- * It cannot be "selena": the workspace chooser itself is the static route
- * `/app/selena`, and a static segment wins over `$brand`. Navigating to
- * `/app/selena/control-room` therefore matched the chooser, which has no child
- * routes, and answered 404 — a dead entry button that no test could catch,
- * because the route tree is only assembled when the app runs.
- *
- * Every static file under `routes/_authed/app/` reserves its name the same way;
- * the test beside this module asserts that this slug is not one of them.
+ * Two things went wrong here in turn, and both answered 404, which is why the
+ * first fix looked right and changed nothing. The chooser is the static route
+ * `/app/selena`, so `/app/selena/control-room` matched the chooser, which has
+ * no children. Pointing it at another literal moved the refusal one step
+ * later, into the brand loader, which throws notFound for an id it cannot
+ * resolve. Only a real brand id gets past both.
  */
-export const CONTENT_OS_BRAND_SLUG = "selena-content";
+export const BRAND_CREATION_ROUTE = "/app/new" as const;

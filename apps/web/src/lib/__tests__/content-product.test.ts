@@ -1,27 +1,33 @@
-import { readdirSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { CONTENT_OS_BRAND_SLUG } from "../content-product";
+import { BRAND_CREATION_ROUTE, CONTENT_PRODUCT_ROUTE } from "../content-product";
 
-/**
- * Read from the filesystem rather than a hand-kept list: the point of the test
- * is to fail when someone adds a static route whose name collides with the
- * brand Content OS opens, and a list copied by hand would go stale exactly then.
- */
-function reservedAppSegments(): string[] {
-	const appRoutes = fileURLToPath(new URL("../../routes/_authed/app", import.meta.url));
-	return readdirSync(appRoutes, { withFileTypes: true })
-		.filter((entry) => !entry.name.startsWith("$") && entry.name !== "index.tsx")
-		.map((entry) => entry.name.replace(/\.tsx$/, ""));
+function chooserSource(): string {
+	return readFileSync(fileURLToPath(new URL("../../routes/_authed/app/selena.tsx", import.meta.url)), "utf8");
 }
 
 describe("Content OS entry", () => {
-	it("opens a brand whose slug no static route can shadow", () => {
-		expect(reservedAppSegments()).not.toContain(CONTENT_OS_BRAND_SLUG);
+	/**
+	 * The button was dead for two separate reasons, and both showed the same
+	 * 404, so the first fix looked correct while changing nothing. Guarding the
+	 * shape of the navigation is what stops a third literal from creeping in:
+	 * `$brand` is a database id, and no constant can stand in for one.
+	 */
+	it("never navigates to a hard-coded brand", () => {
+		const navigations = chooserSource().match(/params:\s*\{\s*brand:[^}]*\}/g) ?? [];
+		expect(navigations.length).toBeGreaterThan(0);
+		for (const navigation of navigations) {
+			expect(navigation).not.toMatch(/brand:\s*["'`]/);
+		}
 	});
 
-	it("still finds the segments it is guarding against", () => {
-		// Without this the test above would pass on an empty directory listing.
-		expect(reservedAppSegments()).toContain("selena");
+	it("sends a user with no brand somewhere that exists", () => {
+		expect(chooserSource()).toContain("BRAND_CREATION_ROUTE");
+		expect(BRAND_CREATION_ROUTE).toBe("/app/new");
+	});
+
+	it("opens the Control Room under the brand segment", () => {
+		expect(CONTENT_PRODUCT_ROUTE).toBe("/app/$brand/control-room");
 	});
 });
