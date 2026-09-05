@@ -151,14 +151,14 @@ run("projecting materials as the registry worker", () => {
 		expect(rolsuper.rows[0]?.rolsuper).toBe(false);
 	});
 
-	it("does nothing for a material whose project has no binding", async () => {
+	it("defers a material whose project has no binding yet, without writing anything", async () => {
 		expect(await receive(article)).toBe("recorded");
 		const outcome = await projectOnce(worker, "local");
-		expect(outcome).toEqual({ kind: "refused", eventId: article.event_id, code: "NO_BINDING" });
+		expect(outcome).toMatchObject({ kind: "deferred", eventId: article.event_id, code: "NO_BINDING" });
 		expect(
 			await countRows("SELECT count(*) AS n FROM selena_registry.content_versions WHERE brand_id = $1", [BRAND_A]),
 		).toBe(0);
-		// The refusal is final for that event; the next event about the aggregate is a new version.
+		// Until the next attempt is due the event is not picked up again.
 		expect(await projectOnce(worker, "local")).toEqual({ kind: "idle" });
 	});
 
@@ -169,9 +169,8 @@ run("projecting materials as the registry worker", () => {
 				PROJECT_ID,
 			]),
 		);
-		// Version 2 of the article carries the binding now; version 1 was refused above and stays refused.
-		const articleV2 = { ...article, event_id: randomUUID(), version: 2 };
-		expect(await receive(articleV2)).toBe("recorded");
+		// The clock, stood in for by the superuser: the deferred article is due again.
+		await admin.query("UPDATE selena_ingest_raw.aether_events SET projection_next_attempt_at = now()");
 		expect(await receive(social)).toBe("recorded");
 
 		const first = await projectOnce(worker, "local");
@@ -193,7 +192,7 @@ run("projecting materials as the registry worker", () => {
 			"SELECT version, cta_url, disclosure FROM selena_registry.content_versions WHERE brand_id = $1 ORDER BY version",
 			[BRAND_A],
 		);
-		expect(versions.rows.map((r) => r.version)).toEqual([1, 2]);
+		expect(versions.rows.map((r) => r.version)).toEqual([1, 1]);
 		expect(versions.rows.every((r) => r.disclosure.synthetic === true)).toBe(true);
 		expect(versions.rows.every((r) => r.cta_url === "https://www.selenasystems.com/visibility")).toBe(true);
 		expect(
@@ -223,14 +222,14 @@ run("projecting materials as the registry worker", () => {
 	});
 
 	it("gives the article a new version without touching the social adaptation", async () => {
-		const articleV3 = {
+		const articleV2 = {
 			...article,
 			event_id: randomUUID(),
-			version: 3,
-			payload: { ...article.payload, title: "Редакция 3" },
+			version: 2,
+			payload: { ...article.payload, title: "Редакция 2" },
 		};
-		articleV3.payload_hash = payloadHash(articleV3.payload);
-		expect(await receive(articleV3)).toBe("recorded");
+		articleV2.payload_hash = payloadHash(articleV2.payload);
+		expect(await receive(articleV2)).toBe("recorded");
 		expect((await projectOnce(worker, "local")).kind).toBe("projected");
 		const versions = await admin.query<{ kind: string; version: number }>(
 			`SELECT i.kind, v.version FROM selena_registry.content_versions v
@@ -238,8 +237,8 @@ run("projecting materials as the registry worker", () => {
 			[BRAND_A],
 		);
 		expect(versions.rows).toEqual([
+			{ kind: "ARTICLE", version: 1 },
 			{ kind: "ARTICLE", version: 2 },
-			{ kind: "ARTICLE", version: 3 },
 			{ kind: "SOCIAL_ADAPTATION", version: 1 },
 		]);
 		expect(
@@ -251,7 +250,7 @@ run("projecting materials as the registry worker", () => {
 		const other = {
 			...article,
 			event_id: randomUUID(),
-			version: 4,
+			version: 3,
 			payload: { ...article.payload, business_key: "kora" },
 		};
 		other.payload_hash = payloadHash(other.payload);
@@ -274,7 +273,7 @@ run("projecting materials as the registry worker", () => {
 			]),
 		);
 		expect(await receive(stagingOnly)).toBe("recorded");
-		expect(await projectOnce(worker, "local")).toMatchObject({ kind: "refused", code: "NO_BINDING" });
+		expect(await projectOnce(worker, "local")).toMatchObject({ kind: "deferred", code: "NO_BINDING" });
 		expect(
 			await countRows("SELECT count(*) AS n FROM selena_registry.content_items WHERE brand_id = $1", [BRAND_B]),
 		).toBe(0);
@@ -285,10 +284,10 @@ run("projecting materials as the registry worker", () => {
 				[BRAND_A, PROJECT_ID],
 			),
 		);
-		const afterRevoke = { ...article, event_id: randomUUID(), version: 5 };
+		const afterRevoke = { ...article, event_id: randomUUID(), version: 4 };
 		expect(await receive(afterRevoke)).toBe("recorded");
-		expect(await projectOnce(worker, "local")).toEqual({
-			kind: "refused",
+		expect(await projectOnce(worker, "local")).toMatchObject({
+			kind: "deferred",
 			eventId: afterRevoke.event_id,
 			code: "NO_BINDING",
 		});

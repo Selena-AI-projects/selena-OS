@@ -17,6 +17,7 @@ import {
 	claimNextDraftEvent,
 	createDraftVersion,
 	currentPolicyVersion,
+	deferProjection,
 	enterBrandContext,
 	markProjected,
 	resolveBinding,
@@ -49,7 +50,15 @@ export function sourceEnvironmentFrom(value: string | undefined): SourceEnvironm
 export type ProjectionOutcome =
 	| { kind: "idle" }
 	| { kind: "projected"; eventId: string; contentVersionId: string; created: boolean }
-	| { kind: "refused"; eventId: string; code: ProjectionErrorCode };
+	| { kind: "refused"; eventId: string; code: ProjectionErrorCode }
+	| { kind: "deferred"; eventId: string; code: ProjectionErrorCode; nextAttemptAt: Date };
+
+/**
+ * What the owner can still supply is not a verdict on the material: a project
+ * bound tomorrow, or a policy written tomorrow, must still receive the drafts
+ * that arrived today, and the sender will not repeat unchanged material.
+ */
+const DEFERRABLE_CODES: ReadonlySet<ProjectionErrorCode> = new Set(["NO_BINDING", "NO_CONTENT_POLICY"]);
 
 /** A minimal view of the pool, so a test can drive the worker with its own client. */
 export interface WorkerPool {
@@ -93,6 +102,11 @@ export async function projectOnce(pool: WorkerPool, sourceEnvironment: SourceEnv
 		}
 
 		const refuse = async (code: ProjectionErrorCode): Promise<ProjectionOutcome> => {
+			if (DEFERRABLE_CODES.has(code)) {
+				const nextAttemptAt = await deferProjection(client, event.eventRowId, code);
+				await client.query("COMMIT");
+				return { kind: "deferred", eventId: event.eventId, code, nextAttemptAt };
+			}
 			await markProjected(client, event.eventRowId, { error: code });
 			await client.query("COMMIT");
 			return { kind: "refused", eventId: event.eventId, code };
@@ -198,6 +212,10 @@ export async function runProjectionLoop(options: {
 		if (outcome.kind === "projected") {
 			console.log(
 				`aether material ${outcome.created ? "projected" : "already projected"}: event=${outcome.eventId} version=${outcome.contentVersionId}`,
+			);
+		} else if (outcome.kind === "deferred") {
+			console.warn(
+				`aether material deferred: event=${outcome.eventId} code=${outcome.code} next=${outcome.nextAttemptAt.toISOString()}`,
 			);
 		} else {
 			console.warn(`aether material refused: event=${outcome.eventId} code=${outcome.code}`);

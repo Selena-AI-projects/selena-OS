@@ -13,20 +13,28 @@ ALTER TABLE selena_ingest_raw.aether_events
     CHECK (event_type <> 'content.draft_ready' OR schema_version = '1.1');
 
 -- A material event is projected once into a content version by the registry
--- worker. The outcome is recorded next to the event: either the version it
--- became, or the code of the reason it did not. Neither is ever overwritten.
+-- worker. A final outcome is recorded next to the event and never overwritten:
+-- `projected_at` with either the version it became or the code of the reason it
+-- never will. A prerequisite the owner can still supply (no binding, no content
+-- policy) is not final: the event is deferred with the reason and a next attempt,
+-- because the sender will not repeat unchanged material and the owner's later
+-- confirmation must still let it through.
 ALTER TABLE selena_ingest_raw.aether_events
   ADD COLUMN projected_content_version_id uuid REFERENCES selena_registry.content_versions(id),
   ADD COLUMN projection_error text,
   ADD COLUMN projected_at timestamptz,
+  ADD COLUMN projection_attempts integer NOT NULL DEFAULT 0 CHECK (projection_attempts >= 0),
+  ADD COLUMN projection_next_attempt_at timestamptz,
   ADD CONSTRAINT aether_events_projection_outcome_single
     CHECK (projected_content_version_id IS NULL OR projection_error IS NULL),
+  ADD CONSTRAINT aether_events_projection_version_is_final
+    CHECK (projected_content_version_id IS NULL OR projected_at IS NOT NULL),
   ADD CONSTRAINT aether_events_projection_error_shape
     CHECK (projection_error IS NULL OR projection_error ~ '^[A-Z_]{3,64}$');
 
 CREATE INDEX aether_events_unprojected_drafts_idx
   ON selena_ingest_raw.aether_events (received_at)
-  WHERE event_type = 'content.draft_ready' AND projected_content_version_id IS NULL AND projection_error IS NULL;
+  WHERE event_type = 'content.draft_ready' AND projected_at IS NULL;
 
 -- The recording function learns conflicts. Version 1 treated a repeated
 -- (aggregate, version) as either a duplicate or a stale event; a material
@@ -204,8 +212,8 @@ BEGIN
            e.version, e.occurred_at, e.trace_id, e.payload, e.payload_sha256
     FROM selena_ingest_raw.aether_events AS e
     WHERE e.event_type = 'content.draft_ready'
-      AND e.projected_content_version_id IS NULL
-      AND e.projection_error IS NULL
+      AND e.projected_at IS NULL
+      AND (e.projection_next_attempt_at IS NULL OR e.projection_next_attempt_at <= now())
     ORDER BY e.received_at, e.version, e.id
     FOR UPDATE SKIP LOCKED
     LIMIT 1;
@@ -234,21 +242,61 @@ BEGIN
   UPDATE selena_ingest_raw.aether_events
   SET projected_content_version_id = p_content_version_id,
       projection_error = p_error,
+      projection_next_attempt_at = NULL,
       projected_at = now()
   WHERE id = p_event_row_id
     AND event_type = 'content.draft_ready'
-    AND projected_content_version_id IS NULL
-    AND projection_error IS NULL;
+    AND projected_at IS NULL;
   IF NOT FOUND THEN
     RAISE EXCEPTION 'Aether material event is not awaiting projection';
   END IF;
 END;
 $$;
 
+-- Deferral: the reason is kept, the attempt counted, and the next attempt moved
+-- out with a doubling delay capped at an hour, so a brand that never gets its
+-- binding costs a query an hour rather than one a cycle.
+CREATE FUNCTION selena_ingest_raw.defer_aether_event_projection(
+  p_event_row_id uuid,
+  p_error text
+) RETURNS timestamptz
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, public, selena_ingest_raw
+AS $$
+DECLARE
+  v_next timestamptz;
+BEGIN
+  IF NOT pg_has_role(session_user, 'selena_registry_worker_runtime', 'member')
+    OR current_setting('app.selena_service_identity', true) IS DISTINCT FROM 'registry_worker'
+    OR current_setting('app.selena_actor_id', true) IS DISTINCT FROM 'service:registry-worker'
+    OR current_setting('app.selena_auth_type', true) IS DISTINCT FROM 'service' THEN
+    RAISE EXCEPTION 'Only the registry worker may defer Aether material events';
+  END IF;
+  IF p_error IS NULL THEN
+    RAISE EXCEPTION 'A deferral names the prerequisite that is missing';
+  END IF;
+  UPDATE selena_ingest_raw.aether_events
+  SET projection_error = p_error,
+      projection_attempts = projection_attempts + 1,
+      projection_next_attempt_at = now() + make_interval(secs => least(3600, 30 * power(2, projection_attempts)))
+  WHERE id = p_event_row_id
+    AND event_type = 'content.draft_ready'
+    AND projected_at IS NULL
+  RETURNING projection_next_attempt_at INTO v_next;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Aether material event is not awaiting projection';
+  END IF;
+  RETURN v_next;
+END;
+$$;
+
 REVOKE ALL ON FUNCTION selena_ingest_raw.claim_next_aether_draft_event() FROM PUBLIC;
 REVOKE ALL ON FUNCTION selena_ingest_raw.mark_aether_event_projected(uuid, uuid, text) FROM PUBLIC;
+REVOKE ALL ON FUNCTION selena_ingest_raw.defer_aether_event_projection(uuid, text) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION selena_ingest_raw.claim_next_aether_draft_event() TO selena_registry_worker_runtime;
 GRANT EXECUTE ON FUNCTION selena_ingest_raw.mark_aether_event_projected(uuid, uuid, text) TO selena_registry_worker_runtime;
+GRANT EXECUTE ON FUNCTION selena_ingest_raw.defer_aether_event_projection(uuid, text) TO selena_registry_worker_runtime;
 
 DO $$
 BEGIN
@@ -262,7 +310,8 @@ BEGIN
     RAISE EXCEPTION 'The receiver identity must not reach the content registry';
   END IF;
   IF has_function_privilege('selena_ingestion_runtime', 'selena_ingest_raw.claim_next_aether_draft_event()', 'EXECUTE')
-    OR has_function_privilege('selena_web_runtime', 'selena_ingest_raw.mark_aether_event_projected(uuid, uuid, text)', 'EXECUTE') THEN
+    OR has_function_privilege('selena_web_runtime', 'selena_ingest_raw.mark_aether_event_projected(uuid, uuid, text)', 'EXECUTE')
+    OR has_function_privilege('selena_web_runtime', 'selena_ingest_raw.defer_aether_event_projection(uuid, text)', 'EXECUTE') THEN
     RAISE EXCEPTION 'Projection claims and marks belong to the registry worker alone';
   END IF;
 END $$;

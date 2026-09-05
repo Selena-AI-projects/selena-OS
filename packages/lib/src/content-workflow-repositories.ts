@@ -211,6 +211,18 @@ export async function appendWorkerAudit(
 	);
 }
 
+/**
+ * The prerequisite is missing, not the material: leave the event for a later
+ * pass and record why. Returns when the next attempt is due.
+ */
+export async function deferProjection(client: PoolClient, eventRowId: string, code: string): Promise<Date> {
+	const result = await client.query<{ next: Date }>(
+		"SELECT selena_ingest_raw.defer_aether_event_projection($1::uuid, $2) AS next",
+		[eventRowId, code],
+	);
+	return result.rows[0]?.next as Date;
+}
+
 export async function markProjected(
 	client: PoolClient,
 	eventRowId: string,

@@ -1,7 +1,7 @@
 -- Run only against a disposable database after migration 0039 is installed.
 -- This file must never be executed against staging or production.
 BEGIN;
-SELECT plan(24);
+SELECT plan(31);
 
 INSERT INTO public."user" (id, name, email, email_verified, created_at, updated_at)
 VALUES ('selena-pgtap-pj-user-a', 'Projection owner A', 'selena-pgtap-pj-a@example.invalid', true, now(), now());
@@ -189,14 +189,50 @@ SELECT is(
   2, 'after projection the next claim is the newer version'
 );
 SELECT lives_ok(
+  $$SELECT selena_ingest_raw.defer_aether_event_projection(
+    (SELECT id FROM selena_ingest_raw.aether_events WHERE event_id = 'a7777777-7777-4777-8777-777777777777'),
+    'NO_BINDING')$$,
+  'a missing prerequisite defers the event with its reason'
+);
+SELECT is(
+  (SELECT count(*)::int FROM selena_ingest_raw.claim_next_aether_draft_event()),
+  0, 'a deferred event is not claimed again before its next attempt is due'
+);
+SELECT throws_ok(
+  $$SELECT projection_attempts FROM selena_ingest_raw.aether_events$$,
+  '42501', NULL,
+  'the worker sees the deferral only through the functions, not the bookkeeping columns'
+);
+RESET SESSION AUTHORIZATION;
+SELECT is(
+  (SELECT projection_attempts FROM selena_ingest_raw.aether_events WHERE event_id = 'a7777777-7777-4777-8777-777777777777'),
+  1, 'the deferral is counted'
+);
+-- Time passes (the superuser stands in for the clock, nothing else).
+UPDATE selena_ingest_raw.aether_events SET projection_next_attempt_at = now() - interval '1 second'
+WHERE event_id = 'a7777777-7777-4777-8777-777777777777';
+SET SESSION AUTHORIZATION selena_pgtap_pj_worker;
+SELECT set_config('app.selena_service_identity', 'registry_worker', true);
+SELECT set_config('app.selena_actor_id', 'service:registry-worker', true);
+SELECT set_config('app.selena_auth_type', 'service', true);
+SELECT is(
+  (SELECT version FROM selena_ingest_raw.claim_next_aether_draft_event()),
+  2, 'a deferred event is claimed again once its next attempt is due'
+);
+SELECT lives_ok(
   $$SELECT selena_ingest_raw.mark_aether_event_projected(
     (SELECT id FROM selena_ingest_raw.aether_events WHERE event_id = 'a7777777-7777-4777-8777-777777777777'),
-    NULL, 'NO_BINDING')$$,
-  'a projection failure is recorded as a code'
+    NULL, 'BUSINESS_KEY_MISMATCH')$$,
+  'a final projection failure is recorded as a code'
 );
 SELECT is(
   (SELECT count(*)::int FROM selena_ingest_raw.claim_next_aether_draft_event()),
   0, 'nothing is left to claim once every event has an outcome'
+);
+SELECT ok(
+  NOT has_function_privilege('selena_web_runtime', 'selena_ingest_raw.defer_aether_event_projection(uuid, text)', 'EXECUTE')
+  AND NOT has_function_privilege('selena_ingestion_runtime', 'selena_ingest_raw.defer_aether_event_projection(uuid, text)', 'EXECUTE'),
+  'only the worker may defer a projection'
 );
 RESET SESSION AUTHORIZATION;
 
