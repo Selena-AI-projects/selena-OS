@@ -260,6 +260,13 @@
       "when": 1787811060000,
       "tag": "0036_gateway_signing_key_custody",
       "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "7",
+      "when": 1787811120000,
+      "tag": "0038_growth_project_bindings",
+      "breakpoints": true
     }
   ]
 }
