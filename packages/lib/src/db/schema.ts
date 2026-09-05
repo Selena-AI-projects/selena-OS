@@ -932,6 +932,102 @@ export const scrMetricQualityEnum = selenaPerformanceSchema.enum("metric_quality
 	"QUARANTINED",
 ]);
 export const scrKillSwitchScopeEnum = selenaRegistrySchema.enum("kill_switch_scope", ["GLOBAL", "BRAND", "ACCOUNT"]);
+export const scrProfileDecisionEnum = selenaRegistrySchema.enum("profile_decision", ["CONFIRMED", "REVOKED"]);
+
+export const scrBrandContentProfileVersions = selenaRegistrySchema
+	.table(
+		"brand_content_profile_versions",
+		{
+			id: uuid("id").defaultRandom().primaryKey().notNull(),
+			organizationId: text("organization_id")
+				.notNull()
+				.references(() => organization.id),
+			brandId: text("brand_id")
+				.notNull()
+				.references(() => brands.id),
+			version: integer("version").notNull(),
+			languages: text("languages").array().notNull(),
+			audience: jsonb("audience").notNull(),
+			voice: jsonb("voice").notNull(),
+			ctaRules: jsonb("cta_rules").notNull().default([]),
+			visualRules: jsonb("visual_rules").notNull().default({}),
+			claimRules: jsonb("claim_rules").notNull().default({}),
+			facts: jsonb("facts").notNull().default([]),
+			sourceRefs: jsonb("source_refs").notNull().default([]),
+			profileHash: text("profile_hash").notNull(),
+			immutable: boolean("immutable").notNull().default(true),
+			createdBy: text("created_by").notNull(),
+			createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+		},
+		(table) => ({
+			brandVersionUnique: uniqueIndex("scr_brand_content_profile_versions_brand_version_unique").on(
+				table.brandId,
+				table.version,
+			),
+			brandHashUnique: uniqueIndex("scr_brand_content_profile_versions_brand_hash_unique").on(
+				table.brandId,
+				table.profileHash,
+			),
+			brandIdx: index("scr_brand_content_profile_versions_brand_idx").on(table.brandId, table.version),
+			orgIdx: index("scr_brand_content_profile_versions_org_idx").on(table.organizationId),
+		}),
+	)
+	.enableRLS();
+
+export const scrBrandContentProfileDecisions = selenaRegistrySchema
+	.table(
+		"brand_content_profile_decisions",
+		{
+			id: uuid("id").defaultRandom().primaryKey().notNull(),
+			organizationId: text("organization_id")
+				.notNull()
+				.references(() => organization.id),
+			brandId: text("brand_id")
+				.notNull()
+				.references(() => brands.id),
+			profileVersionId: uuid("profile_version_id")
+				.notNull()
+				.references(() => scrBrandContentProfileVersions.id),
+			profileHash: text("profile_hash").notNull(),
+			decision: scrProfileDecisionEnum().notNull(),
+			decidedBy: text("decided_by").notNull(),
+			reason: text("reason"),
+			createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+		},
+		(table) => ({
+			versionIdx: index("scr_brand_content_profile_decisions_version_idx").on(table.profileVersionId, table.createdAt),
+			brandIdx: index("scr_brand_content_profile_decisions_brand_idx").on(table.brandId, table.createdAt),
+			orgIdx: index("scr_brand_content_profile_decisions_org_idx").on(table.organizationId),
+		}),
+	)
+	.enableRLS();
+
+export const scrContentChannels = selenaRegistrySchema
+	.table(
+		"content_channels",
+		{
+			id: uuid("id").defaultRandom().primaryKey().notNull(),
+			organizationId: text("organization_id")
+				.notNull()
+				.references(() => organization.id),
+			brandId: text("brand_id")
+				.notNull()
+				.references(() => brands.id),
+			platform: text("platform").notNull(),
+			publicationMode: text("publication_mode").notNull().default("DRAFT_ONLY"),
+			displayName: text("display_name").notNull().default("YouTube"),
+			channelUrl: text("channel_url"),
+			languages: text("languages").array(),
+			createdBy: text("created_by").notNull(),
+			createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+		},
+		(table) => ({
+			brandPlatformUnique: uniqueIndex("scr_content_channels_brand_platform_unique").on(table.brandId, table.platform),
+			brandIdx: index("scr_content_channels_brand_idx").on(table.brandId),
+			orgIdx: index("scr_content_channels_org_idx").on(table.organizationId),
+		}),
+	)
+	.enableRLS();
 
 export const scrContentPolicies = selenaRegistrySchema
 	.table(

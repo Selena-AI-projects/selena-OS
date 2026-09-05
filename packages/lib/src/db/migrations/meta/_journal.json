@@ -225,6 +225,13 @@
       "when": 1787810760000,
       "tag": "0031_postiz_performance_ingestion",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1788620325000,
+      "tag": "0032_content_project_profiles",
+      "breakpoints": true
     }
   ]
 }

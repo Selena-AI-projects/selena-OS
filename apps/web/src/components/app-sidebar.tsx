@@ -154,9 +154,11 @@ export function AppSidebar({
 
 	// Dashboard section - only show if we have a brand context
 	if (scope === "brand" && isControlRoom) {
+		const stage1Enabled = context.clientConfig?.contentOsStage1Enabled === true;
 		groups.push({
 			label: CONTENT_PRODUCT_NAME,
 			items: [
+				...(stage1Enabled ? [{ title: "Set up", url: "/control-room/profile", icon: IconTool }] : []),
 				{ title: "Inbox", url: "/control-room", icon: IconListDetails, hash: "inbox" },
 				{ title: "Content", url: "/control-room", icon: IconFileText, hash: "content" },
 				{ title: "Review", url: "/control-room", icon: IconShieldCheck, hash: "review" },

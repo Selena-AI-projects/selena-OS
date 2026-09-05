@@ -1,5 +1,5 @@
 import { IconAlertTriangle, IconFileText, IconLockCheck, IconPlus, IconRefresh } from "@tabler/icons-react";
-import { createFileRoute, useLocation, useRouter } from "@tanstack/react-router";
+import { createFileRoute, Outlet, useLocation, useRouter } from "@tanstack/react-router";
 import { Badge } from "@workspace/ui/components/badge";
 import { Button } from "@workspace/ui/components/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@workspace/ui/components/card";
@@ -212,8 +212,9 @@ function ControlRoomPage() {
 	const data = Route.useLoaderData();
 	const { clientConfig } = Route.useRouteContext();
 	const router = useRouter();
-	const { hash } = useLocation();
+	const { hash, pathname } = useLocation();
 	const activeSection = sectionFromHash(hash);
+	const isProfileRoute = pathname.endsWith("/profile");
 	const [pending, startTransition] = useTransition();
 	const [notice, setNotice] = useState<string | null>(null);
 	const [contentTitle, setContentTitle] = useState("");
@@ -437,6 +438,8 @@ function ControlRoomPage() {
 			}
 		});
 	}
+
+	if (isProfileRoute) return <Outlet />;
 
 	return (
 		<div className="mx-auto flex w-full max-w-[1440px] flex-col gap-5">

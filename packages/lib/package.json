@@ -6,6 +6,7 @@
 	"scripts": {
 		"check-types": "tsc --noEmit",
 		"test": "vitest run",
+		"test:pgtap": "node scripts/run-pgtap.mjs",
 		"compare:onboarding": "tsx scripts/compare-onboarding.ts",
 		"generate:auth-schema": "bash scripts/generate-auth-schema.sh",
 		"verify:membership-dedupe": "tsx scripts/verify-membership-dedupe.ts"
@@ -50,6 +51,7 @@
 		,"./selena-release-gateway": "./src/selena-release-gateway.ts"
 		,"./selena-postiz": "./src/selena-postiz.ts"
 		,"./selena-postiz-ingestion": "./src/selena-postiz-ingestion.ts"
+		,"./content-workflow-repositories": "./src/content-workflow-repositories.ts"
 		,"./public-source-adapters": "./src/public-source-adapters.ts"
 		,"./public-provider-gates": "./src/public-provider-gates.ts"
 		,"./recommendation-persistence": "./src/recommendation-persistence.ts"
@@ -64,6 +66,7 @@
 		"@brightdata/sdk": "^1.1.0",
 		"@mozilla/readability": "^0.6.0",
 		"@workspace/config": "workspace:*",
+		"@workspace/content-workflow": "workspace:*",
 		"@workspace/selena-visibility-contracts": "workspace:*",
 		"ai": "^7.0.48",
 		"better-auth": "^1.6.26",
