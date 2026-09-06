@@ -51,7 +51,7 @@ type DecisionRow = typeof scrContentResearchOpportunityDecisions.$inferSelect;
 
 function assertWritable(context: ContentAuthContext): void {
 	if (context.authType !== "session" || !["owner", "member"].includes(context.role)) {
-		throw new Error("Forbidden: editor or owner access required");
+		throw new Error("Forbidden: owner or member access required");
 	}
 }
 
