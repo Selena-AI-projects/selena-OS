@@ -1,6 +1,6 @@
 BEGIN;
 
-SELECT plan(62);
+SELECT plan(65);
 
 SELECT has_table('selena_registry', 'content_research_runs', 'research runs table exists');
 SELECT has_table('selena_registry', 'content_research_sources', 'research sources table exists');
@@ -76,7 +76,18 @@ INSERT INTO selena_registry.brand_content_profile_versions (
   id, organization_id, brand_id, version, languages, audience, voice, profile_hash, created_by
 ) VALUES
   ('20000000-0000-4000-8000-000000000001', 'research-org', 'research-brand-a', 1, ARRAY['en'], '{}'::jsonb, '{}'::jsonb, repeat('a', 64), 'research-owner'),
-  ('20000000-0000-4000-8000-000000000002', 'research-org', 'research-brand-b', 1, ARRAY['en'], '{}'::jsonb, '{}'::jsonb, repeat('b', 64), 'research-owner');
+  ('20000000-0000-4000-8000-000000000002', 'research-org', 'research-brand-b', 1, ARRAY['en'], '{}'::jsonb, '{}'::jsonb, repeat('b', 64), 'research-owner'),
+  -- Never decided, and confirmed-then-revoked: research must be refused against both.
+  ('20000000-0000-4000-8000-000000000003', 'research-org', 'research-brand-a', 2, ARRAY['en'], '{}'::jsonb, '{}'::jsonb, repeat('d', 64), 'research-owner'),
+  ('20000000-0000-4000-8000-000000000004', 'research-org', 'research-brand-a', 3, ARRAY['en'], '{}'::jsonb, '{}'::jsonb, repeat('e', 64), 'research-owner');
+
+INSERT INTO selena_registry.brand_content_profile_decisions (
+  organization_id, brand_id, profile_version_id, profile_hash, decision, decided_by, reason, created_at
+) VALUES
+  ('research-org', 'research-brand-a', '20000000-0000-4000-8000-000000000001', repeat('a', 64), 'CONFIRMED', 'research-owner', NULL, now()),
+  ('research-org', 'research-brand-b', '20000000-0000-4000-8000-000000000002', repeat('b', 64), 'CONFIRMED', 'research-owner', NULL, now()),
+  ('research-org', 'research-brand-a', '20000000-0000-4000-8000-000000000004', repeat('e', 64), 'CONFIRMED', 'research-owner', NULL, now() - interval '1 minute'),
+  ('research-org', 'research-brand-a', '20000000-0000-4000-8000-000000000004', repeat('e', 64), 'REVOKED', 'research-owner', 'Superseded', now());
 
 INSERT INTO selena_registry.content_research_runs (
   id, organization_id, brand_id, profile_version_id, profile_hash, idempotency_key, adapter_id,
@@ -133,6 +144,32 @@ SELECT throws_matching(
   )$$,
   'row-level security policy',
   'a run cannot be bound to another brand''s profile version'
+);
+SELECT throws_matching(
+  $$INSERT INTO selena_registry.content_research_runs (
+    organization_id, brand_id, profile_version_id, profile_hash, idempotency_key, adapter_id,
+    status, pipeline_version, scoring_version, baseline_version, correlation_id,
+    started_at, completed_at, created_by
+  ) VALUES (
+    'research-org', 'research-brand-a', '20000000-0000-4000-8000-000000000003', repeat('d', 64),
+    'run-undecided-profile', 'fixture', 'COMPLETED', 'content.research/v1', 'content.research.scoring/v1',
+    'radar-baseline-v1', '30000000-0000-4000-8000-000000000015', now(), now(), 'research-owner'
+  )$$,
+  'row-level security policy',
+  'a run cannot be bound to a profile version nobody confirmed'
+);
+SELECT throws_matching(
+  $$INSERT INTO selena_registry.content_research_runs (
+    organization_id, brand_id, profile_version_id, profile_hash, idempotency_key, adapter_id,
+    status, pipeline_version, scoring_version, baseline_version, correlation_id,
+    started_at, completed_at, created_by
+  ) VALUES (
+    'research-org', 'research-brand-a', '20000000-0000-4000-8000-000000000004', repeat('e', 64),
+    'run-revoked-profile', 'fixture', 'COMPLETED', 'content.research/v1', 'content.research.scoring/v1',
+    'radar-baseline-v1', '30000000-0000-4000-8000-000000000016', now(), now(), 'research-owner'
+  )$$,
+  'row-level security policy',
+  'a run cannot be bound to a profile version whose confirmation was revoked'
 );
 SELECT throws_matching(
   $$INSERT INTO selena_registry.content_research_runs (
@@ -277,6 +314,20 @@ SELECT throws_matching(
   )$$,
   'content_research_opportunities_evidence_summary_check',
   'an opportunity cannot be stored without evidence'
+);
+SELECT throws_matching(
+  $$INSERT INTO selena_registry.content_research_opportunities (
+    organization_id, brand_id, run_id, source_id, profile_version_id, profile_hash,
+    opportunity_key, proposed_angle, proposed_hook, content_format, rationale,
+    evidence_summary, confidence, created_by
+  ) VALUES (
+    'research-org', 'research-brand-a', '20000000-0000-4000-8000-000000000110',
+    '20000000-0000-4000-8000-000000000200', '20000000-0000-4000-8000-000000000004',
+    repeat('e', 64), 'opportunity-foreign-lineage', 'An angle', 'A hook', 'LONG_VIDEO',
+    'Cleared the gate', 'Evidence', 'HIGH', 'research-owner'
+  )$$,
+  'row-level security policy',
+  'an opportunity cannot cite a profile version its own run was not scored against'
 );
 
 SELECT selena_registry.set_request_context(

@@ -181,8 +181,8 @@ CREATE POLICY content_research_runs_web_insert ON selena_registry.content_resear
   WITH CHECK (
     created_by = current_setting('app.selena_actor_id', true)
     AND selena_registry.can_write_brand(organization_id, brand_id, ARRAY['web'])
-    -- A run is bound to a confirmed profile version of the same brand, so a run
-    -- can never inherit another brand's facts.
+    -- A run is bound to a profile version of the same brand carrying the same
+    -- hash.
     -- Every reference to the new row is fully qualified: an unqualified name here
     -- resolves against the subquery's own table, which turns a cross-tenant guard
     -- into a comparison of a column with itself.
@@ -193,6 +193,17 @@ CREATE POLICY content_research_runs_web_insert ON selena_registry.content_resear
         AND version.brand_id = selena_registry.content_research_runs.brand_id
         AND version.profile_hash = selena_registry.content_research_runs.profile_hash
     )
+    -- ...and that version's newest decision is CONFIRMED. The application checks
+    -- this too, but an application check is not the invariant: without this
+    -- predicate the runtime could store research against a draft or a revoked
+    -- profile, which is the lineage the whole slice exists to preserve.
+    AND (
+      SELECT decision
+      FROM selena_registry.brand_content_profile_decisions decided
+      WHERE decided.profile_version_id = selena_registry.content_research_runs.profile_version_id
+      ORDER BY decided.created_at DESC, decided.id DESC
+      LIMIT 1
+    ) = 'CONFIRMED'
   );
 CREATE POLICY content_research_runs_web_update_denied ON selena_registry.content_research_runs
   FOR UPDATE TO selena_web_runtime USING (false) WITH CHECK (false);
@@ -253,6 +264,15 @@ CREATE POLICY content_research_opportunities_web_insert ON selena_registry.conte
         AND source.run_id = selena_registry.content_research_opportunities.run_id
         AND source.organization_id = selena_registry.content_research_opportunities.organization_id
         AND source.brand_id = selena_registry.content_research_opportunities.brand_id
+    )
+    -- The opportunity repeats its run's profile lineage, so it must be the same
+    -- lineage. Otherwise an opportunity could cite a profile version its own run
+    -- was never scored against.
+    AND EXISTS (
+      SELECT 1 FROM selena_registry.content_research_runs run
+      WHERE run.id = selena_registry.content_research_opportunities.run_id
+        AND run.profile_version_id = selena_registry.content_research_opportunities.profile_version_id
+        AND run.profile_hash = selena_registry.content_research_opportunities.profile_hash
     )
   );
 CREATE POLICY content_research_opportunities_web_update_denied ON selena_registry.content_research_opportunities
