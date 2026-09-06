@@ -156,20 +156,66 @@ describe.skipIf(!disposableDatabaseUrl)("content research PostgreSQL adapter", (
 			}),
 		).rejects.toMatchObject({ code: "NOT_FOUND" });
 
-		// The transferred Video Radar adapter is recorded as refused rather than
-		// dispatched, and the run it produces still counts zero provider calls.
-		const refused = await research.runResearch(member, {
-			brandId,
-			idempotencyKey: `radar-${suffix}`,
-			adapterId: "video-radar",
-		});
-		expect(refused.status).toBe("FAILED");
-		const refusedRun = await root.query<{ failures: { code: string }[]; external_provider_calls: number }>(
-			`SELECT failures, external_provider_calls FROM selena_registry.content_research_runs WHERE id = $1`,
-			[refused.id],
+		// Each live-provider gate is exercised separately through the server path,
+		// because "we observed no calls" is not evidence that any one gate holds:
+		// only opening the other two proves the remaining one is what refused.
+		// The fourth case leaves every gate open and shows the adapter still
+		// refuses, because Stage 1 injects no dispatcher at all.
+		const gateCases = [
+			{ name: "flag", env: {}, expected: "ADAPTER_DISABLED" },
+			{
+				name: "ceiling",
+				env: { CONTENT_OS_VIDEO_RADAR_LIVE: "true", CONTENT_OS_VIDEO_RADAR_CREDENTIAL_PRESENT: "true" },
+				expected: "PROVIDER_QUOTA_EXCEEDED",
+			},
+			{
+				name: "credential",
+				env: { CONTENT_OS_VIDEO_RADAR_LIVE: "true", CONTENT_OS_VIDEO_RADAR_MAX_CALLS: "5" },
+				expected: "PROVIDER_AUTH_FAILED",
+			},
+			{
+				name: "transport",
+				env: {
+					CONTENT_OS_VIDEO_RADAR_LIVE: "true",
+					CONTENT_OS_VIDEO_RADAR_MAX_CALLS: "5",
+					CONTENT_OS_VIDEO_RADAR_CREDENTIAL_PRESENT: "true",
+				},
+				expected: "PROVIDER_UNAVAILABLE",
+			},
+		] as const;
+
+		const gateKeys = [
+			"CONTENT_OS_VIDEO_RADAR_LIVE",
+			"CONTENT_OS_VIDEO_RADAR_MAX_CALLS",
+			"CONTENT_OS_VIDEO_RADAR_CREDENTIAL_PRESENT",
+		] as const;
+
+		for (const gateCase of gateCases) {
+			for (const key of gateKeys) delete process.env[key];
+			Object.assign(process.env, gateCase.env);
+
+			const refused = await research.runResearch(member, {
+				brandId,
+				idempotencyKey: `radar-${gateCase.name}-${suffix}`,
+				adapterId: "video-radar",
+			});
+			expect(refused.status).toBe("FAILED");
+			const refusedRun = await root.query<{ failures: { code: string }[]; external_provider_calls: number }>(
+				`SELECT failures, external_provider_calls FROM selena_registry.content_research_runs WHERE id = $1`,
+				[refused.id],
+			);
+			expect(refusedRun.rows[0]?.failures.map((failure) => failure.code)).toEqual([gateCase.expected]);
+			expect(refusedRun.rows[0]?.external_provider_calls).toBe(0);
+		}
+		for (const key of gateKeys) delete process.env[key];
+
+		// Nothing above dispatched, so no run recorded a provider call.
+		const providerCalls = await root.query<{ total: string }>(
+			`SELECT coalesce(sum(external_provider_calls), 0)::text AS total
+			 FROM selena_registry.content_research_runs WHERE organization_id = $1`,
+			[organizationId],
 		);
-		expect(refusedRun.rows[0]?.failures.map((failure) => failure.code)).toEqual(["ADAPTER_DISABLED"]);
-		expect(refusedRun.rows[0]?.external_provider_calls).toBe(0);
+		expect(providerCalls.rows[0]?.total).toBe("0");
 
 		// A revoked profile is not a confirmed one, so research stops.
 		await profiles.profiles.decide(owner, {

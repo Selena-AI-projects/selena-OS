@@ -1087,13 +1087,13 @@ export const scrContentResearchRuns = selenaRegistrySchema
 			createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 		},
 		(table) => ({
-			brandIdempotencyUnique: uniqueIndex("scr_content_research_runs_brand_idempotency_unique").on(
+			brandIdempotencyUnique: uniqueIndex("content_research_runs_brand_idempotency_unique").on(
 				table.brandId,
 				table.idempotencyKey,
 			),
-			brandIdx: index("scr_content_research_runs_brand_idx").on(table.brandId, table.createdAt),
-			orgIdx: index("scr_content_research_runs_org_idx").on(table.organizationId),
-			profileIdx: index("scr_content_research_runs_profile_idx").on(table.profileVersionId),
+			brandIdx: index("content_research_runs_brand_idx").on(table.brandId, table.createdAt),
+			orgIdx: index("content_research_runs_org_idx").on(table.organizationId),
+			profileIdx: index("content_research_runs_profile_idx").on(table.profileVersionId),
 		}),
 	)
 	.enableRLS();
@@ -1149,12 +1149,9 @@ export const scrContentResearchSources = selenaRegistrySchema
 			createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 		},
 		(table) => ({
-			runExternalUnique: uniqueIndex("scr_content_research_sources_run_external_unique").on(
-				table.runId,
-				table.externalId,
-			),
-			brandIdx: index("scr_content_research_sources_brand_idx").on(table.brandId, table.shortlisted),
-			orgIdx: index("scr_content_research_sources_org_idx").on(table.organizationId),
+			runExternalUnique: uniqueIndex("content_research_sources_run_external_unique").on(table.runId, table.externalId),
+			brandIdx: index("content_research_sources_brand_idx").on(table.brandId, table.shortlisted, table.candidateScore),
+			orgIdx: index("content_research_sources_org_idx").on(table.organizationId),
 		}),
 	)
 	.enableRLS();
@@ -1181,12 +1178,12 @@ export const scrContentResearchMetricSnapshots = selenaRegistrySchema
 			createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 		},
 		(table) => ({
-			sourceCapturedUnique: uniqueIndex("scr_content_research_metric_snapshots_source_captured_unique").on(
+			sourceCapturedUnique: uniqueIndex("content_research_metric_snapshots_source_captured_unique").on(
 				table.sourceId,
 				table.capturedAt,
 			),
-			brandIdx: index("scr_content_research_metric_snapshots_brand_idx").on(table.brandId, table.capturedAt),
-			orgIdx: index("scr_content_research_metric_snapshots_org_idx").on(table.organizationId),
+			brandIdx: index("content_research_metric_snapshots_brand_idx").on(table.brandId, table.capturedAt),
+			orgIdx: index("content_research_metric_snapshots_org_idx").on(table.organizationId),
 		}),
 	)
 	.enableRLS();
@@ -1224,13 +1221,10 @@ export const scrContentResearchOpportunities = selenaRegistrySchema
 			createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 		},
 		(table) => ({
-			runKeyUnique: uniqueIndex("scr_content_research_opportunities_run_key_unique").on(
-				table.runId,
-				table.opportunityKey,
-			),
-			runIdx: index("scr_content_research_opportunities_run_idx").on(table.runId, table.createdAt),
-			brandIdx: index("scr_content_research_opportunities_brand_idx").on(table.brandId, table.createdAt),
-			orgIdx: index("scr_content_research_opportunities_org_idx").on(table.organizationId),
+			runKeyUnique: uniqueIndex("content_research_opportunities_run_key_unique").on(table.runId, table.opportunityKey),
+			runIdx: index("content_research_opportunities_run_idx").on(table.runId, table.createdAt),
+			brandIdx: index("content_research_opportunities_brand_idx").on(table.brandId, table.createdAt),
+			orgIdx: index("content_research_opportunities_org_idx").on(table.organizationId),
 		}),
 	)
 	.enableRLS();
@@ -1255,12 +1249,12 @@ export const scrContentResearchOpportunityDecisions = selenaRegistrySchema
 			createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 		},
 		(table) => ({
-			opportunityIdx: index("scr_content_research_opportunity_decisions_opportunity_idx").on(
+			opportunityIdx: index("content_research_opportunity_decisions_opportunity_idx").on(
 				table.opportunityId,
 				table.createdAt,
 			),
-			brandIdx: index("scr_content_research_opportunity_decisions_brand_idx").on(table.brandId, table.createdAt),
-			orgIdx: index("scr_content_research_opportunity_decisions_org_idx").on(table.organizationId),
+			brandIdx: index("content_research_opportunity_decisions_brand_idx").on(table.brandId, table.createdAt),
+			orgIdx: index("content_research_opportunity_decisions_org_idx").on(table.organizationId),
 		}),
 	)
 	.enableRLS();

@@ -419,45 +419,45 @@ tenant identity.
   `parkourcafe/video-radar-marketing-tool` at
   `b589a811a4e1f205a784e5128283f9d227143f32` despite the source repository
   having no license file.
-- [ ] Record source paths and commit provenance in the PR.
-- [ ] Port contracts, scoring, baseline, outlier, relevance, velocity,
+- [x] Record source paths and commit provenance in the PR.
+- [x] Port contracts, scoring, baseline, outlier, relevance, velocity,
   anti-copy enforcement, run orchestration and provider interfaces.
-- [ ] Do not port UI, routes, auth, Supabase adapter, JSON project registry or
+- [x] Do not port UI, routes, auth, Supabase adapter, JSON project registry or
   environment loading.
-- [ ] Replace global project lookup with exactly one brand-derived
+- [x] Replace global project lookup with exactly one brand-derived
   `RadarProject` from the confirmed profile.
-- [ ] Preserve or replace tests at the research module interface; do not layer
+- [x] Preserve or replace tests at the research module interface; do not layer
   duplicate tests around shallow helpers.
 
 #### B. Migration 0040 and persistence
 
-- [ ] Add `0040_content_research_registry.sql`.
-- [ ] Register migration `0040` in
+- [x] Add `0040_content_research_registry.sql`.
+- [x] Register migration `0040` in
   `packages/lib/src/db/migrations/meta/_journal.json`; inspect the current
   Drizzle convention and record whether a matching snapshot JSON is required.
-- [ ] Add brand-scoped research runs, sources, metric snapshots, opportunities
+- [x] Add brand-scoped research runs, sources, metric snapshots, opportunities
   and opportunity decisions.
-- [ ] Bind each run to an immutable confirmed profile version.
-- [ ] Enforce brand-local idempotency and source uniqueness.
-- [ ] Make snapshots and decisions append-only.
-- [ ] Preserve transcript permission, language, retrieval and failure state;
+- [x] Bind each run to an immutable confirmed profile version.
+- [x] Enforce brand-local idempotency and source uniqueness.
+- [x] Make snapshots and decisions append-only.
+- [x] Preserve transcript permission, language, retrieval and failure state;
   store `UNAVAILABLE` instead of invented text.
-- [ ] Enable and force RLS and add least-privilege grants.
-- [ ] Add `0040_content_research_registry.pgtap.sql` covering cross-brand
+- [x] Enable and force RLS and add least-privilege grants.
+- [x] Add `0040_content_research_registry.pgtap.sql` covering cross-brand
   read/write/link denial and append-only behavior.
 
 #### C. Adapters and server operations
 
-- [ ] Add `createPostgresRadarStore({ context, brandId })` behind the research
+- [x] Add `createPostgresRadarStore({ context, brandId })` behind the research
   module implementation.
-- [ ] Add deterministic `FixtureResearchAdapter` first.
-- [ ] Add `VideoRadarAdapter` without enabling a live provider path.
-- [ ] Validate provenance and deduplicate sources before persistence.
-- [ ] Persist sanitized failures and correlation IDs, not raw provider payloads.
-- [ ] Emit `content.research_started`, `content.research_completed`,
+- [x] Add deterministic `FixtureResearchAdapter` first.
+- [x] Add `VideoRadarAdapter` without enabling a live provider path.
+- [x] Validate provenance and deduplicate sources before persistence.
+- [x] Persist sanitized failures and correlation IDs, not raw provider payloads.
+- [x] Emit `content.research_started`, `content.research_completed`,
   `content.research_failed`, `content.opportunity_saved` and
   `content.opportunity_rejected` through the existing hash-chained audit path.
-- [ ] Add research start, import, get and opportunity-decision handlers in
+- [x] Add research start, import, get and opportunity-decision handlers in
   `apps/web/src/server/content-research.ts`.
 - [ ] If work is handed to pg-boss, enqueue opaque IDs only; the worker must set
   authenticated brand-scoped database context and re-read canonical profile,
@@ -465,40 +465,40 @@ tenant identity.
 
 #### D. UI
 
-- [ ] Gate the research route, navigation entry, handlers and all new Slice 2
+- [x] Gate the research route, navigation entry, handlers and all new Slice 2
   surfaces behind the fail-closed `CONTENT_OS_STAGE1_ENABLED` flag.
-- [ ] Add `/app/$brand/control-room/research`.
-- [ ] Add Research under the **Create** navigation group.
-- [ ] Show run state, confirmed-profile lineage, sources, capture times,
+- [x] Add `/app/$brand/control-room/research`.
+- [x] Add Research under the **Create** navigation group.
+- [x] Show run state, confirmed-profile lineage, sources, capture times,
   scoring version and evidence requirements.
-- [ ] Support fixture/import mode before any live action.
-- [ ] Support `NEW`, `SAVED`, `REJECTED` and `SENT_TO_CREATION` decisions.
-- [ ] Do not render raw provider responses.
-- [ ] Add a short patch changeset for the user-facing research surface, scoped
+- [x] Support fixture/import mode before any live action.
+- [x] Support `NEW`, `SAVED`, `REJECTED` and `SENT_TO_CREATION` decisions.
+- [x] Do not render raw provider responses.
+- [x] Add a short patch changeset for the user-facing research surface, scoped
   to the packages that actually change.
 
 ### 7.4 Slice 2 targeted evidence
 
-- [ ] Ported compatibility tests pass at the research module interface.
-- [ ] Fixture output is deterministic.
-- [ ] Migration chain through `0040` and paired pgTAP pass on a clean disposable
+- [x] Ported compatibility tests pass at the research module interface.
+- [x] Fixture output is deterministic.
+- [x] Migration chain through `0040` and paired pgTAP pass on a clean disposable
   database; the migration receipt reports the new `0040` journal tag as applied.
-- [ ] Unconfirmed/revoked profiles block research.
-- [ ] Foreign-brand profiles, sources and opportunities cannot be linked or
+- [x] Unconfirmed/revoked profiles block research.
+- [x] Foreign-brand profiles, sources and opportunities cannot be linked or
   observed.
-- [ ] Duplicate idempotency keys do not duplicate runs.
+- [x] Duplicate idempotency keys do not duplicate runs.
 - [ ] Queued-worker tests prove canonical state is re-read under brand-scoped
   database context and foreign-brand opaque IDs are denied.
-- [ ] Local browser flow imports a fixture and saves/rejects an opportunity.
-- [ ] With `CONTENT_OS_STAGE1_ENABLED` unset, the research route and handlers are
+- [x] Local browser flow imports a fixture and saves/rejects an opportunity.
+- [x] With `CONTENT_OS_STAGE1_ENABLED` unset, the research route and handlers are
   inaccessible and its navigation entry is absent; the exact value `true`
   enables only the authorized disposable flow.
-- [ ] All five Slice 2 events are present in `selena_audit.audit_events`; event
+- [x] All five Slice 2 events are present in `selena_audit.audit_events`; event
   metadata is limited to IDs, hashes, versions, status and normalized error
   codes and excludes secrets, transcripts, prompts, provider bodies and image
   bytes.
-- [ ] `externalProviderCalls = 0` and cost is zero.
-- [ ] Server integration tests prove `VideoRadarAdapter` fails closed, with zero
+- [x] `externalProviderCalls = 0` and cost is zero.
+- [x] Server integration tests prove `VideoRadarAdapter` fails closed, with zero
   dispatch and zero call-ledger entry, when the live-provider flag, cost ceiling
   or credential is absent in separate test cases.
 - [ ] CI and blind review pass the exact head SHA; owner decides merge.
