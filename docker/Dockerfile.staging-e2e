@@ -1,0 +1,16 @@
+# A browser that can reach the deployment, for the one thing no log can prove.
+#
+# Whether a signed-in person can actually get from an empty account to a
+# material in the Inbox is not answerable from a database or a deploy log. It is
+# answered by walking it, and the walk has to happen somewhere that can reach
+# the deployed site — which the session doing this work cannot.
+#
+# Built from Playwright's own image so the browser matches the library version;
+# installing a browser at build time would be slower and no more correct.
+FROM mcr.microsoft.com/playwright:v1.62.1-noble
+
+WORKDIR /app
+COPY e2e/staging ./staging
+RUN npm install --no-save playwright@1.62.1 pg@8.16.3
+
+CMD ["node", "staging/owner-path.mjs"]
