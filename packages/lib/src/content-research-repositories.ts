@@ -359,7 +359,7 @@ export function createPostgresRadarStore(options: {
 					eq(scrContentResearchOpportunityDecisions.brandId, brandId),
 				),
 			)
-			.orderBy(desc(scrContentResearchOpportunityDecisions.createdAt));
+			.orderBy(desc(scrContentResearchOpportunityDecisions.createdAt), desc(scrContentResearchOpportunityDecisions.id));
 		return { sources, opportunities, decisions };
 	}
 

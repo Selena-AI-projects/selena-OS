@@ -1091,7 +1091,7 @@ export const scrContentResearchRuns = selenaRegistrySchema
 				table.brandId,
 				table.idempotencyKey,
 			),
-			brandIdx: index("content_research_runs_brand_idx").on(table.brandId, table.createdAt),
+			brandIdx: index("content_research_runs_brand_idx").on(table.brandId, table.createdAt.desc()),
 			orgIdx: index("content_research_runs_org_idx").on(table.organizationId),
 			profileIdx: index("content_research_runs_profile_idx").on(table.profileVersionId),
 		}),
@@ -1150,7 +1150,11 @@ export const scrContentResearchSources = selenaRegistrySchema
 		},
 		(table) => ({
 			runExternalUnique: uniqueIndex("content_research_sources_run_external_unique").on(table.runId, table.externalId),
-			brandIdx: index("content_research_sources_brand_idx").on(table.brandId, table.shortlisted, table.candidateScore),
+			brandIdx: index("content_research_sources_brand_idx").on(
+				table.brandId,
+				table.shortlisted,
+				table.candidateScore.desc(),
+			),
 			orgIdx: index("content_research_sources_org_idx").on(table.organizationId),
 		}),
 	)
@@ -1223,7 +1227,7 @@ export const scrContentResearchOpportunities = selenaRegistrySchema
 		(table) => ({
 			runKeyUnique: uniqueIndex("content_research_opportunities_run_key_unique").on(table.runId, table.opportunityKey),
 			runIdx: index("content_research_opportunities_run_idx").on(table.runId, table.createdAt),
-			brandIdx: index("content_research_opportunities_brand_idx").on(table.brandId, table.createdAt),
+			brandIdx: index("content_research_opportunities_brand_idx").on(table.brandId, table.createdAt.desc()),
 			orgIdx: index("content_research_opportunities_org_idx").on(table.organizationId),
 		}),
 	)
