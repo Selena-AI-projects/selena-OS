@@ -114,6 +114,50 @@ export function contentVersionHash(input: {
 	});
 }
 
+/**
+ * `content.workflow/v2`, for structured content.
+ *
+ * A separate function rather than a branch inside `contentVersionHash`, because
+ * a stored V1 hash is a historical fact about what somebody approved: it must
+ * keep hashing exactly what it hashed, and the surest way to guarantee that is
+ * for the V1 path to have no new inputs and no new conditions.
+ *
+ * V2 covers the identity a structured version actually has — what it is, where
+ * it goes, what it says, and the whole lineage that produced it. Two versions
+ * whose text is identical but whose profile version, research run or generation
+ * run differ are not the same version, and their hashes say so.
+ */
+export function contentWorkflowV2Hash(input: {
+	contentKind: string;
+	contentChannelId: string | null;
+	structuredBody: unknown;
+	ctaUrl: string;
+	claims: unknown;
+	evidenceSnapshot: unknown;
+	disclosure: unknown;
+	policyVersion: string;
+	projectProfileVersionId: string;
+	projectProfileHash: string;
+	researchRunId: string | null;
+	generationRunId: string | null;
+}): string {
+	return sha256({
+		claims: input.claims,
+		contentChannelId: input.contentChannelId,
+		contentKind: input.contentKind,
+		ctaUrl: input.ctaUrl,
+		disclosure: input.disclosure,
+		evidenceSnapshot: input.evidenceSnapshot,
+		generationRunId: input.generationRunId,
+		hashVersion: "content.workflow/v2",
+		policyVersion: input.policyVersion,
+		projectProfileHash: input.projectProfileHash,
+		projectProfileVersionId: input.projectProfileVersionId,
+		researchRunId: input.researchRunId,
+		structuredBody: input.structuredBody,
+	});
+}
+
 export function assetBundleHash(assets: ReadonlyArray<{ id: string; sha256: string }>): string {
 	return sha256(
 		assets
