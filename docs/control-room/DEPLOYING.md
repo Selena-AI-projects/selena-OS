@@ -169,7 +169,11 @@ Supabase Storage, а staging живёт на Postgres Railway, и проекта
 | `DATABASE_URL` | под `selena_worker_login` — логин появляется, когда у сервиса `migrate` задан `SELENA_WORKER_DB_PASSWORD` |
 | `GROWTH_ENGINE_STAGE1_ENABLED` | точное `true`; любое другое значение — сервис выходит с сообщением и ничего не делает |
 | `SELENA_GROWTH_SOURCE_ENVIRONMENT` | `staging` или `production` — среда, за которую отвечают подтверждённые источники этой базы; материал из другой среды не найдёт binding |
-| `SELENA_STAGING_MVP` | `true` на staging — включает проверку корневого сертификата базы, как у `receiver` |
+| `SELENA_STAGING_MVP` | задавать только там, где база требует verify-full и корневой сертификат передан в `SELENA_RUNTIME_DATABASE_CA_PEM`. На staging `receiver` работает без него, и `projection` настроен так же |
+
+Логин `selena_worker_login` создаёт сервис `migrate`, и только когда у него задан
+`SELENA_WORKER_DB_PASSWORD`: без пароля миграции проходят, а логин молча
+пропускается — в логе это строка `skipped, no password set`.
 
 Тот же флаг `GROWTH_ENGINE_STAGE1_ENABLED=true` на сервисе `web` открывает раздел
 Sources в Control Room, где владелец подтверждает источник. Без подтверждённого
