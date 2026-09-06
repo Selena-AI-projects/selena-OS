@@ -1,8 +1,15 @@
 import { describe, expect, it } from "vitest";
-import { parseYouTubeVideoDocument, renderReadableBody, YOUTUBE_VIDEO_DOCUMENT_FORMAT } from "../content-document";
+import {
+	evidenceSnapshot,
+	parseYouTubeVideoDocument,
+	renderReadableBody,
+	YOUTUBE_VIDEO_DOCUMENT_SCHEMA,
+} from "../content-document";
 import type { ResearchOpportunity } from "../research/contracts";
 import {
+	buildConceptDocument,
 	buildEvidenceContext,
+	buildScriptDocument,
 	buildScriptEvidenceContext,
 	ContentCreationError,
 	type CreationAdapter,
@@ -194,9 +201,14 @@ describe("script generation", () => {
 });
 
 describe("the structured document", () => {
-	async function document() {
+	async function concept() {
 		const [idea] = await fixtureIdeas();
 		const evidence = buildScriptEvidenceContext({ evidence: context(), idea });
+		return { evidence, document: buildConceptDocument({ idea, evidence, audience: "GENERAL" }) };
+	}
+
+	async function scripted() {
+		const { evidence, document } = await concept();
 		const outcome = await runScriptGeneration({
 			adapter: new FixtureCreationAdapter(),
 			evidence,
@@ -206,41 +218,69 @@ describe("the structured document", () => {
 			audience: "GENERAL",
 			now: NOW,
 		});
-		return parseYouTubeVideoDocument({
-			format: YOUTUBE_VIDEO_DOCUMENT_FORMAT,
-			title: outcome.script.titles[0],
-			alternativeTitles: outcome.script.titles.slice(1),
-			hook: outcome.script.hook,
-			sections: outcome.script.structure,
-			script: outcome.script.script,
-			payoff: outcome.script.payoff,
-			primaryCta: outcome.script.primaryCta,
-			studioValidation: outcome.script.studioValidation,
-			evidenceClaims: [...evidence.evidenceClaims, ...evidence.ideaPackage.evidenceClaims],
-		});
+		return { evidence, document: buildScriptDocument({ concept: document, script: outcome.script }) };
 	}
 
+	// Selecting an idea creates a version before any script exists, so a document
+	// without a script has to be valid rather than a special case.
+	it("is valid for a selected idea that has no script yet", async () => {
+		const { document } = await concept();
+		expect(document.schema).toBe(YOUTUBE_VIDEO_DOCUMENT_SCHEMA);
+		expect(document.script).toBeUndefined();
+		expect(document.evidenceClaimIds.length).toBeGreaterThan(0);
+	});
+
 	it("renders the same bytes for the same document", async () => {
-		const built = await document();
-		expect(renderReadableBody(built)).toBe(renderReadableBody(built));
+		const { document, evidence } = await scripted();
+		const claims = [...evidence.evidenceClaims, ...evidence.ideaPackage.evidenceClaims];
+		expect(renderReadableBody(document, claims)).toBe(renderReadableBody(document, claims));
 	});
 
 	// The legacy body column is what surfaces that predate structured content
 	// render. It has to carry the script, not a placeholder.
 	it("renders the script into the readable body", async () => {
-		const built = await document();
-		expect(renderReadableBody(built)).toContain(built.script);
-		expect(renderReadableBody(built)).toContain(built.primaryCta);
+		const { document, evidence } = await scripted();
+		const body = renderReadableBody(document, [...evidence.evidenceClaims, ...evidence.ideaPackage.evidenceClaims]);
+		expect(body).toContain(document.script?.primaryCta);
+		expect(body).toContain(document.concept.honestPromise);
 	});
 
 	it("refuses a document whose section cites a claim it does not carry", async () => {
-		const built = await document();
+		const { document } = await scripted();
 		expect(() =>
 			parseYouTubeVideoDocument({
-				...built,
-				sections: built.sections.map((section) => ({ ...section, evidenceClaimIds: ["a-claim-nobody-has"] })),
+				...document,
+				script: {
+					...document.script,
+					sections: document.script?.sections.map((section) => ({
+						...section,
+						evidenceClaimIds: ["a-claim-nobody-has"],
+					})),
+				},
 			}),
 		).toThrow("The structured content document is not valid");
+	});
+
+	// Evidence the document does not cite is not part of what was approved, so it
+	// must not move the hash input either.
+	it("snapshots each cited claim once, and nothing else", async () => {
+		const { document, evidence } = await scripted();
+		const claims = [...evidence.evidenceClaims, ...evidence.ideaPackage.evidenceClaims];
+		const snapshot = evidenceSnapshot(document, [...claims, { ...claims[0], id: "an-uncited-claim" }]) as {
+			id: string;
+		}[];
+		expect(snapshot.map((entry) => entry.id)).not.toContain("an-uncited-claim");
+		// The caller passed the same claim twice, as every real caller does when it
+		// concatenates the run's evidence with the idea's.
+		expect(snapshot.map((entry) => entry.id)).toEqual([...document.evidenceClaimIds].sort());
+	});
+
+	it("refuses two different claims that share an id", async () => {
+		const { document, evidence } = await scripted();
+		const claims = [...evidence.evidenceClaims, ...evidence.ideaPackage.evidenceClaims];
+		expect(() => evidenceSnapshot(document, [...claims, { ...claims[0], claim: "A different assertion." }])).toThrow(
+			"Two different evidence claims share the id",
+		);
 	});
 });
 

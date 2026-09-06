@@ -12,6 +12,8 @@
  * Provider clients are injected. This module cannot reach a network.
  */
 
+import type { YouTubeVideoDocument } from "../content-document";
+import { parseYouTubeVideoDocument, YOUTUBE_VIDEO_DOCUMENT_SCHEMA } from "../content-document";
 import { isTooSimilarToSource } from "../research/anti-copy";
 import type { ResearchOpportunity, ResearchSource } from "../research/contracts";
 import type { CreationAdapter, IdeaGenerationRequest, ScriptGenerationRequest } from "./adapters";
@@ -237,4 +239,60 @@ export async function runScriptGeneration(input: {
 		script: parsed.data,
 		externalProviderCalls: result.externalProviderCalls,
 	};
+}
+
+/**
+ * The document a selected idea becomes, before any script exists.
+ *
+ * Selecting an idea creates the content item and its first version, so the
+ * document is valid without a script: the concept and its evidence are already
+ * a decision worth recording immutably, and the script arrives as a later
+ * version rather than by editing this one.
+ */
+export function buildConceptDocument(input: {
+	idea: IdeaPackage;
+	evidence: ScriptEvidenceContext;
+	audience: TargetAudience;
+}): YouTubeVideoDocument {
+	const claims = [...input.evidence.evidenceClaims, ...input.idea.evidenceClaims];
+	return parseYouTubeVideoDocument({
+		schema: YOUTUBE_VIDEO_DOCUMENT_SCHEMA,
+		concept: {
+			angle: input.idea.description,
+			hook: input.idea.honestPromise,
+			honestPromise: input.idea.honestPromise,
+			format: input.idea.format,
+			audience: input.audience,
+			discoverySurface: input.idea.discoverySurface,
+		},
+		titles: [input.idea.title],
+		evidenceClaimIds: [...new Set(claims.map((claim) => claim.id))],
+	});
+}
+
+/** The same document with a generated script folded in, as a new version. */
+export function buildScriptDocument(input: {
+	concept: YouTubeVideoDocument;
+	script: ScriptGenerationOutput;
+}): YouTubeVideoDocument {
+	return parseYouTubeVideoDocument({
+		...input.concept,
+		titles: [...new Set([...input.script.titles, ...input.concept.titles])].slice(0, 8),
+		script: {
+			hook: input.script.hook,
+			sections: input.script.structure.map((section) => ({
+				heading: section.section,
+				purpose: section.purpose,
+				// The generation contract carries a section's purpose and its claims;
+				// the narration is the script body attributed to that section. Until a
+				// provider returns per-section prose, the whole script sits on the first
+				// section rather than being split by a guess at its boundaries.
+				narration: section.section === input.script.structure[0].section ? input.script.script : section.purpose,
+				evidenceClaimIds: section.evidenceClaimIds,
+			})),
+			payoff: input.script.payoff,
+			primaryCta: input.script.primaryCta,
+			studioValidation: input.script.studioValidation,
+		},
+	});
 }
