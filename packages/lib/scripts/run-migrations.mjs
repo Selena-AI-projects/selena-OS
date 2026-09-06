@@ -5,7 +5,7 @@ import { join, resolve } from "node:path";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
 import { Client } from "pg";
-import { connectionSettings } from "./db-connection.mjs";
+import { connectionSettings, redact } from "./db-connection.mjs";
 import { databaseNameFrom, provisionRuntimeLogins } from "./provision-runtime-logins.mjs";
 
 const isStagingMvp = process.env.SELENA_STAGING_MVP === "true";
@@ -83,7 +83,6 @@ async function refuseSilentlySkippedMigrations(client) {
 	const recorded = await client.query("SELECT hash, created_at FROM drizzle.__drizzle_migrations");
 	if (recorded.rows.length === 0) return;
 	const applied = new Set(recorded.rows.map((row) => row.hash));
-	const recordedAt = new Set(recorded.rows.map((row) => Number(row.created_at)));
 
 	// The same row drizzle reads to decide what to apply, read the same way:
 	// `created_at` is nullable, and DESC puts a null first, so taking a maximum
@@ -94,17 +93,24 @@ async function refuseSilentlySkippedMigrations(client) {
 	const newest = Number(newestRows[0]?.created_at ?? 0);
 
 	const journal = JSON.parse(readFileSync(join(migrationsFolder, "meta", "_journal.json"), "utf8"));
-	const unrecorded = journal.entries
-		.map((entry) => ({
-			tag: entry.tag,
-			when: entry.when,
-			hash: createHash("sha256")
-				.update(readFileSync(join(migrationsFolder, `${entry.tag}.sql`)))
-				.digest("hex"),
-		}))
-		.filter((entry) => !applied.has(entry.hash));
+	const local = journal.entries.map((entry) => ({
+		tag: entry.tag,
+		when: entry.when,
+		hash: createHash("sha256")
+			.update(readFileSync(join(migrationsFolder, `${entry.tag}.sql`)))
+			.digest("hex"),
+	}));
+	const localHashes = new Set(local.map((entry) => entry.hash));
+	const unrecorded = local.filter((entry) => !applied.has(entry.hash));
 
-	const drifted = unrecorded.filter((entry) => recordedAt.has(entry.when));
+	// A drifted migration's ledger row is precisely the row no file in this
+	// checkout explains, sitting at that migration's own timestamp. Keying on any
+	// recorded timestamp would misread a genuinely new migration that happens to
+	// collide with one, and tell its author not to re-date it.
+	const unexplainedAt = new Set(
+		recorded.rows.filter((row) => !localHashes.has(row.hash)).map((row) => Number(row.created_at)),
+	);
+	const drifted = unrecorded.filter((entry) => unexplainedAt.has(entry.when));
 	if (drifted.length > 0) {
 		throw new Error(
 			`refusing to migrate: ${drifted.map((entry) => `${entry.tag} (when ${entry.when})`).join(", ")} ` +
@@ -177,6 +183,8 @@ async function main() {
 }
 
 main().catch((error) => {
-	console.error(error instanceof Error ? error.message : "migration runner failed");
+	// Scrubbed for the same reason the inspector scrubs: a driver error names the
+	// address it could not reach, and this goes to a deploy log that gets quoted.
+	console.error(redact(error instanceof Error ? error.message : "migration runner failed"));
 	process.exitCode = 1;
 });

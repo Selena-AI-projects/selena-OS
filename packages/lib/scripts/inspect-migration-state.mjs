@@ -17,7 +17,7 @@ import { createHash } from "node:crypto";
 import { readdirSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { Client } from "pg";
-import { connectionSettings } from "./db-connection.mjs";
+import { connectionSettings, redact } from "./db-connection.mjs";
 
 const databaseUrl = process.env.SELENA_MIGRATION_DATABASE_URL ?? process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error("DATABASE_URL is required for the inspector");
@@ -26,16 +26,12 @@ const migrationsFolder = resolve(process.cwd(), "src/db/migrations");
 const STATEMENT_TIMEOUT_MS = 15_000;
 
 /**
- * Migrations known to belong to another branch. Drizzle records a hash of the
- * file, so a row whose hash matches none of ours is either one of these or
- * something nobody in this checkout can name — and the difference matters.
+ * Migrations known to belong to another branch, by the hash drizzle records.
+ * Empty while every branch's migrations live in this checkout; an entry here
+ * turns "a row nobody can name" into "the row that branch is responsible for",
+ * which is the difference between a mystery and a coordination problem.
  */
-const KNOWN_FOREIGN = new Map([
-	[
-		"bd0e108b86f71137ffb530a9d234fc34a529aaf3c813d8b2e21a840ca79310d7",
-		"0037_content_project_profiles (branch feat/content-os-slice1)",
-	],
-]);
+const KNOWN_FOREIGN = new Map();
 
 /**
  * Objects each migration is responsible for, so "applied" is checked against the
@@ -291,7 +287,17 @@ async function main() {
 			// `when` is greater than the newest created_at already recorded. A pending
 			// migration below that line is skipped in silence, and the run still reports
 			// success — which is the failure this whole inspection exists to catch.
-			const newest = report.ledger.reduce((max, row) => Math.max(max, row.created_at), 0);
+			// Drizzle takes the first row of `ORDER BY created_at DESC`, and a null
+			// sorts first there, so a maximum would quietly disagree with it.
+			const nullDated = rows.rows.filter((row) => row.created_at === null).length;
+			if (nullDated > 0) {
+				console.log(`WARNING: ${nullDated} ledger row(s) have no created_at; drizzle would treat the newest as absent`);
+			}
+			const { rows: newestRows } = await client.query(
+				"SELECT created_at FROM drizzle.__drizzle_migrations ORDER BY created_at DESC LIMIT 1",
+			);
+			const newest = Number(newestRows[0]?.created_at ?? 0);
+			report.null_dated_ledger_rows = nullDated;
 			report.newest_recorded = newest;
 			console.log("");
 			console.log(`newest created_at in ledger: ${newest}`);
@@ -313,9 +319,20 @@ async function main() {
 		console.log("");
 		console.log("objects:");
 		for (const [label, predicate] of OBJECT_CHECKS) {
-			const { rows } = await client.query(`SELECT (${predicate}) AS present`);
-			report.objects[label] = rows[0].present === true;
-			console.log(`  ${rows[0].present ? "yes" : "no "}  ${label}`);
+			// Same savepoint as the counts: a predicate can raise rather than return
+			// null — `to_regclass` on a schema this login cannot use, for one — and
+			// a read-only transaction refuses everything after its first error.
+			await client.query("SAVEPOINT checked");
+			try {
+				const { rows } = await client.query(`SELECT (${predicate}) AS present`);
+				await client.query("RELEASE SAVEPOINT checked");
+				report.objects[label] = rows[0].present === true;
+				console.log(`  ${rows[0].present ? "yes" : "no "}  ${label}`);
+			} catch (error) {
+				await client.query("ROLLBACK TO SAVEPOINT checked");
+				report.objects[label] = { error: error?.code ?? "error" };
+				console.log(`  ???  ${label} (${error?.code ?? "error"})`);
+			}
 		}
 
 		console.log("");
@@ -386,19 +403,6 @@ async function main() {
 	console.log("");
 	console.log(`INSPECTOR_JSON ${JSON.stringify(report)}`);
 	console.log("inspection complete; nothing was written");
-}
-
-/**
- * A driver error names what it could not reach: `ECONNREFUSED 10.x.x.x:5432`
- * puts an internal address in a log that is read and quoted elsewhere. The
- * reason is worth keeping, the address is not.
- */
-function redact(message) {
-	return message
-		.replace(/\b[a-z+]+:\/\/\S+/gi, "<url>")
-		.replace(/\b(?:\d{1,3}\.){3}\d{1,3}(?::\d+)?\b/g, "<address>")
-		.replace(/\b(?:[0-9a-f]{0,4}:){2,7}[0-9a-f]{0,4}(?::\d+)?\b/gi, "<address>")
-		.replace(/\b[a-z0-9-]+(?:\.[a-z0-9-]+)+(?::\d+)?\b/gi, "<host>");
 }
 
 main().catch((error) => {

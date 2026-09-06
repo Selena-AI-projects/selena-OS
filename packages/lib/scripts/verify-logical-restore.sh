@@ -24,8 +24,9 @@
 # which even the owner reads zero rows and `pg_dump` refuses outright.
 #
 # Nothing here writes the archive to disk: it is streamed from one server into
-# the other. Temporary files hold fingerprints only, under a directory removed
-# when the script exits.
+# the other. Temporary files hold fingerprints, role
+# definitions and error logs only, under a directory removed when the script
+# exits.
 set -eu
 
 : "${SOURCE_DATABASE_URL:?SOURCE_DATABASE_URL is required}"
@@ -41,6 +42,14 @@ SCHEMAS="'public','drizzle','selena_registry','selena_release','selena_audit','s
 # `psql` in a pipeline hands its exit status to the last command, and this is
 # /bin/sh, where `set -o pipefail` does not exist. So every psql runs on its own
 # and its status is checked.
+# Postgres puts the offending value in the primary error line as often as in the
+# DETAIL below it, so the safe direction is to keep the shape of the failure and
+# drop the rest, rather than to strip the lines known to be dangerous.
+withhold_row_content() {
+	sed -e 's/\(ERROR:[^:]*\):.*/\1: (message withheld)/' \
+	    -e '/^DETAIL/d' -e '/^CONTEXT/d' -e '/Failing row/d' "$1" | tail -20
+}
+
 run_sql() {
 	psql "$1" -v ON_ERROR_STOP=1 -q -f "$2" -o "$3"
 }
@@ -132,47 +141,81 @@ sed -i '/^$/d' "$work/source.fingerprint"
 [ -s "$work/source.fingerprint" ] || { echo "the source fingerprint came back empty; refusing to compare nothing"; exit 1; }
 cat "$work/source.fingerprint"
 
+# Two databases, always. Comparing a database with itself would otherwise print
+# this script's strongest verdict having proved nothing at all — and on the copy
+# path it would create roles and tables in the database being copied.
+# Assigned rather than inlined into `[ ]`, where a failure would escape `set -e`.
+echo ""
+echo "=== checking the target is a different database ==="
+source_identity=$(identity_of "$SOURCE_DATABASE_URL")
+target_identity=$(identity_of "$TARGET_DATABASE_URL")
+[ -n "$source_identity" ] || { echo "could not read the source's identity"; exit 1; }
+[ -n "$target_identity" ] || { echo "could not read the target's identity"; exit 1; }
+if [ "$source_identity" = "$target_identity" ]; then
+	echo "the target is the same database as the source; there is nothing to compare"
+	exit 1
+fi
+echo "target is not the source"
+
 if [ "${COMPARE_ONLY:-}" = "true" ]; then
 	echo ""
 	echo "=== comparing only; nothing was copied ==="
 else
-	# The one mistake this script must not make is writing to the database it is
-	# supposed to be copying. One wrong export would otherwise create roles and
-	# tables in the source.
 	echo ""
-	echo "=== checking the target is a different, empty database ==="
-	if [ "$(identity_of "$SOURCE_DATABASE_URL")" = "$(identity_of "$TARGET_DATABASE_URL")" ]; then
-		echo "the target is the same database as the source; refusing to write to it"
-		exit 1
-	fi
+	echo "=== checking the target is empty ==="
 	occupied=$(psql "$TARGET_DATABASE_URL" -v ON_ERROR_STOP=1 -tAc \
 		"SELECT count(*) FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname IN ($SCHEMAS)")
 	if [ "$occupied" != "0" ]; then
 		echo "the target already holds $occupied object(s) in the schemas being restored; refusing to write over them"
 		exit 1
 	fi
-	echo "target is empty and is not the source"
+	echo "target is empty"
 
 	echo ""
 	echo "=== restoring roles (no passwords are read or written) ==="
 	# Roles live in the cluster, not the database, so a dump of the database
 	# alone restores grants that refer to roles nobody has created. Passwords are
 	# not copied: this copy is never a place anyone signs in to.
-	pg_dumpall --roles-only --no-role-passwords --dbname "$SOURCE_DATABASE_URL" \
-		| grep -v '^CREATE ROLE postgres;' > "$work/roles.sql"
-	psql "$TARGET_DATABASE_URL" -q -f "$work/roles.sql" 2>&1 | grep -v 'already exists' || true
-
-	echo "=== copying the database ==="
-	# Streamed from one server to the other: the archive is never a file on disk.
-	# pg_dump's own status is checked separately, because a pipeline in /bin/sh
-	# reports only the last command's.
-	if ! pg_dump --format=custom --dbname "$SOURCE_DATABASE_URL" > "$work/archive.dump"; then
-		echo "pg_dump failed; nothing was restored"
+	if ! pg_dumpall --roles-only --no-role-passwords --dbname "$SOURCE_DATABASE_URL" > "$work/roles.all"; then
+		echo "could not read the source's roles"
 		exit 1
 	fi
-	if ! pg_restore --dbname "$TARGET_DATABASE_URL" --exit-on-error "$work/archive.dump" > "$work/restore.log" 2>&1; then
-		echo "restore failed. Its log can quote a row it could not insert, so only the lines that name no data:"
-		grep -v -e '^DETAIL' -e '^CONTEXT' -e 'Failing row' "$work/restore.log" | tail -20
+	grep -v '^CREATE ROLE postgres;' "$work/roles.all" > "$work/roles.sql"
+	# A role that already exists is the expected case, not a failure; anything
+	# else is, so the status is checked rather than discarded by a pipe.
+	if ! psql "$TARGET_DATABASE_URL" -q -f "$work/roles.sql" > "$work/roles.log" 2>&1; then
+		if grep -qv 'already exists' "$work/roles.log"; then
+			echo "restoring roles failed:"
+			grep -v 'already exists' "$work/roles.log" | tail -10
+			exit 1
+		fi
+	fi
+
+	echo "=== copying the database ==="
+	# Streamed from one server to the other through a named pipe, so the archive
+	# is never a file: a file would survive a SIGKILL that the cleanup trap
+	# cannot answer, and it holds every row in the database. The pipe also lets
+	# both exit statuses be read, which a plain shell pipeline in /bin/sh
+	# cannot — it reports only the last command's.
+	# A real pipeline, so the archive is never a file: a file would survive a
+	# SIGKILL the cleanup trap cannot answer, and it holds every row in the
+	# database. /bin/sh reports only the last command's status and has no
+	# pipefail, so pg_dump records its own failure in a file the pipeline's
+	# subshell can write and this shell can read. (A named pipe does not work
+	# here: given an archive as a path, pg_restore seeks.)
+	restore_status=0
+	{ pg_dump --format=custom --dbname "$SOURCE_DATABASE_URL" 2> "$work/dump.log" \
+		|| echo $? > "$work/dump.failed"; } \
+		| pg_restore --dbname "$TARGET_DATABASE_URL" --exit-on-error > "$work/restore.log" 2>&1 \
+		|| restore_status=$?
+	if [ -f "$work/dump.failed" ]; then
+		echo "pg_dump failed; the copy is incomplete:"
+		withhold_row_content "$work/dump.log"
+		exit 1
+	fi
+	if [ "$restore_status" != "0" ]; then
+		echo "restore failed. Its log can quote a row it could not insert, so only what names no data:"
+		withhold_row_content "$work/restore.log"
 		exit 1
 	fi
 	echo "restore completed without error"

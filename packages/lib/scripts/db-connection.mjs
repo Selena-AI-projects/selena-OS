@@ -28,3 +28,16 @@ export function connectionSettings(databaseUrl, stagingMvp = process.env.SELENA_
 		},
 	};
 }
+
+/**
+ * A driver error names what it could not reach: `ECONNREFUSED 10.x.x.x:5432`
+ * puts an internal address in a log that is read and quoted elsewhere. The
+ * reason is worth keeping, the address is not.
+ */
+export function redact(message) {
+	return message
+		.replace(/\b[a-z+]+:\/\/\S+/gi, "<url>")
+		.replace(/\b(?:\d{1,3}\.){3}\d{1,3}(?::\d+)?\b/g, "<address>")
+		.replace(/\b(?:[0-9a-f]{0,4}:){2,7}[0-9a-f]{0,4}(?::\d+)?\b/gi, "<address>")
+		.replace(/\b[a-z0-9-]+(?:\.[a-z0-9-]+)+(?::\d+)?\b/gi, "<host>");
+}
