@@ -12,9 +12,12 @@ import {
 	type ResearchAdapter,
 	type ResearchAdapterId,
 	type ResearchProject,
+	type ResearchRunCounters,
+	type ResearchRunFailure,
 	type ResearchRunOutcome,
 	type ResearchSource,
 	runResearchPipeline,
+	type ScoreComponent,
 	type ScoredSource,
 	VideoRadarAdapter,
 	type VideoRadarAdapterGates,
@@ -90,6 +93,7 @@ function failedOutcome(code: string, occurredAt: string): ResearchRunOutcome {
 export interface ConfirmedProfileRef {
 	profileVersionId: string;
 	profileHash: string;
+	version: number;
 	profile: NormalizedProjectProfile;
 }
 
@@ -129,6 +133,7 @@ export function createPostgresRadarStore(options: {
 			return {
 				profileVersionId: version.id,
 				profileHash: version.profileHash,
+				version: version.version,
 				profile: {
 					languages: version.languages,
 					audience: version.audience,
@@ -291,6 +296,15 @@ export function createPostgresRadarStore(options: {
 		};
 	}
 
+	async function readProfileVersionNumber(tx: ContentTransaction, profileVersionId: string): Promise<number | null> {
+		const [row] = await tx
+			.select({ version: scrBrandContentProfileVersions.version })
+			.from(scrBrandContentProfileVersions)
+			.where(eq(scrBrandContentProfileVersions.id, profileVersionId))
+			.limit(1);
+		return row?.version ?? null;
+	}
+
 	async function readRunDetail(tx: ContentTransaction, runId: string) {
 		const sources = await tx
 			.select()
@@ -322,6 +336,7 @@ export function createPostgresRadarStore(options: {
 		readConfirmedProfile,
 		findRunByIdempotencyKey,
 		readLatestRun,
+		readProfileVersionNumber,
 		readRunDetail,
 		persistRun,
 	};
@@ -335,7 +350,7 @@ export interface ResearchRunRef {
 }
 
 export interface ResearchStateView {
-	confirmedProfile: { profileVersionId: string; profileHash: string } | null;
+	confirmedProfile: { profileVersionId: string; profileHash: string; version: number } | null;
 	run: {
 		id: string;
 		status: RunRow["status"];
@@ -345,8 +360,11 @@ export interface ResearchStateView {
 		baselineVersion: string;
 		profileVersionId: string;
 		profileHash: string;
-		counters: unknown;
-		failures: unknown;
+		profileVersion: number | null;
+		/** Whether the profile this run was scored against is still the confirmed one. */
+		profileStillConfirmed: boolean;
+		counters: ResearchRunCounters;
+		failures: ResearchRunFailure[];
 		externalProviderCalls: number;
 		startedAt: string;
 		completedAt: string;
@@ -378,8 +396,8 @@ function toSourceView(row: SourceRow) {
 		relevanceScore: row.relevanceScore,
 		candidateScore: row.candidateScore,
 		weightCoverage: row.weightCoverage,
-		scoreComponents: row.scoreComponents,
-		gateReasons: row.gateReasons,
+		scoreComponents: row.scoreComponents as ScoreComponent[],
+		gateReasons: row.gateReasons as string[],
 		shortlisted: row.shortlisted,
 		scoringVersion: row.scoringVersion,
 	};
@@ -396,7 +414,7 @@ function toOpportunityView(row: OpportunityRow, decisions: DecisionRow[]) {
 		rationale: row.rationale,
 		evidenceSummary: row.evidenceSummary,
 		confidence: row.confidence,
-		factRequirements: row.factRequirements,
+		factRequirements: row.factRequirements as string[],
 		createdAt: row.createdAt.toISOString(),
 		state: latest?.decision ?? ("NEW" as const),
 		decidedBy: latest?.decidedBy ?? null,
@@ -413,7 +431,11 @@ export function createContentResearchRepositories(database: typeof db = db) {
 			if (!run) {
 				return {
 					confirmedProfile: profile
-						? { profileVersionId: profile.profileVersionId, profileHash: profile.profileHash }
+						? {
+								profileVersionId: profile.profileVersionId,
+								profileHash: profile.profileHash,
+								version: profile.version,
+							}
 						: null,
 					run: null,
 					sources: [],
@@ -421,9 +443,14 @@ export function createContentResearchRepositories(database: typeof db = db) {
 				};
 			}
 			const detail = await store.readRunDetail(tx, run.id);
+			const profileVersion = await store.readProfileVersionNumber(tx, run.profileVersionId);
 			return {
 				confirmedProfile: profile
-					? { profileVersionId: profile.profileVersionId, profileHash: profile.profileHash }
+					? {
+							profileVersionId: profile.profileVersionId,
+							profileHash: profile.profileHash,
+							version: profile.version,
+						}
 					: null,
 				run: {
 					id: run.id,
@@ -434,8 +461,10 @@ export function createContentResearchRepositories(database: typeof db = db) {
 					baselineVersion: run.baselineVersion,
 					profileVersionId: run.profileVersionId,
 					profileHash: run.profileHash,
-					counters: run.counters,
-					failures: run.failures,
+					profileVersion,
+					profileStillConfirmed: profile?.profileVersionId === run.profileVersionId,
+					counters: run.counters as ResearchRunCounters,
+					failures: run.failures as ResearchRunFailure[],
 					externalProviderCalls: run.externalProviderCalls,
 					startedAt: run.startedAt.toISOString(),
 					completedAt: run.completedAt.toISOString(),

@@ -12,6 +12,7 @@ import {
 	IconLink,
 	IconListDetails,
 	IconReport,
+	IconSearch,
 	IconShieldCheck,
 	IconSitemap,
 	IconSpeakerphone,
@@ -169,6 +170,12 @@ export function AppSidebar({
 				{ title: "Audit", url: "/control-room", icon: IconListDetails, hash: "audit" },
 			],
 		});
+		if (stage1Enabled) {
+			groups.push({
+				label: "Create",
+				items: [{ title: "Research", url: "/control-room/research", icon: IconSearch }],
+			});
+		}
 	} else if (scope === "brand") {
 		const dashboardItems = [
 			{
