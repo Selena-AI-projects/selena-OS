@@ -1,21 +1,21 @@
 {
-  "$comment": "Machine-readable record of every third-party source transferred into this package. scripts/check-vendored-licenses.ts fails CI when a required file here is missing. Adding vendored code without adding an entry is itself a failure: the check requires every directory under THIRD_PARTY_LICENSES to be declared.",
-  "sources": [
-    {
-      "id": "youtube-pro",
-      "repository": "https://github.com/parkourcafe/youtube-pro",
-      "commit": "63cd9b9c2ad19b9941a763be3d5cfcbd9bc13b25",
-      "license": "Apache-2.0",
-      "licenseFile": "youtube-pro/LICENSE",
-      "provenanceFile": "youtube-pro/PROVENANCE.md",
-      "upstreamHasNotice": false,
-      "upstreamNoticeEvidence": "git ls-tree -r --name-only 63cd9b9c2ad19b9941a763be3d5cfcbd9bc13b25 lists no NOTICE file anywhere in the tree, so the Apache-2.0 section 4(d) obligation to reproduce one does not arise.",
-      "portedFiles": [
-        "src/creation/contracts.ts",
-        "src/creation/adapters.ts",
-        "src/creation/index.ts",
-        "src/content-document/index.ts"
-      ]
-    }
-  ]
+	"$comment": "Machine-readable record of every third-party source transferred into this package. scripts/check-vendored-licenses.ts fails CI when a required file here is missing. Adding vendored code without adding an entry is itself a failure: the check requires every directory under THIRD_PARTY_LICENSES to be declared.",
+	"sources": [
+		{
+			"id": "youtube-pro",
+			"repository": "https://github.com/parkourcafe/youtube-pro",
+			"commit": "63cd9b9c2ad19b9941a763be3d5cfcbd9bc13b25",
+			"license": "Apache-2.0",
+			"licenseFile": "youtube-pro/LICENSE",
+			"provenanceFile": "youtube-pro/PROVENANCE.md",
+			"upstreamHasNotice": false,
+			"upstreamNoticeEvidence": "git ls-tree -r --name-only 63cd9b9c2ad19b9941a763be3d5cfcbd9bc13b25 lists no NOTICE file anywhere in the tree, so the Apache-2.0 section 4(d) obligation to reproduce one does not arise.",
+			"portedFiles": [
+				"src/creation/contracts.ts",
+				"src/creation/adapters.ts",
+				"src/creation/index.ts",
+				"src/content-document/index.ts"
+			]
+		}
+	]
 }

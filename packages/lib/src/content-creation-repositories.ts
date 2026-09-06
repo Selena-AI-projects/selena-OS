@@ -41,7 +41,6 @@ import {
 	scrContentItems,
 	scrContentResearchOpportunities,
 	scrContentResearchOpportunityDecisions,
-	scrContentResearchRuns,
 	scrContentResearchSources,
 	scrContentVersions,
 	scrGenerationRuns,
@@ -703,7 +702,7 @@ export function createContentCreationRepositories(database: typeof db = db) {
 				input.brandId,
 				async (tx) => {
 					const run = await store.readGenerationRun(tx, input.generationRunId);
-					if (!run || run.kind !== "IDEAS" || run.status !== "COMPLETED") {
+					if (run?.kind !== "IDEAS" || run.status !== "COMPLETED") {
 						throw new ContentCreationError("NOT_FOUND", "No completed idea run is available for this brand");
 					}
 					const ideas = (run.validatedOutput as { ideas: IdeaPackage[] }).ideas ?? [];
@@ -810,7 +809,7 @@ export function createContentCreationRepositories(database: typeof db = db) {
 					const ideaRun = conceptVersion?.generationRunId
 						? await store.readGenerationRun(tx, conceptVersion.generationRunId)
 						: undefined;
-					if (!ideaRun || ideaRun.kind !== "IDEAS" || !ideaRun.researchOpportunityId) {
+					if (ideaRun?.kind !== "IDEAS" || !ideaRun.researchOpportunityId) {
 						throw new ContentCreationError("EVIDENCE_REQUIRED", "The version has no research lineage to build on");
 					}
 					const { evidence } = await evidenceForOpportunity(tx, store, ideaRun.researchOpportunityId);
