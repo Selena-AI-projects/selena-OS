@@ -31,9 +31,17 @@ export type VelocityStatus = "MEASURED" | "UNAVAILABLE";
 
 export type EvidenceConfidence = "HIGH" | "MEDIUM" | "LOW";
 
-export type ResearchRunStatus = "RUNNING" | "COMPLETED" | "PARTIAL" | "FAILED";
+/**
+ * A run is recorded once it has finished. Stage 1 evaluates a fixture in the
+ * request, so there is no in-flight state to model, and adding one would mean
+ * an update path on a table that is otherwise append-only.
+ */
+export type ResearchRunStatus = "COMPLETED" | "PARTIAL" | "FAILED";
 
+/** `NEW` is the absence of a decision rather than a recorded one. */
 export type OpportunityState = "NEW" | "SAVED" | "REJECTED" | "SENT_TO_CREATION";
+
+export type OpportunityDecisionState = Exclude<OpportunityState, "NEW">;
 
 /**
  * Version stamps recorded on every run and score. Never bump silently — an old
@@ -61,7 +69,6 @@ export const RESEARCH_ERROR_CODES = [
 	"MISSING_PROVENANCE",
 	"TRANSCRIPT_UNAVAILABLE",
 	"OPPORTUNITY_EVIDENCE_REQUIRED",
-	"RUN_IN_PROGRESS",
 	"INTERNAL_ERROR",
 ] as const;
 
