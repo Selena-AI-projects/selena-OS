@@ -190,6 +190,23 @@ calls without exercising those gates is insufficient acceptance evidence.
   one tag make the runner apply whichever arrived first and pass silently over
   the other. Content OS therefore uses `0040` and `0041`, above the `0038` and
   `0039` already held by `growth/ge1-4-local-slice`.
+- **Drizzle orders by `when`, as a strict high-water mark — not by tag and not by
+  `idx`.** It applies a migration only when its `when` is greater than the newest
+  `created_at` already recorded, and says nothing about the ones it passes over.
+  A distinct tag therefore prevents a collision but not a skip: a branch whose
+  `when` is *lower* than one already applied loses its migration silently and
+  permanently. Two consequences follow, and neither is optional:
+  - a branch holding a lower `when` must be migrated **before** one holding a
+    higher `when`, or have its entries re-stamped above it when it merges;
+  - after any merge, renumber `idx` so the journal has no duplicate index, and
+    re-read the resulting order before migrating anything shared.
+  Concretely today: `growth/ge1-4-local-slice` holds `0038` (`when`
+  1788620400000) and `0039` (`when` 1788620460000), both **below** Content OS
+  `0040` (`when` 1788620520000). Whichever database receives `0040` first will
+  skip those two until they are re-stamped. The guard that turns this into a
+  refusal instead of a silent success lives on the growth branch
+  (`run-migrations.mjs`, per issue #29) and reaches `main` only when that branch
+  merges; until then nothing in the shared runner detects it.
 
 ### 3.5 Environment preflight
 
@@ -483,7 +500,9 @@ tenant identity.
 - [x] Fixture output is deterministic.
 - [x] Migration chain through `0040` and paired pgTAP pass on a clean disposable
   database; the migration receipt reports the new `0040` journal tag as applied.
-- [x] Unconfirmed/revoked profiles block research.
+- [x] A run cannot bind an unconfirmed or revoked profile version. Revoking the
+  newest version falls back to the previous still-confirmed one rather than
+  stopping research; that fallback is an open owner decision in the decision log.
 - [x] Foreign-brand profiles, sources and opportunities cannot be linked or
   observed.
 - [x] Duplicate idempotency keys do not duplicate runs.

@@ -160,3 +160,41 @@
   acceptance, which is what it already claims to be.
 - Authority: owner decision on 2026-09-06.
 - Affected requirements: Stage 1 plan 3.4, 10.2 and 10.4.
+
+## 2026-09-06 — record the migration ordering constraint where it outlives the PR
+
+- Decision: state the `when` high-water-mark rule and the required apply order in
+  `STAGE1_EXECUTION_PLAN.md` §3.4 and as an owner gate, not only in a pull
+  request body.
+- Evidence: Drizzle applies a migration only when its journal `when` exceeds the
+  newest recorded `created_at`, so a distinct tag prevents a collision but not a
+  skip. Content OS `0040` (`when` 1788620520000) sits above
+  `growth/ge1-4-local-slice`'s `0038` (1788620400000) and `0039` (1788620460000),
+  and a database that receives `0040` first loses both silently.
+- Consequence: the growth entries are applied first or re-stamped above `0040`
+  when that branch merges. The runner guard that would refuse instead of
+  succeeding lives on the growth branch and reaches `main` with it.
+- Alternatives rejected: lowering `0040` below the growth entries, which only
+  moves the same hazard onto the other branch; relying on a note in a pull
+  request, which does not survive the merge.
+- Authority: safe implementation step within the recorded migration-numbering
+  decision.
+- Affected requirements: Stage 1 plan 3.4 and 7.3B.
+
+## 2026-09-06 — profile revocation falls back to the previous confirmed version
+
+- Open decision for the owner. Recorded rather than silently settled.
+- Behavior today: research selects the newest profile version whose own newest
+  decision is `CONFIRMED`. Revoking the version a brand is using therefore does
+  not stop research; it continues against the last still-confirmed version, and
+  the surface presents that older version as the confirmed profile.
+- Why it is not simply a bug: an undecided draft must not block research against
+  the confirmed version beneath it, so "use only the newest version" is wrong.
+  The question is whether a revoked newest version should stop research outright
+  or fall through, and that is a product judgement about what revocation means.
+- Inherited from Slice 1's `profiles.getCurrent`; Slice 2 is the first consumer
+  that acts on it.
+- Safe default until the owner decides: leave the fallback, state it plainly in
+  the plan's acceptance wording, and keep the integration coverage that pins the
+  behavior either way.
+- Affected requirements: Stage 1 plan 7.4.
