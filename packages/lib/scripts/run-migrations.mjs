@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -85,6 +86,46 @@ async function grantSchemaOwnerMigrationLedgerAccess(client) {
 	await client.query("GRANT USAGE, SELECT ON SEQUENCE drizzle.__drizzle_migrations_id_seq TO selena_schema_owner");
 }
 
+/**
+ * Refuse to run when a pending migration would be passed over in silence.
+ *
+ * Drizzle applies a migration only when its journal `when` is newer than the
+ * newest one the database has recorded, and says nothing about the ones it
+ * skips: the run reports success while the schema is missing whatever arrived
+ * out of order. Two branches numbering migrations independently produce exactly
+ * that, and it is invisible until something fails far away.
+ *
+ * The check is the same comparison drizzle is about to make, made out loud.
+ */
+async function refuseSilentlySkippedMigrations(client) {
+	const { rows } = await client.query("SELECT to_regclass('drizzle.__drizzle_migrations') IS NOT NULL AS exists");
+	if (!rows[0]?.exists) return;
+
+	const recorded = await client.query("SELECT hash, created_at FROM drizzle.__drizzle_migrations");
+	if (recorded.rows.length === 0) return;
+	const applied = new Set(recorded.rows.map((row) => row.hash));
+	const newest = recorded.rows.reduce((max, row) => Math.max(max, Number(row.created_at)), 0);
+
+	const journal = JSON.parse(readFileSync(join(migrationsFolder, "meta", "_journal.json"), "utf8"));
+	const skipped = journal.entries
+		.map((entry) => ({
+			tag: entry.tag,
+			when: entry.when,
+			hash: createHash("sha256")
+				.update(readFileSync(join(migrationsFolder, `${entry.tag}.sql`)))
+				.digest("hex"),
+		}))
+		.filter((entry) => !applied.has(entry.hash) && entry.when <= newest);
+
+	if (skipped.length === 0) return;
+	throw new Error(
+		`refusing to migrate: ${skipped.map((entry) => `${entry.tag} (when ${entry.when})`).join(", ")} ` +
+			`would be skipped without being applied, because this database has already recorded a migration at ${newest}. ` +
+			"A migration from another branch landed first. Raise these entries' `when` above that value, in an agreed " +
+			"order with whoever owns the other branch, and run again.",
+	);
+}
+
 async function main() {
 	const client = createClient();
 	await client.connect();
@@ -118,6 +159,7 @@ async function main() {
 
 		await grantSchemaOwnerMigrationLedgerAccess(client);
 		await assumeSchemaOwner(client);
+		await refuseSilentlySkippedMigrations(client);
 		await migrate(drizzle({ client }), {
 			migrationsFolder,
 		});
