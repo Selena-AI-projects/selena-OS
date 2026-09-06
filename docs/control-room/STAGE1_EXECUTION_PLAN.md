@@ -185,6 +185,11 @@ calls without exercising those gates is insufficient acceptance evidence.
   `packages/lib/src/db/migrations/meta/_journal.json`. Before each migration,
   inspect the current Drizzle convention to determine whether that migration
   also requires a snapshot JSON; do not create or omit one by assumption.
+- The journal is shared with every other branch that adds a migration. Before
+  choosing a number, read the journal on those branches: two migrations behind
+  one tag make the runner apply whichever arrived first and pass silently over
+  the other. Content OS therefore uses `0040` and `0041`, above the `0038` and
+  `0039` already held by `growth/ge1-4-local-slice`.
 
 ### 3.5 Environment preflight
 
@@ -225,20 +230,21 @@ Each slice has one status:
 | Step | Outcome | Status | Evidence / next gate |
 |---|---|---|---|
 | 0 | Product contract and neutral shell | `MERGED` | Content delta `ab50d742..ef1ea56f`, PR #25; PR #26 / `39ec0ea3` reconciled the already-merged branch with an empty delta; retrospective review remains incomplete |
-| Plan | Detailed Stage 1 execution control | `PR_OPEN` | PR #27 remains open; its corrected content is also carried in Slice 1 PR #28 and is reviewed with that exact head SHA |
-| 1 | Profile and draft YouTube target | `PR_OPEN` | PR #28; local and disposable PostgreSQL evidence complete; exact-head CI, blind review, owner-authorized merge and dedicated staging canary remain |
-| 2 | Research | `NOT_STARTED` | Accepted Slice 1 merge SHA |
+| Plan | Detailed Stage 1 execution control | `MERGED` | Delivered inside Slice 1 PR #28 and merged as `313daa0c`; PR #27 is superseded |
+| 1 | Profile and draft YouTube target | `MERGED` | PR #28, head `45dd3b96`, merge `313daa0c`; required checks green on the head, blind review passed, staging migration `0037` applied and the canary flag enabled |
+| 2 | Research | `IN_PROGRESS` | Branch `feat/content-os-slice2-research` from `313daa0c`; migration `0040` |
 | 3 | Ideas and scripts | `NOT_STARTED` | Accepted Slice 2 merge SHA and source-transfer authorization |
 | 4 | Thumbnails and editorial approval | `NOT_STARTED` | Accepted Slice 3 merge SHA and private-storage acceptance path |
 | 5 | Local vertical acceptance | `NOT_STARTED` | Accepted Slice 4 merge SHA and disposable environment |
 
-Before Slice 1, this execution plan must be accepted and merged. Slice 1 starts
-from the execution-plan merge SHA, not directly from the Slice 0 merge SHA. The
-owner also either requests retrospective blind review of the exact Slice 0
-content delta `ab50d742695ff8d8bc728efe217502e121869189..ef1ea56f102ed23c7c8ad5cc8d89224a0ddb1399`
-or explicitly accepts that review gap. PR #26 / `39ec0ea3` must not be used as
-the review delta because it contains no file changes; the existing history is
-not rewritten.
+The plan and Slice 1 were delivered together in PR #28 and merged as
+`313daa0c`, so every later slice starts from that merge SHA. The Slice 0 review
+gap is still open: the owner either requests retrospective blind review of the
+exact Slice 0 content delta
+`ab50d742695ff8d8bc728efe217502e121869189..ef1ea56f102ed23c7c8ad5cc8d89224a0ddb1399`
+or explicitly accepts it. PR #26 / `39ec0ea3` must not be used as the review
+delta because it contains no file changes; the existing history is not
+rewritten.
 
 ## 6. Slice 1 - profile and draft YouTube target
 
@@ -409,7 +415,7 @@ tenant identity.
 
 #### A. Source authorization and port
 
-- [ ] Record owner confirmation that code may be transferred from
+- [x] Record owner confirmation that code may be transferred from
   `parkourcafe/video-radar-marketing-tool` at
   `b589a811a4e1f205a784e5128283f9d227143f32` despite the source repository
   having no license file.
@@ -423,10 +429,10 @@ tenant identity.
 - [ ] Preserve or replace tests at the research module interface; do not layer
   duplicate tests around shallow helpers.
 
-#### B. Migration 0038 and persistence
+#### B. Migration 0040 and persistence
 
-- [ ] Add `0038_content_research_registry.sql`.
-- [ ] Register migration `0038` in
+- [ ] Add `0040_content_research_registry.sql`.
+- [ ] Register migration `0040` in
   `packages/lib/src/db/migrations/meta/_journal.json`; inspect the current
   Drizzle convention and record whether a matching snapshot JSON is required.
 - [ ] Add brand-scoped research runs, sources, metric snapshots, opportunities
@@ -437,7 +443,7 @@ tenant identity.
 - [ ] Preserve transcript permission, language, retrieval and failure state;
   store `UNAVAILABLE` instead of invented text.
 - [ ] Enable and force RLS and add least-privilege grants.
-- [ ] Add `0038_content_research_registry.pgtap.sql` covering cross-brand
+- [ ] Add `0040_content_research_registry.pgtap.sql` covering cross-brand
   read/write/link denial and append-only behavior.
 
 #### C. Adapters and server operations
@@ -475,8 +481,8 @@ tenant identity.
 
 - [ ] Ported compatibility tests pass at the research module interface.
 - [ ] Fixture output is deterministic.
-- [ ] Migration chain through `0038` and paired pgTAP pass on a clean disposable
-  database; the migration receipt reports the new `0038` journal tag as applied.
+- [ ] Migration chain through `0040` and paired pgTAP pass on a clean disposable
+  database; the migration receipt reports the new `0040` journal tag as applied.
 - [ ] Unconfirmed/revoked profiles block research.
 - [ ] Foreign-brand profiles, sources and opportunities cannot be linked or
   observed.
@@ -553,10 +559,10 @@ server-side; there is no global key configuration.
 - [ ] Keep teleprompter functionality outside Stage 1 unless the owner adds it
   to the master specification before this slice starts.
 
-#### B. Migration 0039 and V2 content
+#### B. Migration 0041 and V2 content
 
-- [ ] Add `0039_structured_content_and_editorial_review.sql`.
-- [ ] Register migration `0039` in
+- [ ] Add `0041_structured_content_and_editorial_review.sql`.
+- [ ] Register migration `0041` in
   `packages/lib/src/db/migrations/meta/_journal.json`; inspect the current
   Drizzle convention and record whether a matching snapshot JSON is required.
 - [ ] Add backward-compatible content kind, channel and workflow-stage fields.
@@ -571,7 +577,7 @@ server-side; there is no global key configuration.
 - [ ] Add editorial approvals bound to content, profile, evidence and asset
   bundle hashes, without `channel_account_id`.
 - [ ] Add release fail-closed constraints for `YOUTUBE_VIDEO`.
-- [ ] Enable and force RLS and add paired `0039` pgTAP coverage.
+- [ ] Enable and force RLS and add paired `0041` pgTAP coverage.
 
 #### C. Creation implementation
 
@@ -612,8 +618,8 @@ server-side; there is no global key configuration.
 - [ ] V2 hashes change when any specified identity or evidence input changes.
 - [ ] Invalid output cannot become a content version.
 - [ ] An unconfirmed or revoked profile blocks idea and script generation.
-- [ ] Migration chain through `0039` and paired pgTAP pass on a clean disposable
-  database; the migration receipt reports the new `0039` journal tag as applied.
+- [ ] Migration chain through `0041` and paired pgTAP pass on a clean disposable
+  database; the migration receipt reports the new `0041` journal tag as applied.
 - [ ] Duplicate generation delivery resumes the same run.
 - [ ] Browser flow covers six ideas, selection, script and immutable revision.
 - [ ] With `CONTENT_OS_STAGE1_ENABLED` unset, the ideas/scripts routes and
@@ -738,7 +744,7 @@ evidence. This is local acceptance only.
 - [ ] Set `CONTENT_OS_STAGE1_ENABLED=true` only in the disposable local/test
   configuration used for the enabled acceptance pass; do not change shared or
   production configuration.
-- [ ] Apply the complete migration chain `0000..0039`.
+- [ ] Apply the complete migration chain `0000..0041`.
 - [ ] Seed two organizations, two users and isolated brands with synthetic data.
 - [ ] Use fixture research, creation and thumbnail adapters only.
 - [ ] Record `externalProviderCalls = 0` before and after the run.
@@ -769,7 +775,7 @@ evidence. This is local acceptance only.
   results.
 - [ ] Database evidence: migration receipt, pgTAP result, tenant-denial queries
   and zero release/outbox/publication rows; the receipt must report journal tags
-  `0037`, `0038` and `0039` as applied.
+  `0037`, `0040` and `0041` as applied.
 - [ ] Browser evidence: route-by-route screenshots or trace with no secrets.
 - [ ] Provider evidence: fixture adapters and zero external calls/cost.
 - [ ] GitHub evidence: PR URL, exact SHA and actual CI conclusions.
@@ -844,7 +850,6 @@ These remain unresolved until the owner decides them explicitly:
 | Decision | Needed before | Safe default |
 |---|---|---|
 | Retrospective Slice 0 blind review or accepted review gap | Slice 1 start | Review `ab50d742..ef1ea56f`; do not use empty PR #26 or rewrite history |
-| Video Radar code-transfer authorization | Slice 2 source port | Do not copy source |
 | Teleprompter in or outside Stage 1 | Slice 3 start | Outside Stage 1 |
 | Relicense any YouTubePro-derived file | Before relicensing | Preserve Apache-2.0; require explicit owner decision and sole-holder evidence |
 | Live research/generation provider and budget | Any live adapter call | Disabled; fixtures only |
@@ -852,6 +857,12 @@ These remain unresolved until the owner decides them explicitly:
 | First real portfolio brands | After disposable acceptance | Synthetic disposable brand |
 | Postiz, Blotato or direct YouTube adapter | Later publication stage | No adapter and no publication |
 | Explicit brand-to-`sv_project` mapping | Future AI Visibility integration | No mapping |
+
+Resolved on 2026-09-06 and recorded in `DECISION_LOG.md` and
+`AUTHORIZATION_MATRIX.md`: the Video Radar code transfer is authorized, the
+research and structured-content migrations are numbered `0040` and `0041`,
+blind review is performed by a separate read-only Claude Code session per
+slice, and Slices 2-5 do not touch the shared Railway staging environment.
 
 ## 14. Global definition of done
 
