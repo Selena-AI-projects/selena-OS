@@ -108,6 +108,21 @@ const COUNTED_TABLES = [
 	"selena_release.publication_attempts",
 ];
 
+/**
+ * Lock modes a migration takes and ordinary reads and writes do not. `pg_locks`
+ * is readable by every role, unlike the query text in `pg_stat_activity`, so
+ * this answers "is someone migrating right now" without depending on privilege.
+ */
+const DDL_LOCK_MODES = [
+	"AccessExclusiveLock",
+	"ExclusiveLock",
+	"ShareRowExclusiveLock",
+	"ShareLock",
+	"ShareUpdateExclusiveLock",
+];
+
+const WATCHED_SCHEMAS = ["public", "drizzle", "selena_registry", "selena_release", "selena_audit", "selena_ingest_raw"];
+
 function readLocalMigrations() {
 	const journal = JSON.parse(readFileSync(join(migrationsFolder, "meta", "_journal.json"), "utf8"));
 	return journal.entries.map((entry) => ({
@@ -142,6 +157,7 @@ async function main() {
 		applied: [],
 		missing: [],
 		foreign: [],
+		concurrency: {},
 		objects: {},
 		roles: {},
 		counts: {},
@@ -159,6 +175,49 @@ async function main() {
 		console.log(`database: ${identity.rows[0].database}`);
 		console.log(`connected as: session_user=${identity.rows[0].login} current_user=${identity.rows[0].role}`);
 		console.log(`server: ${identity.rows[0].server.split(" on ")[0]}`);
+		console.log("");
+
+		// Whether anything else is mid-migration right now. A finished deploy says
+		// nothing about a process still running, and two migrators on one database
+		// is the failure this is here to prevent.
+		const others = await client.query(
+			`SELECT usename, coalesce(state, 'not visible to this login') AS state, count(*)::int AS sessions
+			   FROM pg_stat_activity
+			  WHERE datname = current_database() AND pid <> pg_backend_pid() AND backend_type = 'client backend'
+			  GROUP BY 1, 2 ORDER BY 1, 2`,
+		);
+		const ledgerLocks = await client.query(
+			`SELECT l.pid, l.mode, l.granted
+			   FROM pg_locks l JOIN pg_class c ON c.oid = l.relation JOIN pg_namespace n ON n.oid = c.relnamespace
+			  WHERE l.pid <> pg_backend_pid() AND n.nspname = 'drizzle' AND c.relname = '__drizzle_migrations'`,
+		);
+		const ddlLocks = await client.query(
+			`SELECT l.pid, l.mode, n.nspname || '.' || c.relname AS relation
+			   FROM pg_locks l JOIN pg_class c ON c.oid = l.relation JOIN pg_namespace n ON n.oid = c.relnamespace
+			  WHERE l.pid <> pg_backend_pid() AND l.mode = ANY($1::text[]) AND n.nspname = ANY($2::text[])
+			  ORDER BY 3, 2`,
+			[DDL_LOCK_MODES, WATCHED_SCHEMAS],
+		);
+		report.concurrency = {
+			sessions: others.rows.map((row) => ({ user: row.usename, state: row.state, count: row.sessions })),
+			ledger_locks: ledgerLocks.rows.map((row) => ({ pid: row.pid, mode: row.mode, granted: row.granted })),
+			ddl_locks: ddlLocks.rows.map((row) => ({ pid: row.pid, mode: row.mode, relation: row.relation })),
+		};
+		console.log("other sessions in this database (no query text is read):");
+		if (others.rows.length === 0) console.log("  none");
+		for (const row of others.rows) console.log(`  ${String(row.sessions).padStart(3)}  ${row.usename} — ${row.state}`);
+		console.log(
+			ledgerLocks.rows.length === 0
+				? "locks on the migration ledger by another session: none"
+				: `LOCKS ON THE MIGRATION LEDGER BY ANOTHER SESSION: ${ledgerLocks.rows.length}`,
+		);
+		for (const row of ledgerLocks.rows) console.log(`  pid=${row.pid} ${row.mode} granted=${row.granted}`);
+		console.log(
+			ddlLocks.rows.length === 0
+				? "migration-shaped locks held elsewhere: none"
+				: `MIGRATION-SHAPED LOCKS HELD ELSEWHERE: ${ddlLocks.rows.length}`,
+		);
+		for (const row of ddlLocks.rows) console.log(`  pid=${row.pid} ${row.mode} ${row.relation}`);
 		console.log("");
 
 		const ledgerExists = await client.query("SELECT to_regclass('drizzle.__drizzle_migrations') IS NOT NULL AS exists");
