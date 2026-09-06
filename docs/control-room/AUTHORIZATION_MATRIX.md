@@ -12,6 +12,7 @@
 | Deploy | Railway staging | ALLOWED by owner on 2026-09-06 | Slice 1 candidate only; production deploy is prohibited | staging runtime changes only |
 | Independent review | Claude.ai Max | ALLOWED by owner on 2026-09-06 | private `selena-OS` code and specification, read-only review only | no API billing, provider calls or repository mutation |
 | CI runner access | Blacksmith via GitHub | ALLOWED by owner on 2026-09-06 | sign in to investigate and restore PR CI | repository/account permission grants still require confirmation at the OAuth action |
+| GitHub-hosted CI | GitHub Actions | ALLOWED by owner on 2026-09-06 | required Slice 1 PR checks on GitHub-hosted runners | may consume available GitHub Actions minutes; no provider/release workflow is triggered |
 | YouTube OAuth/publication/provider call | external platform | PROHIBITED in Slice 1 | none | no account or publication authority |
 
 Owner authorization quote:

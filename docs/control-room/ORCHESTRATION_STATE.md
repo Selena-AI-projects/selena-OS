@@ -25,11 +25,13 @@
 - secret-pattern diff scan and `git diff --check` — PASS
 - Claude Code Max blind review of `594cc3b6` — COMPLETE (Sonnet, read-only, no tool denials); it confirmed the Slice 1 module/RLS/draft-only architecture and identified the stale migration-numbering prose corrected in the next commit
 - Claude Code Max blind review of `9a61082d` — CHANGES_REQUESTED (Sonnet, read-only, no tool denials); it confirmed the Slice 1 architecture and found stale execution-plan numbering/status plus the missing UI path for per-fact evidence states and source URLs
-- per-fact evidence-state/source authoring correction — PASS (web typecheck, profile-domain tests, targeted Biome, web build and Impeccable detector); exact-head review remains pending
+- per-fact evidence-state/source authoring correction — PASS (web typecheck, profile-domain tests, targeted Biome, web build and Impeccable detector)
+- Claude Code Max blind review of `c2074af4` — REVIEW_PASSED for Slice 1 (Sonnet, read-only, no tool denials); later-slice work remains explicitly outside the Slice 1 gate
+- Blacksmith CI diagnosis — VERIFIED: repository owner `parkourcafe` is a personal account, unsupported by Blacksmith; owner authorized the required PR checks to use GitHub-hosted `ubuntu-24.04` runners
 
 ## Pending execution evidence
 
-- exact-head GitHub CI and a fresh independent review after the execution-plan and profile-UI correction;
+- exact-head GitHub CI and an infrastructure-only exact-head review after the runner correction;
 - verified Railway staging migration, deployment and canary response;
 - browser acceptance where the staging authentication path permits it.
 
@@ -38,7 +40,7 @@ and must remain disabled.
 
 ## Next autonomous action
 
-Commit and push the execution-plan and profile-UI correction, obtain CI and a
-fresh exact-head blind review, then migrate and deploy the exact merged
+Commit and push the GitHub-hosted runner correction, obtain CI and an
+infrastructure-only exact-head review, then migrate and deploy the exact merged
 candidate to the dedicated Railway staging project. Stop before any production
 or YouTube publication action.

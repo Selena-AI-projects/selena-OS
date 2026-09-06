@@ -99,3 +99,18 @@
 - Authority: required response to the exact-head review within the owner's
   approved Slice 1 delivery loop.
 - Affected requirements: S1-01, S1-05, S1-08.
+
+## 2026-09-06 — run required PR checks on GitHub-hosted runners
+
+- Decision: move only the four pull-request workflows required by Slice 1
+  (`Build`, `E2E Tests`, `License Check` and `Deployment Smoke Tests`) from
+  Blacksmith labels to `ubuntu-24.04`.
+- Evidence: `parkourcafe` is a GitHub personal account and owns the private
+  `parkourcafe/selena-OS` repository; Blacksmith's installation flow states
+  that personal GitHub accounts are unsupported. The Blacksmith-labeled PR
+  jobs remained queued with zero repository runners.
+- Boundary: scheduled provider checks, daily content automation and the manual
+  release workflow are unchanged and are not triggered by this delivery.
+- Authority: owner approved GitHub-hosted runners and available GitHub Actions
+  minutes on 2026-09-06.
+- Affected requirements: S1-08.
