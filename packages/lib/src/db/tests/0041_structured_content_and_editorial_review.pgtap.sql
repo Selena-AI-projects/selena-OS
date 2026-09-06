@@ -1,6 +1,6 @@
 BEGIN;
 
-SELECT plan(53);
+SELECT plan(58);
 
 SELECT has_table('selena_registry', 'generation_runs', 'generation runs table exists');
 SELECT has_table('selena_registry', 'editorial_approvals', 'editorial approvals table exists');
@@ -374,6 +374,43 @@ SELECT throws_ok(
   'a structured version without its research lineage is refused'
 );
 
+-- The lineage columns are as protected as generation_runs' own. A version may
+-- only cite research, a profile version and a generation run belonging to the
+-- brand it is written for; the V2 digest covers those ids, so a forged one would
+-- become part of what an editorial decision attests to.
+SELECT throws_ok(
+  $$INSERT INTO selena_registry.content_versions (
+    organization_id, brand_id, content_id, version, body, cta_url, policy_version, content_hash,
+    format_version, hash_version, structured_body, project_profile_version_id, research_run_id,
+    generation_run_id, created_by
+  ) VALUES (
+    'creation-org', 'creation-brand-a', '40000000-0000-4000-8000-000000000501', 8,
+    'Rendered body', 'https://example.test/cta', 'brand-pack/v1', repeat('a', 64),
+    'content.youtube-video/v1', 'content.workflow/v2', '{"schema":"content.youtube-video/v1"}'::jsonb,
+    '40000000-0000-4000-8000-000000000002', '40000000-0000-4000-8000-000000000101',
+    '40000000-0000-4000-8000-000000000401', 'creation-owner'
+  )$$,
+  42501,
+  'new row violates row-level security policy for table "content_versions"',
+  'a version cannot cite a sibling brand''s profile version'
+);
+SELECT throws_ok(
+  $$INSERT INTO selena_registry.content_versions (
+    organization_id, brand_id, content_id, version, body, cta_url, policy_version, content_hash,
+    format_version, hash_version, structured_body, project_profile_version_id, research_run_id,
+    generation_run_id, created_by
+  ) VALUES (
+    'creation-org', 'creation-brand-a', '40000000-0000-4000-8000-000000000501', 9,
+    'Rendered body', 'https://example.test/cta', 'brand-pack/v1', repeat('b', 64),
+    'content.youtube-video/v1', 'content.workflow/v2', '{"schema":"content.youtube-video/v1"}'::jsonb,
+    '40000000-0000-4000-8000-000000000001', '40000000-0000-4000-8000-000000000102',
+    '40000000-0000-4000-8000-000000000401', 'creation-owner'
+  )$$,
+  42501,
+  'new row violates row-level security policy for table "content_versions"',
+  'a version cannot cite another brand''s research run'
+);
+
 -- ── editorial approvals ─────────────────────────────────────────────────────
 
 SELECT lives_ok(
@@ -522,6 +559,73 @@ SELECT is(
    WHERE intent.content_version_id = '40000000-0000-4000-8000-000000000602'),
   0,
   'no outbox event exists for the refused YouTube version'
+);
+
+-- The gate must name a YouTube publication adapter. An active binding for some
+-- other provider, attached to a YouTube channel account, says nothing about
+-- YouTube publication — and a gate that accepted it would open on a routing
+-- decision nobody made about YouTube.
+INSERT INTO selena_registry.channel_provider_bindings (
+  organization_id, brand_id, channel_account_id, provider, environment, active, created_by
+) VALUES (
+  'creation-org', 'creation-brand-a', '40000000-0000-4000-8000-000000000701',
+  'postiz', 'STAGING', true, 'creation-owner'
+);
+SELECT throws_matching(
+  $$INSERT INTO selena_release.release_intents (
+    organization_id, brand_id, content_version_id, approval_id, channel_account_id,
+    platform, idempotency_key, correlation_id, created_by
+  ) VALUES (
+    'creation-org', 'creation-brand-a', '40000000-0000-4000-8000-000000000602',
+    '40000000-0000-4000-8000-000000000801', '40000000-0000-4000-8000-000000000701',
+    'youtube', 'release-postiz', '50000000-0000-4000-8000-000000000031', 'creation-owner'
+  )$$,
+  'no allowlisted YouTube channel account with a publication adapter exists',
+  'an active binding for another provider does not open the YouTube gate'
+);
+
+-- The intent table is not append-only, so an intent created against a legacy
+-- version could otherwise be re-pointed at a YouTube one after the gate.
+INSERT INTO selena_registry.content_items (
+  id, organization_id, brand_id, title, content_kind, created_by
+) VALUES (
+  '40000000-0000-4000-8000-000000000901', 'creation-org', 'creation-brand-a', 'A post',
+  'GENERIC_POST', 'creation-owner'
+);
+INSERT INTO selena_registry.content_versions (
+  id, organization_id, brand_id, content_id, version, body, cta_url, policy_version, content_hash, created_by
+) VALUES (
+  '40000000-0000-4000-8000-000000000902', 'creation-org', 'creation-brand-a',
+  '40000000-0000-4000-8000-000000000901', 1, 'Legacy body', 'https://example.test/cta',
+  'brand-pack/v1', repeat('2', 64), 'creation-owner'
+);
+INSERT INTO selena_registry.approvals (
+  id, organization_id, brand_id, content_version_id, channel_account_id, decision,
+  binding_hash, content_hash, asset_bundle_hash, policy_version, disclosure_hash, approver_id, expires_at
+) VALUES (
+  '40000000-0000-4000-8000-000000000903', 'creation-org', 'creation-brand-a',
+  '40000000-0000-4000-8000-000000000902', '40000000-0000-4000-8000-000000000701', 'APPROVED',
+  repeat('b', 64), repeat('2', 64), repeat('f', 64), 'brand-pack/v1', repeat('d', 64),
+  'creation-owner', now() + interval '1 day'
+);
+SELECT lives_ok(
+  $$INSERT INTO selena_release.release_intents (
+    id, organization_id, brand_id, content_version_id, approval_id, channel_account_id,
+    platform, idempotency_key, correlation_id, created_by
+  ) VALUES (
+    '40000000-0000-4000-8000-000000000904', 'creation-org', 'creation-brand-a',
+    '40000000-0000-4000-8000-000000000902', '40000000-0000-4000-8000-000000000903',
+    '40000000-0000-4000-8000-000000000701', 'postiz', 'release-legacy',
+    '50000000-0000-4000-8000-000000000032', 'creation-owner'
+  )$$,
+  'a legacy version is still releasable, so the gate is a condition and not a blanket refusal'
+);
+SELECT throws_matching(
+  $$UPDATE selena_release.release_intents
+    SET content_version_id = '40000000-0000-4000-8000-000000000602'
+    WHERE id = '40000000-0000-4000-8000-000000000904'$$,
+  'no allowlisted YouTube channel account with a publication adapter exists',
+  'an intent cannot be re-pointed at a YouTube version after the fact'
 );
 
 -- ...and the manifest boundary refuses the same version for the same reason, so

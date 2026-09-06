@@ -36,6 +36,16 @@ describe("content version hashing", () => {
 		expect(contentVersionHash(v1Input)).toBe("ab8885900a8a34bdc034717ecbed44403e974ef63a1735272407e5b707fdc803");
 	});
 
+	/**
+	 * The V2 digest is pinned the same way V1 is. Asserting only that it is stable
+	 * and sensitive would not notice a change to the canonicalization or to the
+	 * evidence snapshot's ordering — and an editorial decision is bound to this
+	 * digest, so moving it silently would unbind every decision already recorded.
+	 */
+	it("keeps the V2 digest byte-for-byte stable", () => {
+		expect(contentWorkflowV2Hash(v2Input)).toBe("a3273143f5a099886e5ee4c593316269f674a551da5f17cae3b9c52729461195");
+	});
+
 	it("gives structured content a different digest from V1 over the same text", () => {
 		expect(contentWorkflowV2Hash(v2Input)).not.toBe(contentVersionHash(v1Input));
 	});

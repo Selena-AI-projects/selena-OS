@@ -146,6 +146,7 @@ describe.skipIf(!disposableDatabaseUrl)("content creation PostgreSQL adapter", (
 			contentId: selected.contentId,
 			idempotencyKey: `script-${suffix}`,
 		});
+		if (scripted.status !== "COMPLETED") throw new Error(`script generation failed: ${scripted.errorCode}`);
 		expect(scripted.version).toBe(2);
 		expect(scripted.contentHash).not.toBe(selected.contentHash);
 
@@ -184,7 +185,48 @@ describe.skipIf(!disposableDatabaseUrl)("content creation PostgreSQL adapter", (
 			idempotencyKey: `revision-${suffix}`,
 			revision: true,
 		});
+		if (revised.status !== "COMPLETED") throw new Error(`revision failed: ${revised.errorCode}`);
 		expect(revised.version).toBe(3);
+
+		// A repeated delivery of the same revision returns the version it already
+		// made rather than generating a second one.
+		const repeatedRevision = await creation.generateScript(member, {
+			brandId,
+			contentId: selected.contentId,
+			idempotencyKey: `revision-${suffix}`,
+			revision: true,
+		});
+		expect(repeatedRevision).toMatchObject({ status: "COMPLETED", version: 3, contentHash: revised.contentHash });
+
+		// Selecting the same idea again finds the draft it already made.
+		const reselected = await creation.selectIdea(member, {
+			brandId,
+			generationRunId: ideas.id,
+			ideaIndex: 0,
+		});
+		expect(reselected.contentId).toBe(selected.contentId);
+		expect(reselected.version).toBe(1);
+
+		// A refused adapter leaves a record rather than rolling it back with the
+		// transaction: an absent run reads as "never attempted".
+		const runsBeforeRefusal = await root.query<{ count: string }>(
+			`SELECT count(*) AS count FROM selena_registry.generation_runs WHERE brand_id = $1`,
+			[brandId],
+		);
+		const refusedScript = await creation.generateScript(member, {
+			brandId,
+			contentId: selected.contentId,
+			idempotencyKey: `script-refused-${suffix}`,
+			adapterId: "gemini",
+		});
+		expect(refusedScript).toMatchObject({ status: "FAILED", errorCode: "ADAPTER_DISABLED" });
+		const runsAfterRefusal = await root.query<{ count: string }>(
+			`SELECT count(*) AS count FROM selena_registry.generation_runs WHERE brand_id = $1`,
+			[brandId],
+		);
+		expect(Number(runsAfterRefusal.rows[0].count)).toBe(Number(runsBeforeRefusal.rows[0].count) + 1);
+		const versionsAfterRefusal = await creation.getCreation(owner, brandId);
+		expect(versionsAfterRefusal.versionsByItem[selected.contentId]).toHaveLength(3);
 		const afterRevision = await creation.getCreation(owner, brandId);
 		const revisionHistory = afterRevision.versionsByItem[selected.contentId];
 		expect(revisionHistory).toHaveLength(3);
@@ -298,6 +340,38 @@ describe.skipIf(!disposableDatabaseUrl)("content creation PostgreSQL adapter", (
 			expect(run.actual).toBe(0);
 			expect(run.requested).toBe(0);
 		}
+
+		// The four gates are asserted one at a time through the server path, not
+		// only in the pure module: a misspelt environment variable would otherwise
+		// pass every test in the repository.
+		const gateCases: [string, Record<string, string | undefined>][] = [
+			["the live flag alone", { CONTENT_OS_GEMINI_LIVE: undefined }],
+			["the call ceiling alone", { CONTENT_OS_GEMINI_MAX_CALLS: undefined }],
+			["the credential alone", { CONTENT_OS_GEMINI_CREDENTIAL_PRESENT: undefined }],
+			["every gate open", {}],
+		];
+		const original = {
+			CONTENT_OS_GEMINI_LIVE: process.env.CONTENT_OS_GEMINI_LIVE,
+			CONTENT_OS_GEMINI_MAX_CALLS: process.env.CONTENT_OS_GEMINI_MAX_CALLS,
+			CONTENT_OS_GEMINI_CREDENTIAL_PRESENT: process.env.CONTENT_OS_GEMINI_CREDENTIAL_PRESENT,
+		};
+		for (const [label, missing] of gateCases) {
+			process.env.CONTENT_OS_GEMINI_LIVE = "true";
+			process.env.CONTENT_OS_GEMINI_MAX_CALLS = "5";
+			process.env.CONTENT_OS_GEMINI_CREDENTIAL_PRESENT = "true";
+			for (const key of Object.keys(missing)) delete process.env[key];
+			const gated = await creation.generateIdeas(member, {
+				brandId,
+				opportunityId,
+				idempotencyKey: `gate-${label.replace(/\s+/g, "-")}-${suffix}`,
+				adapterId: "gemini",
+			});
+			expect(gated.status, label).toBe("FAILED");
+			// Even with every gate open there is no transport, so nothing dispatches.
+			expect(creationProviderCallCount(), label).toBe(0);
+		}
+		Object.assign(process.env, original);
+		for (const [key, value] of Object.entries(original)) if (value === undefined) delete process.env[key];
 
 		await root.end();
 	});

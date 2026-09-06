@@ -14,6 +14,7 @@
  * forgetting to record it is the failure this exists to catch.
  */
 
+import { createHash } from "node:crypto";
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 
@@ -24,6 +25,8 @@ export interface VendoredSource {
 	commit: string;
 	license: string;
 	licenseFile: string;
+	/** SHA-256 of the upstream licence text, so a replaced file is caught. */
+	licenseSha256: string;
 	provenanceFile: string;
 	upstreamHasNotice: boolean;
 	/** Present when `upstreamHasNotice` is true. */
@@ -91,8 +94,19 @@ export function verifyVendoredSources(packageDir: string): VendoredViolation[] {
 		if (!source.repository?.startsWith("https://")) {
 			record("repository must be an https url");
 		}
-		if (!fileHasContent(join(licensesDir, source.licenseFile ?? ""))) {
+		const licensePath = join(licensesDir, source.licenseFile ?? "");
+		if (!fileHasContent(licensePath)) {
 			record(`licence file ${source.licenseFile} is missing or empty`);
+		} else if (!/^[a-f0-9]{64}$/.test(source.licenseSha256 ?? "")) {
+			record("licenseSha256 must be the sha-256 of the upstream licence text");
+		} else {
+			// Presence is not the obligation; carrying the licence is. A file that
+			// exists but is not the upstream text satisfies a size check and fails
+			// the licence.
+			const actual = createHash("sha256").update(readFileSync(licensePath)).digest("hex");
+			if (actual !== source.licenseSha256) {
+				record(`licence file ${source.licenseFile} does not match the recorded upstream digest`);
+			}
 		}
 		if (!fileHasContent(join(licensesDir, source.provenanceFile ?? ""))) {
 			record(`provenance record ${source.provenanceFile} is missing or empty`);

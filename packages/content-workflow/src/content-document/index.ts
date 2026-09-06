@@ -43,7 +43,10 @@ export const documentSectionSchema = z
 	.object({
 		heading: z.string().trim().min(1).max(120),
 		purpose: z.string().trim().min(1).max(500),
-		narration: z.string().trim().min(1).max(20_000),
+		// Optional, because a generator that returns a section's purpose and its
+		// claims has not written prose for it. Filling the gap with the purpose
+		// would render the same sentence twice and present it as script.
+		narration: z.string().trim().min(1).max(20_000).optional(),
 		evidenceClaimIds: z.array(claimId).max(8),
 	})
 	.strict();
@@ -139,7 +142,8 @@ export function renderReadableBody(
 	const lines: string[] = [document.titles[0], "", document.concept.hook, "", document.concept.honestPromise, ""];
 
 	for (const section of document.script?.sections ?? []) {
-		lines.push(`## ${section.heading}`, section.purpose, "", section.narration);
+		lines.push(`## ${section.heading}`, section.purpose);
+		if (section.narration) lines.push("", section.narration);
 		for (const id of section.evidenceClaimIds) {
 			const claim = claimById.get(id);
 			lines.push(claim ? `- ${claim.claim} [${claim.evidenceClass}, ${claim.confidence}]` : `- ${id}`);

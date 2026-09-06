@@ -280,14 +280,18 @@ export function buildScriptDocument(input: {
 		titles: [...new Set([...input.script.titles, ...input.concept.titles])].slice(0, 8),
 		script: {
 			hook: input.script.hook,
-			sections: input.script.structure.map((section) => ({
+			// The generation contract carries a section's purpose and its claims; the
+			// narration is the script body attributed to that section. Until a provider
+			// returns per-section prose, the whole script sits on the first section
+			// rather than being split by a guess at its boundaries — and the rest carry
+			// no narration key at all. Repeating their purpose would present the same
+			// sentence twice as though it were script, and an explicit `undefined`
+			// would reach the canonical JSON the V2 digest is taken over, which
+			// refuses it.
+			sections: input.script.structure.map((section, index) => ({
 				heading: section.section,
 				purpose: section.purpose,
-				// The generation contract carries a section's purpose and its claims;
-				// the narration is the script body attributed to that section. Until a
-				// provider returns per-section prose, the whole script sits on the first
-				// section rather than being split by a guess at its boundaries.
-				narration: section.section === input.script.structure[0].section ? input.script.script : section.purpose,
+				...(index === 0 ? { narration: input.script.script } : {}),
 				evidenceClaimIds: section.evidenceClaimIds,
 			})),
 			payoff: input.script.payoff,

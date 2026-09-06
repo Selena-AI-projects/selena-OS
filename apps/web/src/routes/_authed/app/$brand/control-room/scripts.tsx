@@ -34,12 +34,25 @@ function ScriptsPage() {
 	const [notice, setNotice] = useState<{ kind: "success" | "error"; message: string } | null>(null);
 	const scriptKey = useRef(crypto.randomUUID());
 
-	function act(action: () => Promise<unknown>, success: string) {
+	/**
+	 * A refused generation resolves with a FAILED result rather than throwing, so
+	 * that its record survives the transaction. That makes the status the thing to
+	 * read: treating "it resolved" as success would report a script that was never
+	 * written.
+	 */
+	function act(action: () => Promise<{ status: string; errorCode?: string | null }>, success: string) {
 		startTransition(async () => {
 			try {
-				await action();
+				const result = await action();
 				await router.invalidate();
 				scriptKey.current = crypto.randomUUID();
+				if (result.status === "FAILED") {
+					setNotice({
+						kind: "error",
+						message: `Generation did not produce a usable script (${result.errorCode ?? "unknown reason"})`,
+					});
+					return;
+				}
 				setNotice({ kind: "success", message: success });
 			} catch (error) {
 				setNotice({
@@ -106,10 +119,14 @@ function ScriptsPage() {
 								{document?.script ? (
 									<div className="flex flex-col gap-3">
 										<p className="break-words font-medium">{document.script.hook}</p>
-										{document.script.sections.map((section) => (
-											<div key={section.heading} className="flex flex-col gap-1">
+										{document.script.sections.map((section, index) => (
+											// biome-ignore lint/suspicious/noArrayIndexKey: two sections may legitimately share a heading, and this list is a stored immutable document that is never reordered, filtered or appended to on the client — position is the only stable identity a section has.
+											<div key={`${index}-${section.heading}`} className="flex flex-col gap-1">
 												<p className="font-medium">{section.heading}</p>
 												<p className="break-words text-muted-foreground">{section.purpose}</p>
+												{/* The narration is the script. Showing only headings and purposes
+												    made this page an outline of a document it never displayed. */}
+												{section.narration && <p className="whitespace-pre-wrap break-words">{section.narration}</p>}
 												{section.evidenceClaimIds.length > 0 && (
 													<p className="break-words text-muted-foreground text-xs">
 														Cites {section.evidenceClaimIds.length}{" "}

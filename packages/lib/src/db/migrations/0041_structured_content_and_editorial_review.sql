@@ -85,8 +85,11 @@ CREATE TABLE selena_registry.generation_runs (
   ),
   CONSTRAINT generation_runs_calls_within_request CHECK (actual_call_count <= requested_call_count),
   -- Stage 1 spends nothing, and the schema says so rather than the code alone.
+  -- Written against the counters rather than against the provider name: the
+  -- application records every Stage 1 run as provider 'none', so a disjunct on
+  -- the name is always true and constrains nothing.
   CONSTRAINT generation_runs_stage1_no_spend CHECK (
-    provider = 'none' OR actual_call_count = 0
+    actual_call_count = 0 AND COALESCE(actual_cost_micros, 0) = 0
   )
 );
 CREATE UNIQUE INDEX generation_runs_brand_idempotency_unique
@@ -95,6 +98,27 @@ CREATE INDEX generation_runs_brand_idx ON selena_registry.generation_runs (brand
 CREATE INDEX generation_runs_opportunity_idx
   ON selena_registry.generation_runs (research_opportunity_id, created_at DESC);
 CREATE INDEX generation_runs_org_idx ON selena_registry.generation_runs (organization_id);
+
+-- ── which idea a draft is ───────────────────────────────────────────────────
+-- Identity by position in the run rather than by title: a title is editable and
+-- need not be unique, so resolving a draft back to its idea by name can silently
+-- find the wrong one and hash the wrong evidence into the version.
+
+ALTER TABLE selena_registry.content_items
+  ADD COLUMN selected_idea_index integer CHECK (selected_idea_index IS NULL OR selected_idea_index BETWEEN 0 AND 5),
+  ADD COLUMN idea_generation_run_id uuid REFERENCES selena_registry.generation_runs(id);
+
+ALTER TABLE selena_registry.content_items
+  ADD CONSTRAINT content_items_idea_selection_complete CHECK (
+    (selected_idea_index IS NULL AND idea_generation_run_id IS NULL)
+    OR (selected_idea_index IS NOT NULL AND idea_generation_run_id IS NOT NULL)
+  );
+
+-- One draft per idea, so an ordinary retry of a selection finds the existing
+-- draft instead of creating a second one for the same idea.
+CREATE UNIQUE INDEX content_items_idea_selection_unique
+  ON selena_registry.content_items (idea_generation_run_id, selected_idea_index)
+  WHERE idea_generation_run_id IS NOT NULL;
 
 -- ── content_versions: structure and lineage ─────────────────────────────────
 -- Existing rows are legacy.text/v1 with selena.content/v1 hashes. Nothing here
@@ -137,6 +161,9 @@ ALTER TABLE selena_registry.content_versions
       AND structured_body ->> 'schema' = 'content.youtube-video/v1'
       AND project_profile_version_id IS NOT NULL
       AND research_run_id IS NOT NULL
+      -- A structured version is produced by a generation run. Without one it is
+      -- a document with no account of where it came from.
+      AND generation_run_id IS NOT NULL
     )
   );
 
@@ -177,10 +204,20 @@ CREATE INDEX editorial_approvals_brand_idx
 CREATE INDEX editorial_approvals_org_idx ON selena_registry.editorial_approvals (organization_id);
 
 -- ── release fail-closed for YOUTUBE_VIDEO ───────────────────────────────────
--- Specification 9.4. The rule is stated as a condition rather than a flat
--- refusal so it relaxes on its own when a real path exists: today no provider
--- binding admits YouTube (0033 restricts providers to postiz and blotato), so
--- the EXISTS below cannot be satisfied and the gate holds shut.
+-- Specification 9.4. The rule is a condition rather than a flat refusal so it
+-- relaxes on its own when a real path exists, and the condition has to name both
+-- halves the specification names: an allowlisted YouTube channel account AND a
+-- YouTube publication adapter.
+--
+-- 0033 restricts binding providers to 'postiz' and 'blotato', which constrains
+-- which provider NAMES may appear — not which platform a binding serves. An
+-- ordinary postiz binding attached to a YouTube channel account therefore says
+-- nothing about YouTube publication, and a gate that accepted it would open on
+-- a routing decision nobody made about YouTube at all.
+--
+-- So the predicate names the adapter. No such provider value is admitted by
+-- 0033's CHECK today, which is what holds the gate shut; introducing one is a
+-- deliberate migration, exactly as 0033 intended.
 
 -- 0021 gave selena_schema_owner a SELECT policy on content_versions but not on
 -- content_items, so a SECURITY DEFINER function owned by that role could read the
@@ -223,8 +260,10 @@ BEGIN
       AND account.platform = 'youtube'
       AND account.allowlisted
       AND account.status = 'ACTIVE'
-      -- An inactive binding is not a publication adapter.
+      -- An inactive binding is not a publication adapter, and a binding for some
+      -- other provider is not a YouTube one.
       AND binding.active
+      AND binding.provider = 'youtube'
   ) THEN
     RETURN NEW;
   END IF;
@@ -235,11 +274,14 @@ BEGIN
 END;
 $$;
 
+-- INSERT OR UPDATE, because release_intents is not append-only: 0021 and 0029
+-- both grant it UPDATE policies. An intent created against a legacy version and
+-- then re-pointed at a YOUTUBE_VIDEO one would otherwise never meet the gate.
 CREATE TRIGGER release_intents_youtube_fail_closed
-  BEFORE INSERT ON selena_release.release_intents
+  BEFORE INSERT OR UPDATE ON selena_release.release_intents
   FOR EACH ROW EXECUTE FUNCTION selena_release.reject_unsupported_youtube_release();
 CREATE TRIGGER release_manifests_youtube_fail_closed
-  BEFORE INSERT ON selena_release.release_manifests
+  BEFORE INSERT OR UPDATE ON selena_release.release_manifests
   FOR EACH ROW EXECUTE FUNCTION selena_release.reject_unsupported_youtube_release();
 
 -- ── row level security ──────────────────────────────────────────────────────
@@ -336,6 +378,53 @@ CREATE POLICY editorial_approvals_web_update_denied ON selena_registry.editorial
   FOR UPDATE TO selena_web_runtime USING (false) WITH CHECK (false);
 CREATE POLICY editorial_approvals_web_delete_denied ON selena_registry.editorial_approvals
   FOR DELETE TO selena_web_runtime USING (false);
+
+-- The lineage columns this migration added to content_versions are governed by
+-- 0021's insert policy, whose whole check is can_write_brand. The single-column
+-- foreign keys prove those rows exist and nothing more, so a session could write
+-- its own brand's immutable, V2-hashed version while citing another
+-- organization's research run — and the V2 digest covers exactly those ids, so
+-- an editorial decision would then be bound to a lineage that is not this
+-- brand's.
+--
+-- generation_runs_web_insert above already enforces these three relationships.
+-- This is the same enforcement on the sibling table, which was an omission
+-- rather than a decision.
+DROP POLICY content_versions_web_insert ON selena_registry.content_versions;
+CREATE POLICY content_versions_web_insert ON selena_registry.content_versions
+  FOR INSERT TO selena_web_runtime
+  WITH CHECK (
+    selena_registry.can_write_brand(organization_id, brand_id, ARRAY['web'])
+    -- Every reference to the new row is schema-qualified: an unqualified name
+    -- inside EXISTS resolves against the subquery's own table.
+    AND (
+      selena_registry.content_versions.project_profile_version_id IS NULL
+      OR EXISTS (
+        SELECT 1 FROM selena_registry.brand_content_profile_versions version
+        WHERE version.id = selena_registry.content_versions.project_profile_version_id
+          AND version.organization_id = selena_registry.content_versions.organization_id
+          AND version.brand_id = selena_registry.content_versions.brand_id
+      )
+    )
+    AND (
+      selena_registry.content_versions.research_run_id IS NULL
+      OR EXISTS (
+        SELECT 1 FROM selena_registry.content_research_runs run
+        WHERE run.id = selena_registry.content_versions.research_run_id
+          AND run.organization_id = selena_registry.content_versions.organization_id
+          AND run.brand_id = selena_registry.content_versions.brand_id
+      )
+    )
+    AND (
+      selena_registry.content_versions.generation_run_id IS NULL
+      OR EXISTS (
+        SELECT 1 FROM selena_registry.generation_runs generation
+        WHERE generation.id = selena_registry.content_versions.generation_run_id
+          AND generation.organization_id = selena_registry.content_versions.organization_id
+          AND generation.brand_id = selena_registry.content_versions.brand_id
+      )
+    )
+  );
 
 CREATE TRIGGER generation_runs_append_only
   BEFORE UPDATE OR DELETE ON selena_registry.generation_runs

@@ -7,6 +7,7 @@
 			"commit": "63cd9b9c2ad19b9941a763be3d5cfcbd9bc13b25",
 			"license": "Apache-2.0",
 			"licenseFile": "youtube-pro/LICENSE",
+			"licenseSha256": "b40930bbcf80744c86c46a12bc9da056641d722716c378f5659b9e555ef833e1",
 			"provenanceFile": "youtube-pro/PROVENANCE.md",
 			"upstreamHasNotice": false,
 			"upstreamNoticeEvidence": "git ls-tree -r --name-only 63cd9b9c2ad19b9941a763be3d5cfcbd9bc13b25 lists no NOTICE file anywhere in the tree, so the Apache-2.0 section 4(d) obligation to reproduce one does not arise.",

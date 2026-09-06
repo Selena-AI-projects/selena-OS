@@ -42,6 +42,17 @@ describe("vendored source attribution", () => {
 		});
 	});
 
+	// A file that exists but is not the upstream text passes a size check and
+	// fails the licence, which is the obligation this exists to keep.
+	it("fails when the licence is replaced by something that is not the licence", () => {
+		const copy = copyOfPackage();
+		writeFileSync(join(copy, "THIRD_PARTY_LICENSES/youtube-pro/LICENSE"), "x");
+		expect(verifyVendoredSources(copy)).toContainEqual({
+			sourceId: "youtube-pro",
+			problem: "licence file youtube-pro/LICENSE does not match the recorded upstream digest",
+		});
+	});
+
 	it("fails when the provenance record is removed", () => {
 		const copy = copyOfPackage();
 		rmSync(join(copy, "THIRD_PARTY_LICENSES/youtube-pro/PROVENANCE.md"));
@@ -83,6 +94,7 @@ describe("vendored source attribution", () => {
 						commit: "63cd9b9c2ad19b9941a763be3d5cfcbd9bc13b25",
 						license: "Apache-2.0",
 						licenseFile: "youtube-pro/LICENSE",
+						licenseSha256: "b40930bbcf80744c86c46a12bc9da056641d722716c378f5659b9e555ef833e1",
 						provenanceFile: "youtube-pro/PROVENANCE.md",
 						upstreamHasNotice: true,
 						noticeFile: "youtube-pro/NOTICE",
@@ -122,6 +134,7 @@ describe("vendored source attribution", () => {
 						commit: "63cd9b9",
 						license: "Apache-2.0",
 						licenseFile: "youtube-pro/LICENSE",
+						licenseSha256: "b40930bbcf80744c86c46a12bc9da056641d722716c378f5659b9e555ef833e1",
 						provenanceFile: "youtube-pro/PROVENANCE.md",
 						upstreamHasNotice: false,
 						upstreamNoticeEvidence: "no NOTICE at this commit",

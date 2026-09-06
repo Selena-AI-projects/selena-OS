@@ -13,7 +13,6 @@ import {
 	ContentCreationError,
 	CREATION_VERSIONS,
 	type CreationAdapter,
-	type CreationErrorCode,
 	type EvidenceClaim,
 	FixtureCreationAdapter,
 	type GeminiAdapterGates,
@@ -96,6 +95,17 @@ export function creationProviderCallCount(): number {
 }
 
 export type CreationAdapterId = "fixture" | "gemini";
+
+/**
+ * The slug the fixture builds its titles from.
+ *
+ * A brand id may be up to 120 characters, and the fixture title is the slug plus
+ * an angle, against a 100-character limit. A long brand id therefore made idea
+ * generation permanently impossible with an error that named nothing useful.
+ */
+function fixtureProjectSlug(brandId: string): string {
+	return brandId.length > 48 ? `${brandId.slice(0, 45)}...` : brandId;
+}
 
 /** What a run is permitted to spend. The fixture path spends nothing by construction. */
 function permittedCalls(adapterId: CreationAdapterId): number {
@@ -239,6 +249,9 @@ export function createPostgresCreationStore(options: {
 			.select({ id: scrContentChannels.id })
 			.from(scrContentChannels)
 			.where(and(eq(scrContentChannels.organizationId, context.tenantId), eq(scrContentChannels.brandId, brandId)))
+			// Oldest first, so which channel a draft attaches to is stable rather than
+			// whichever row the planner happened to return.
+			.orderBy(scrContentChannels.createdAt, scrContentChannels.id)
 			.limit(1);
 		return channel?.id ?? null;
 	}
@@ -259,11 +272,20 @@ export function createPostgresCreationStore(options: {
 		readChannel,
 		nextVersionNumber,
 
+		// Scoped to this slice's own kind. A legacy GENERIC_POST has no structured
+		// document and no idea behind it, so offering it a "draft the script"
+		// button promises something the handler will refuse.
 		async readItems(tx: ContentTransaction): Promise<ContentItemRow[]> {
 			return tx
 				.select()
 				.from(scrContentItems)
-				.where(and(eq(scrContentItems.organizationId, context.tenantId), eq(scrContentItems.brandId, brandId)))
+				.where(
+					and(
+						eq(scrContentItems.organizationId, context.tenantId),
+						eq(scrContentItems.brandId, brandId),
+						eq(scrContentItems.contentKind, "YOUTUBE_VIDEO"),
+					),
+				)
 				.orderBy(desc(scrContentItems.createdAt));
 		},
 
@@ -372,6 +394,19 @@ export interface ContentVersionRef {
 	version: number;
 	contentHash: string;
 }
+
+/**
+ * A generation either produced a version or it did not, and both outcomes are
+ * returned rather than one of them thrown.
+ *
+ * Throwing rolled the whole transaction back — including the FAILED run and its
+ * audit events, which are written inside it. The record of a refusal then
+ * vanished, and an absent run reads as "never attempted". With a live adapter
+ * that would mean losing the only record of a call that already happened.
+ */
+export type ScriptGenerationResult =
+	| ({ status: "COMPLETED" } & ContentVersionRef)
+	| { status: "FAILED"; generationRunId: string; errorCode: string | null };
 
 export function createContentCreationRepositories(database: typeof db = db) {
 	/**
@@ -665,7 +700,7 @@ export function createContentCreationRepositories(database: typeof db = db) {
 							const outcome = await runIdeaGeneration({
 								adapter: creationAdapter(adapterId),
 								evidence,
-								projectSlug: input.brandId,
+								projectSlug: fixtureProjectSlug(input.brandId),
 								profileHash: profile.profileHash,
 								languages: profile.profile.languages,
 								audience: "GENERAL",
@@ -709,6 +744,36 @@ export function createContentCreationRepositories(database: typeof db = db) {
 					const idea = ideas[input.ideaIndex];
 					if (!idea) throw new ContentCreationError("NOT_FOUND", "That idea is not part of this run");
 
+					// A retry of the same selection finds the draft it already made. Without
+					// this an ordinary double submit creates a second draft for one idea.
+					const [existing] = await tx
+						.select()
+						.from(scrContentItems)
+						.where(
+							and(
+								eq(scrContentItems.organizationId, context.tenantId),
+								eq(scrContentItems.brandId, input.brandId),
+								eq(scrContentItems.ideaGenerationRunId, run.id),
+								eq(scrContentItems.selectedIdeaIndex, input.ideaIndex),
+							),
+						)
+						.limit(1);
+					if (existing) {
+						// The version the selection produced, which is the earliest — not the
+						// latest, which by now may be a script or a revision the selection
+						// had nothing to do with. readVersions orders newest first.
+						const history = await store.readVersions(tx, existing.id);
+						const created = history[history.length - 1];
+						if (created) {
+							return {
+								contentId: existing.id,
+								versionId: created.id,
+								version: created.version,
+								contentHash: created.contentHash,
+							};
+						}
+					}
+
 					const profile = await store.readConfirmedProfile(tx);
 					if (!profile) {
 						throw new ContentCreationError("PROFILE_NOT_CONFIRMED", "Selecting an idea requires a confirmed profile");
@@ -735,6 +800,8 @@ export function createContentCreationRepositories(database: typeof db = db) {
 							contentKind: "YOUTUBE_VIDEO",
 							contentChannelId,
 							workflowStage: "IDEA_SELECTED",
+							selectedIdeaIndex: input.ideaIndex,
+							ideaGenerationRunId: run.id,
 							createdBy: context.actorId,
 						})
 						.returning({ id: scrContentItems.id });
@@ -769,7 +836,7 @@ export function createContentCreationRepositories(database: typeof db = db) {
 				adapterId?: CreationAdapterId;
 				revision?: boolean;
 			},
-		): Promise<ContentVersionRef> {
+		): Promise<ScriptGenerationResult> {
 			assertWritable(context);
 			const store = createPostgresCreationStore({ context, brandId: input.brandId, database });
 			return withBrandRequestContext(
@@ -790,6 +857,34 @@ export function createContentCreationRepositories(database: typeof db = db) {
 						.limit(1);
 					if (!item) throw new ContentCreationError("NOT_FOUND", "That content item is not available for this brand");
 
+					// Before anything is dispatched. Colliding on the unique index after the
+					// adapter ran would mean a live provider was called and the run that
+					// records the call was then rolled back.
+					const existingRun = await store.findGenerationByIdempotencyKey(tx, input.idempotencyKey);
+					if (existingRun) {
+						const [latestForKey] = await tx
+							.select()
+							.from(scrContentVersions)
+							.where(
+								and(
+									eq(scrContentVersions.organizationId, context.tenantId),
+									eq(scrContentVersions.brandId, input.brandId),
+									eq(scrContentVersions.generationRunId, existingRun.id),
+								),
+							)
+							.limit(1);
+						if (latestForKey) {
+							return {
+								status: "COMPLETED" as const,
+								contentId: latestForKey.contentId,
+								versionId: latestForKey.id,
+								version: latestForKey.version,
+								contentHash: latestForKey.contentHash,
+							};
+						}
+						return { status: "FAILED" as const, generationRunId: existingRun.id, errorCode: existingRun.errorCode };
+					}
+
 					const versions = await store.readVersions(tx, input.contentId);
 					const latest = versions[0];
 					if (!latest?.structuredBody || !latest.researchRunId || !latest.generationRunId) {
@@ -801,20 +896,21 @@ export function createContentCreationRepositories(database: typeof db = db) {
 						throw new ContentCreationError("PROFILE_NOT_CONFIRMED", "Script generation requires a confirmed profile");
 					}
 
-					// The idea lives in the IDEAS run, which is the *first* version's
-					// generation run. Reading it off the latest version works only until
-					// the first revision, when the latest version's run is a SCRIPT run
-					// whose output has no ideas in it at all.
-					const conceptVersion = versions[versions.length - 1];
-					const ideaRun = conceptVersion?.generationRunId
-						? await store.readGenerationRun(tx, conceptVersion.generationRunId)
+					// The run the selection recorded, rather than one inferred from a
+					// version: the latest version's run is a SCRIPT run after the first
+					// revision, and its output holds no ideas at all.
+					const ideaRun = item.ideaGenerationRunId
+						? await store.readGenerationRun(tx, item.ideaGenerationRunId)
 						: undefined;
 					if (ideaRun?.kind !== "IDEAS" || !ideaRun.researchOpportunityId) {
 						throw new ContentCreationError("EVIDENCE_REQUIRED", "The version has no research lineage to build on");
 					}
 					const { evidence } = await evidenceForOpportunity(tx, store, ideaRun.researchOpportunityId);
 					const ideas = (ideaRun.validatedOutput as { ideas: IdeaPackage[] } | null)?.ideas ?? [];
-					const idea = ideas.find((candidate) => candidate.title === item.title) ?? ideas[0];
+					// By the index the selection recorded. Matching on title would silently
+					// pick a different idea when the item is renamed or two ideas share a
+					// title, and the wrong evidence would then be hashed into the version.
+					const idea = item.selectedIdeaIndex === null ? undefined : ideas[item.selectedIdeaIndex];
 					if (!idea) throw new ContentCreationError("EVIDENCE_REQUIRED", "The selected idea is no longer available");
 					const scriptEvidence = buildScriptEvidenceContext({ evidence, idea });
 					const adapterId = input.adapterId ?? "fixture";
@@ -833,7 +929,7 @@ export function createContentCreationRepositories(database: typeof db = db) {
 							const outcome = await runScriptGeneration({
 								adapter: creationAdapter(adapterId),
 								evidence: scriptEvidence,
-								projectSlug: input.brandId,
+								projectSlug: fixtureProjectSlug(input.brandId),
 								profileHash: profile.profileHash,
 								languages: profile.profile.languages,
 								audience: "GENERAL",
@@ -844,12 +940,11 @@ export function createContentCreationRepositories(database: typeof db = db) {
 					});
 
 					if (recorded.status === "FAILED") {
-						// Invalid output never becomes a content version. The failure is
-						// already recorded above, with a normalized code and no output.
-						throw new ContentCreationError(
-							(recorded.errorCode as CreationErrorCode) ?? "INVALID_GENERATION_OUTPUT",
-							"Script generation did not produce a usable script",
-						);
+						// Returned rather than thrown: the FAILED run and its audit events
+						// were written in this transaction, and throwing would roll them
+						// back along with everything else. Invalid output still never
+						// becomes a content version.
+						return { status: "FAILED" as const, generationRunId: recorded.id, errorCode: recorded.errorCode };
 					}
 
 					const document = buildScriptDocument({
@@ -858,7 +953,7 @@ export function createContentCreationRepositories(database: typeof db = db) {
 					});
 
 					const version = await store.nextVersionNumber(tx, input.contentId);
-					const written = await writeStructuredVersion(tx, context, input.brandId, {
+					const written: ContentVersionRef = await writeStructuredVersion(tx, context, input.brandId, {
 						contentId: input.contentId,
 						version,
 						document,
@@ -874,7 +969,7 @@ export function createContentCreationRepositories(database: typeof db = db) {
 						.set({ workflowStage: "SCRIPT_DRAFTED", updatedAt: new Date() })
 						.where(eq(scrContentItems.id, input.contentId));
 
-					return written;
+					return { status: "COMPLETED" as const, ...written };
 				},
 				true,
 			);

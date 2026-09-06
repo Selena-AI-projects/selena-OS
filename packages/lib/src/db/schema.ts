@@ -1478,6 +1478,8 @@ export const scrContentItems = selenaRegistrySchema
 			contentKind: scrContentKindEnum("content_kind").notNull().default("GENERIC_POST"),
 			contentChannelId: uuid("content_channel_id").references(() => scrContentChannels.id),
 			workflowStage: scrContentWorkflowStageEnum("workflow_stage").notNull().default("DRAFT"),
+			selectedIdeaIndex: integer("selected_idea_index"),
+			ideaGenerationRunId: uuid("idea_generation_run_id").references(() => scrGenerationRuns.id),
 			createdBy: text("created_by").notNull(),
 			createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 			updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
@@ -1486,6 +1488,9 @@ export const scrContentItems = selenaRegistrySchema
 			brandIdx: index("scr_content_items_brand_idx").on(table.brandId),
 			orgIdx: index("scr_content_items_org_idx").on(table.organizationId),
 			kindStageIdx: index("content_items_kind_stage_idx").on(table.brandId, table.contentKind, table.workflowStage),
+			ideaSelectionUnique: uniqueIndex("content_items_idea_selection_unique")
+				.on(table.ideaGenerationRunId, table.selectedIdeaIndex)
+				.where(sql`${table.ideaGenerationRunId} IS NOT NULL`),
 		}),
 	)
 	.enableRLS();

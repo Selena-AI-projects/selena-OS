@@ -230,6 +230,17 @@ describe("the structured document", () => {
 		expect(document.evidenceClaimIds.length).toBeGreaterThan(0);
 	});
 
+	// An explicit `undefined` reaches the canonical JSON the V2 digest is taken
+	// over, which refuses it — so a section with no prose must omit the key.
+	it("omits the narration key entirely on a section that has no prose", async () => {
+		const { document } = await scripted();
+		const sections = document.script?.sections ?? [];
+		expect(sections[0].narration).toBeTruthy();
+		for (const section of sections.slice(1)) {
+			expect(Object.hasOwn(section, "narration")).toBe(false);
+		}
+	});
+
 	it("renders the same bytes for the same document", async () => {
 		const { document, evidence } = await scripted();
 		const claims = [...evidence.evidenceClaims, ...evidence.ideaPackage.evidenceClaims];
