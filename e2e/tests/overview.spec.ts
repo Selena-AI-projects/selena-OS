@@ -9,16 +9,10 @@ import { test, expect } from "@playwright/test";
 const BRAND_ID = "default";
 
 test.describe("Overview Page", () => {
-  test("home page lands on the brand switcher and the default brand is reachable", async ({ page }) => {
+  test("home page lands in the owner workspace", async ({ page }) => {
     await page.goto("/");
-    // Local mode supports multiple brands, so / -> /app shows the switcher
-    // rather than auto-redirecting through to a brand.
-    await page.waitForURL(/\/app(?:\/)?$/, { timeout: 30_000 });
-    const brandLink = page.locator(`a[href="/app/${BRAND_ID}"]`).first();
-    await expect(brandLink).toBeVisible({ timeout: 15_000 });
-    await brandLink.click();
-    await page.waitForURL(new RegExp(`/app/${BRAND_ID}$`));
-    expect(page.url()).toContain(`/app/${BRAND_ID}`);
+    await page.waitForURL(/\/app\/selena(?:\/)?$/, { timeout: 30_000 });
+    await expect(page.getByRole("heading", { name: "Choose your workspace" })).toBeVisible({ timeout: 15_000 });
   });
 
   test("dashboard page loads and shows sidebar", async ({ page }) => {

@@ -37,6 +37,7 @@
 		"@workspace/api-spec": "workspace:*",
 		"@workspace/cloud": "workspace:*",
 		"@workspace/config": "workspace:*",
+		"@workspace/content-workflow": "workspace:*",
 		"@workspace/deployment": "workspace:*",
 		"@workspace/lib": "workspace:*",
 		"@workspace/og": "workspace:*",

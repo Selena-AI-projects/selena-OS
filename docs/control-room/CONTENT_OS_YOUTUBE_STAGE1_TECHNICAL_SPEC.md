@@ -23,7 +23,9 @@ The following are source-level facts on the stated baseline:
 - Web-created channel accounts are restricted to the non-allowlisted `linkedin_page_dry_run` fixture.
 - The release path has no active provider submission.
 - The current strict gap report records `0/12` requirements complete because no full deployed/provider vertical cycle has passed.
-- The database chain currently ends at migration `0031`.
+- At the initial audit baseline the database chain ended at migration `0031`.
+  The reconciled staging line now owns migrations `0032` through `0036`, and
+  Slice 1 adds project profiles and draft channels as migration `0037`.
 ## 3. Product outcome
 For each brand, an authenticated user can:
 1. create and owner-confirm a versioned project content profile;
@@ -202,8 +204,11 @@ apps/web/src/server/
 ```
 `@workspace/content-workflow` contains pure contracts and behavior. Database and authenticated request adapters stay in `@workspace/lib` and `apps/web`.
 ## 9. Database plan
-Historical migrations are immutable. Add new migrations after `0031` and pair every security-sensitive migration with a pgTAP suite.
-### 9.1 Migration 0032: project profiles and draft channels
+Historical migrations are immutable. On the reconciled staging line, add new
+migrations after `0037` and pair every security-sensitive migration with a
+pgTAP suite.
+
+### 9.1 Migration 0037: project profiles and draft channels
 Add `selena_registry.brand_content_profile_versions`:
 | Column | Rule |
 |---|---|
@@ -249,7 +254,7 @@ Add `selena_registry.content_channels`:
 | `publication_mode` | always `DRAFT_ONLY` |
 | `provider_account_id` | absent in Stage 1 |
 This table is not `channel_accounts`. Creating it grants no release authority and stores no OAuth credential.
-### 9.2 Migration 0033: research registry
+### 9.2 Migration 0038: research registry
 Add the following brand-scoped RLS tables:
 - `selena_registry.research_runs`;
 - `selena_registry.research_sources`;
@@ -266,7 +271,7 @@ Required invariants:
 - a source from another brand cannot be linked, selected or read;
 - raw provider responses are not returned directly to the browser.
 Transcripts are private research data. Persist transcript text only when the source/provider permits it and attach provider, language, retrieval time and failure state. Otherwise persist `UNAVAILABLE` or a source reference, not invented text.
-### 9.3 Migration 0034: structured content, generation lineage and editorial review
+### 9.3 Migration 0039: structured content, generation lineage and editorial review
 Alter `selena_registry.content_items` with nullable/backward-compatible fields:
 - `content_kind`, default `GENERIC_POST` for existing rows;
 - `content_channel_id`;
@@ -447,20 +452,20 @@ Audit metadata contains IDs, hashes, versions, status and normalized error codes
 - add feature flag `CONTENT_OS_STAGE1_ENABLED`, default false outside explicit local/test configuration;
 - add neutral navigation shell without provider functionality.
 ### Slice 1: profile and draft YouTube target
-- migration `0032` and pgTAP;
+- migration `0037` and pgTAP;
 - profile domain module and server adapter;
 - profile UI and owner confirmation;
 - draft-only YouTube channel card;
 - no provider calls.
 ### Slice 2: research
-- migration `0033` and pgTAP;
+- migration `0038` and pgTAP;
 - port Video Radar core with provenance;
 - brand-scoped Postgres store adapter;
 - fixture/import mode first;
 - research and opportunity UI;
 - optional live adapter remains disabled until an explicit provider budget gate exists.
 ### Slice 3: ideas and scripts
-- migration `0034` and pgTAP;
+- migration `0039` and pgTAP;
 - V2 content hash with V1 compatibility tests;
 - port YouTubePro evidence, idea and script contracts;
 - fixture creation path;
@@ -489,7 +494,7 @@ Audit metadata contains IDs, hashes, versions, status and normalized error codes
 - V2 hashes change when profile, research, content, evidence or asset identity changes;
 - invalid provider output cannot become a content version.
 ### Disposable PostgreSQL and pgTAP
-- migrations `0000..0034` apply on a clean disposable database;
+- migrations `0000..0039` apply on a clean disposable database;
 - new tables have `ENABLE` and `FORCE ROW LEVEL SECURITY`;
 - cross-brand SELECT/INSERT/UPDATE/DELETE is denied;
 - profile and editorial decisions require an interactive owner;

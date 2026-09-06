@@ -17,15 +17,19 @@ WORKDIR /app
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY apps/web/package.json ./apps/web/
 COPY apps/worker/package.json ./apps/worker/
+COPY apps/www/package.json ./apps/www/
 COPY packages/ui/package.json ./packages/ui/
 COPY packages/config/package.json ./packages/config/
+COPY packages/content-workflow/package.json ./packages/content-workflow/
 COPY packages/lib/package.json ./packages/lib/
 COPY packages/local/package.json ./packages/local/
 COPY packages/whitelabel/package.json ./packages/whitelabel/
 COPY packages/cloud/package.json ./packages/cloud/
 COPY packages/deployment/package.json ./packages/deployment/
+COPY packages/docs/package.json ./packages/docs/
 COPY packages/og/package.json ./packages/og/
 COPY packages/api-spec/package.json ./packages/api-spec/
+COPY packages/selena-visibility-contracts/package.json ./packages/selena-visibility-contracts/
 
 # Install dependencies
 RUN pnpm install --frozen-lockfile
@@ -38,14 +42,18 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=deps /app/apps/web/node_modules ./apps/web/node_modules
 COPY --from=deps /app/apps/worker/node_modules ./apps/worker/node_modules
+COPY --from=deps /app/apps/www/node_modules ./apps/www/node_modules
 COPY --from=deps /app/packages/ui/node_modules ./packages/ui/node_modules
 COPY --from=deps /app/packages/config/node_modules ./packages/config/node_modules
+COPY --from=deps /app/packages/content-workflow/node_modules ./packages/content-workflow/node_modules
 COPY --from=deps /app/packages/lib/node_modules ./packages/lib/node_modules
 COPY --from=deps /app/packages/local/node_modules ./packages/local/node_modules
 COPY --from=deps /app/packages/whitelabel/node_modules ./packages/whitelabel/node_modules
 COPY --from=deps /app/packages/cloud/node_modules ./packages/cloud/node_modules
 COPY --from=deps /app/packages/deployment/node_modules ./packages/deployment/node_modules
+COPY --from=deps /app/packages/docs/node_modules ./packages/docs/node_modules
 COPY --from=deps /app/packages/og/node_modules ./packages/og/node_modules
+COPY --from=deps /app/packages/selena-visibility-contracts/node_modules ./packages/selena-visibility-contracts/node_modules
 
 # Copy source code
 COPY . .
@@ -167,5 +175,25 @@ ENV SELENA_GATEWAY_PORT=8082
 
 CMD ["node_modules/.bin/tsx", "src/selena-release-gateway.ts"]
 
-# The service name selects the final runtime stage: web, worker, migrate, scanner, or gateway.
+# The Aether bridge receiver is the only runtime that faces the public internet
+# with a shared secret, and it carries the ingestion identity, whose entire
+# reach into the database is one recording function.
+FROM base AS receiver
+WORKDIR /app
+
+ENV NODE_ENV=production
+
+RUN addgroup --system --gid 1004 receiver
+RUN adduser --system --uid 1004 receiver
+
+COPY --from=builder --chown=receiver:receiver /deploy/worker ./
+
+USER receiver
+
+EXPOSE 8083
+ENV SELENA_RECEIVER_PORT=8083
+
+CMD ["node_modules/.bin/tsx", "src/selena-aether-receiver.ts"]
+
+# The service name selects the final runtime stage: web, worker, migrate, scanner, gateway, or receiver.
 FROM ${RAILWAY_SERVICE_NAME} AS final

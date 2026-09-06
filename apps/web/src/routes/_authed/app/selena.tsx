@@ -25,6 +25,7 @@ import {
 import { Input } from "@workspace/ui/components/input";
 import { Label } from "@workspace/ui/components/label";
 import { useEffect, useMemo, useState } from "react";
+import { BRAND_CREATION_ROUTE, CONTENT_PRODUCT_ROUTE } from "@/lib/content-product";
 import { SelenaWordmark } from "@/components/selena-wordmark";
 import { useAuth } from "@/hooks/use-auth";
 import { validateWebsiteUrl } from "@/lib/brand-website";
@@ -32,12 +33,12 @@ import { CONTENT_PRODUCT_DESCRIPTION, CONTENT_PRODUCT_NAME } from "@/lib/content
 import { resetPostHog } from "@/lib/posthog";
 import { getLastSelenaProduct, rememberSelenaProduct, type SelenaProduct } from "@/lib/selena-product-entry";
 import { humanizeSelenaError } from "@/lib/selena-workspace-errors";
-import { createSelenaProjectFn, getSelenaWorkspaceFn } from "../../../server/selena-client";
+import { createSelenaProjectFn, getContentOsBrandFn, getSelenaWorkspaceFn } from "../../../server/selena-client";
 import { confirmSelenaProfileFn } from "../../../server/selena-onboarding";
 import { collectSelenaWebsiteFn } from "../../../server/selena-website-collector";
 
 export const Route = createFileRoute("/_authed/app/selena")({
-	loader: () => getSelenaWorkspaceFn(),
+	loader: async () => ({ workspace: await getSelenaWorkspaceFn(), contentOs: await getContentOsBrandFn() }),
 	pendingComponent: WorkspaceSkeleton,
 	component: SelenaWorkspace,
 });
@@ -57,7 +58,11 @@ const emptyProfileForm = {
 };
 
 function SelenaWorkspace() {
-	const { projects } = Route.useLoaderData();
+	const { workspace, contentOs } = Route.useLoaderData();
+	const { projects } = workspace;
+	// Null when this organization has no brand yet, which is the state a fresh
+	// cabinet starts in: the entry then leads to creating one, not to a 404.
+	const contentBrandId = contentOs.brandId;
 	const router = useRouter();
 	const { user } = useAuth();
 	const [selectedProduct, setSelectedProduct] = useState<SelenaProduct | null>(null);
@@ -93,7 +98,11 @@ function SelenaWorkspace() {
 	useEffect(() => {
 		const product = getLastSelenaProduct();
 		if (product === "content-control") {
-			void router.navigate({ to: "/app/$brand/control-room", params: { brand: "selena" } });
+			if (contentBrandId) {
+				void router.navigate({ to: CONTENT_PRODUCT_ROUTE, params: { brand: contentBrandId } });
+			} else {
+				void router.navigate({ to: BRAND_CREATION_ROUTE });
+			}
 			return;
 		}
 		if (product === "ai-visibility") setSelectedProduct(product);
@@ -300,7 +309,11 @@ function SelenaWorkspace() {
 	const chooseProduct = (product: SelenaProduct) => {
 		rememberSelenaProduct(product);
 		if (product === "content-control") {
-			void router.navigate({ to: "/app/$brand/control-room", params: { brand: "selena" } });
+			if (contentBrandId) {
+				void router.navigate({ to: CONTENT_PRODUCT_ROUTE, params: { brand: contentBrandId } });
+			} else {
+				void router.navigate({ to: BRAND_CREATION_ROUTE });
+			}
 			return;
 		}
 		setSelectedProduct(product);

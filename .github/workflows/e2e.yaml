@@ -33,7 +33,7 @@ concurrency:
 jobs:
   e2e:
     name: E2E Integration Tests
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: [self-hosted, Linux, X64, selena-ci]
     timeout-minutes: 30
 
     env:
@@ -41,19 +41,18 @@ jobs:
       # can silently run against a different effective config. The override
       # scopes the worker to the no-network stub provider.
       COMPOSE_FILE: e2e/.elmo/elmo.yaml:e2e/worker-override.yaml
+      COMPOSE_PROJECT_NAME: selena-os-e2e
 
     steps:
+      - name: Remove containers from an interrupted run
+        run: docker compose down --volumes --remove-orphans || true
+
       - name: Checkout
         uses: actions/checkout@v7
 
-      # NB: no free-disk-space step here — it predated the Blacksmith migration
-      # and is unnecessary on these runners (publish.yaml builds the same
-      # Dockerfile without it). We also deliberately do NOT use a buildx
-      # sticky-disk builder: `docker compose build` doesn't wire up its cache,
-      # and the container driver would serialize each image to load it back into
-      # the local daemon for `up` — that export/import tax outweighs any cache
-      # savings for this build-and-run-locally job. The default driver builds
-      # straight into the daemon's image store.
+      # Deliberately use the default Docker driver: `docker compose build`
+      # doesn't wire up a buildx sticky-disk cache, and loading images back into
+      # the local daemon adds an export/import penalty to this build-and-run job.
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v6
@@ -78,7 +77,7 @@ jobs:
         with:
           timeout_minutes: 1
           max_attempts: 3
-          command: pnpm -C apps/web exec playwright install chromium --with-deps
+          command: pnpm -C apps/web exec playwright install chromium
 
       - name: Build elmo CLI
         run: pnpm -C apps/cli build
@@ -177,6 +176,10 @@ jobs:
             e2e/test-results-worker/
           retention-days: 7
 
+      - name: Stop the test stack
+        if: ${{ always() }}
+        run: docker compose down --volumes --remove-orphans
+
   # Scheduling-policy verification: drives a real
   # worker over a real database with the no-network stub provider, in local
   # mode (legacy volume + dueness metering must match the pre-policy behavior
@@ -186,7 +189,7 @@ jobs:
   # whitelabel deployments run.
   scheduling-policy:
     name: Scheduling Policy Verification
-    runs-on: blacksmith-2vcpu-ubuntu-2404
+    runs-on: [self-hosted, Linux, X64, selena-ci]
     timeout-minutes: 15
 
     services:
@@ -227,7 +230,7 @@ jobs:
         run: pnpm install --no-frozen-lockfile
 
       - name: Apply migrations
-        run: pnpm -C packages/lib exec drizzle-kit migrate
+        run: pnpm -C packages/lib exec node scripts/run-migrations.mjs
 
       - name: Seed local fixtures
         run: pnpm -C e2e exec tsx seed.ts

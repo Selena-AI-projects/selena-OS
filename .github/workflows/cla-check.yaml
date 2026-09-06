@@ -24,7 +24,7 @@ concurrency:
 jobs:
   cla:
     name: Verify CLA signature
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux, X64, selena-ci]
     timeout-minutes: 2
     steps:
       - name: Checkout
