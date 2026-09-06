@@ -528,6 +528,16 @@ Stop if source-transfer authorization is absent, tenant identity can be
 overridden, provenance is missing, transcript rights are ambiguous, a live
 adapter dispatches or provider output reaches the browser unsanitized.
 
+Two prerequisites for ever enabling a live adapter, recorded here because both
+are invisible while every adapter is disabled:
+
+- the provider call ceiling needs a durable shared ledger. The process-scoped
+  one bounds a single web process and nothing more, so it cannot bound spending.
+- the research surface renders a thrown error's message directly in its notice
+  banner. Every message that reaches it today is one we author, so nothing
+  provider-shaped can appear there; a live adapter's failures would be the first
+  that could, and the boundary must normalize them to codes before that happens.
+
 ## 8. Slice 3 - ideas and scripts
 
 ### 8.1 Outcome
