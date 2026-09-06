@@ -77,7 +77,7 @@ jobs:
         with:
           timeout_minutes: 1
           max_attempts: 3
-          command: pnpm -C apps/web exec playwright install chromium --with-deps
+          command: pnpm -C apps/web exec playwright install chromium
 
       - name: Build elmo CLI
         run: pnpm -C apps/cli build
