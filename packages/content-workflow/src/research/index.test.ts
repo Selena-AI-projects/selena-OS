@@ -231,6 +231,22 @@ describe("video radar adapter", () => {
 		await expect(withoutDispatch.fetch(request)).rejects.toMatchObject({ code: "PROVIDER_UNAVAILABLE" });
 		expect(ledger.count).toBe(0);
 	});
+
+	// A ceiling is only a ceiling if the ledger it counts against outlives one
+	// call. With a fresh ledger per call the count is always zero and the gate
+	// never closes, so this exercises a ledger that persists across calls.
+	it("stops dispatching once the call ceiling is reached", async () => {
+		const ledger = new ProviderCallLedger();
+		const dispatched = new VideoRadarAdapter({
+			gates: { liveProviderEnabled: true, maxProviderCalls: 1, credentialPresent: true },
+			ledger,
+			dispatch: async () => ({ sources: [], provenance: [], externalProviderCalls: 1 }),
+		});
+		await expect(dispatched.fetch(request)).resolves.toMatchObject({ externalProviderCalls: 1 });
+		expect(ledger.count).toBe(1);
+		await expect(dispatched.fetch(request)).rejects.toMatchObject({ code: "PROVIDER_QUOTA_EXCEEDED" });
+		expect(ledger.count).toBe(1);
+	});
 });
 
 describe("opportunity decisions", () => {

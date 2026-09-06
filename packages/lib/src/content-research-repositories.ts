@@ -72,9 +72,28 @@ function videoRadarGates(env: NodeJS.ProcessEnv = process.env): VideoRadarAdapte
 	};
 }
 
+/**
+ * One ledger for the process, not one per call.
+ *
+ * A ledger constructed per request starts at zero every time, so the call
+ * ceiling it is compared against can never be reached and the gate is
+ * decorative. This one at least holds for the life of the process.
+ *
+ * It is still not sufficient for a live provider: a ceiling that resets on
+ * deploy and is not shared between instances cannot bound real spending. A
+ * durable, shared ledger is a prerequisite for any future live-call
+ * authorization, and Stage 1 injects no dispatcher, so nothing can be recorded
+ * in it yet.
+ */
+const providerCallLedger = new ProviderCallLedger();
+
+export function researchProviderCallCount(): number {
+	return providerCallLedger.count;
+}
+
 function researchAdapter(adapterId: ResearchAdapterId, imported?: ResearchSource[]): ResearchAdapter {
 	if (adapterId === "fixture") return new FixtureResearchAdapter(imported);
-	return new VideoRadarAdapter({ gates: videoRadarGates(), ledger: new ProviderCallLedger() });
+	return new VideoRadarAdapter({ gates: videoRadarGates(), ledger: providerCallLedger });
 }
 
 /** A run that never produced a result is still recorded, with a normalized code. */

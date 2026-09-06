@@ -85,7 +85,7 @@ INSERT INTO selena_registry.content_research_runs (
 ) VALUES (
   '20000000-0000-4000-8000-000000000101', 'research-org', 'research-brand-b',
   '20000000-0000-4000-8000-000000000002', repeat('b', 64), 'seed-brand-b', 'fixture',
-  'COMPLETED', 'content.research/v1', 'radar-scoring-v1', 'radar-baseline-v1',
+  'COMPLETED', 'content.research/v1', 'content.research.scoring/v1', 'radar-baseline-v1',
   '30000000-0000-4000-8000-000000000001', now(), now(), 'research-owner'
 );
 
@@ -103,7 +103,7 @@ SELECT lives_ok(
   ) VALUES (
     '20000000-0000-4000-8000-000000000110', 'research-org', 'research-brand-a',
     '20000000-0000-4000-8000-000000000001', repeat('a', 64), 'run-one', 'fixture',
-    'COMPLETED', 'content.research/v1', 'radar-scoring-v1', 'radar-baseline-v1',
+    'COMPLETED', 'content.research/v1', 'content.research.scoring/v1', 'radar-baseline-v1',
     '30000000-0000-4000-8000-000000000011', now(), now(), 'research-owner'
   )$$,
   'a run can be recorded against the brand''s own confirmed profile version'
@@ -115,7 +115,7 @@ SELECT throws_matching(
     started_at, completed_at, created_by
   ) VALUES (
     'research-org', 'research-brand-a', '20000000-0000-4000-8000-000000000001', repeat('c', 64),
-    'run-stale-hash', 'fixture', 'COMPLETED', 'content.research/v1', 'radar-scoring-v1',
+    'run-stale-hash', 'fixture', 'COMPLETED', 'content.research/v1', 'content.research.scoring/v1',
     'radar-baseline-v1', '30000000-0000-4000-8000-000000000012', now(), now(), 'research-owner'
   )$$,
   'row-level security policy',
@@ -128,7 +128,7 @@ SELECT throws_matching(
     started_at, completed_at, created_by
   ) VALUES (
     'research-org', 'research-brand-a', '20000000-0000-4000-8000-000000000002', repeat('b', 64),
-    'run-foreign-profile', 'fixture', 'COMPLETED', 'content.research/v1', 'radar-scoring-v1',
+    'run-foreign-profile', 'fixture', 'COMPLETED', 'content.research/v1', 'content.research.scoring/v1',
     'radar-baseline-v1', '30000000-0000-4000-8000-000000000013', now(), now(), 'research-owner'
   )$$,
   'row-level security policy',
@@ -141,7 +141,7 @@ SELECT throws_matching(
     started_at, completed_at, created_by
   ) VALUES (
     'research-org', 'research-brand-a', '20000000-0000-4000-8000-000000000001', repeat('a', 64),
-    'run-one', 'fixture', 'COMPLETED', 'content.research/v1', 'radar-scoring-v1',
+    'run-one', 'fixture', 'COMPLETED', 'content.research/v1', 'content.research.scoring/v1',
     'radar-baseline-v1', '30000000-0000-4000-8000-000000000014', now(), now(), 'research-owner'
   )$$,
   'content_research_runs_brand_idempotency_unique',
@@ -160,7 +160,7 @@ SELECT lives_ok(
     '20000000-0000-4000-8000-000000000110', 'youtube', 'source-1', 'https://example.test/1', 'fixture',
     'channel-1', 'Channel One', 'A title', 'A description', now(), now(), 600,
     'LONG', 'en', 20000, 1000, 80, 'AVAILABLE', 16, 'HIGH', 'STRONG', 'MATURE', 0.9, 0.7,
-    1.0, '[]'::jsonb, true, 'radar-scoring-v1', 'radar-baseline-v1', 'research-owner'
+    1.0, '[]'::jsonb, true, 'content.research.scoring/v1', 'radar-baseline-v1', 'research-owner'
   )$$,
   'a source can be recorded against a run of the same brand'
 );
@@ -176,7 +176,7 @@ SELECT throws_matching(
     'source-foreign', 'https://example.test/foreign', 'fixture', 'channel-1', 'Channel One',
     'A title', 'A description', now(), now(), 'LONG', 'UNAVAILABLE', 'NO_TRANSCRIPT', 0,
     'UNAVAILABLE', 'UNAVAILABLE', 'PROVISIONAL', 0.1, 0.1, 0.5, '[]'::jsonb,
-    'radar-scoring-v1', 'radar-baseline-v1', 'research-owner'
+    'content.research.scoring/v1', 'radar-baseline-v1', 'research-owner'
   )$$,
   'row-level security policy',
   'a source cannot be attached to another brand''s run'
@@ -193,7 +193,7 @@ SELECT throws_matching(
     'source-1', 'https://example.test/1', 'fixture', 'channel-1', 'Channel One',
     'A title', 'A description', now(), now(), 'LONG', 'UNAVAILABLE', 'NO_TRANSCRIPT', 0,
     'UNAVAILABLE', 'UNAVAILABLE', 'PROVISIONAL', 0.1, 0.1, 0.5, '[]'::jsonb,
-    'radar-scoring-v1', 'radar-baseline-v1', 'research-owner'
+    'content.research.scoring/v1', 'radar-baseline-v1', 'research-owner'
   )$$,
   'content_research_sources_run_external_unique',
   'the same source cannot be recorded twice in one run'
@@ -210,7 +210,7 @@ SELECT throws_matching(
     'source-2', 'https://example.test/2', 'fixture', 'channel-1', 'Channel One',
     'A title', 'A description', now(), now(), 'LONG', 'UNAVAILABLE', 0,
     'UNAVAILABLE', 'UNAVAILABLE', 'PROVISIONAL', 0.1, 0.1, 0.5, '[]'::jsonb,
-    'radar-scoring-v1', 'radar-baseline-v1', 'research-owner'
+    'content.research.scoring/v1', 'radar-baseline-v1', 'research-owner'
   )$$,
   'content_research_sources_transcript_reason',
   'an unavailable transcript must record why'

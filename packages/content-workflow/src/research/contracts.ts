@@ -46,10 +46,22 @@ export type OpportunityDecisionState = Exclude<OpportunityState, "NEW">;
 /**
  * Version stamps recorded on every run and score. Never bump silently — an old
  * ranking must stay interpretable next to a new one.
+ *
+ * `scoring` is deliberately NOT the transferred `radar-scoring-v1`. The weights
+ * feeding the score are unchanged, but the relevance term they weight is a
+ * different function: upstream scored a source against a shared topic table and
+ * a global project registry (`topicKeyword` 0.5, `projectKeyword` 0.3,
+ * `languageMatch` 0.1, `creatorPriority` 0.1), and this scores it against one
+ * brand-derived project (`keyword` 0.6, `languageMatch` 0.2, `creatorPriority`
+ * 0.2). A score stored here would not mean what the same stamp means upstream,
+ * so it carries its own.
+ *
+ * `baseline` keeps the transferred stamp because that algorithm and every
+ * threshold it reads are unchanged.
  */
 export const RESEARCH_VERSIONS = {
 	pipeline: "content.research/v1",
-	scoring: "radar-scoring-v1",
+	scoring: "content.research.scoring/v1",
 	baseline: "radar-baseline-v1",
 } as const;
 
