@@ -187,5 +187,22 @@ ENV SELENA_RECEIVER_PORT=8083
 
 CMD ["node_modules/.bin/tsx", "src/selena-aether-receiver.ts"]
 
-# The service name selects the final runtime stage: web, worker, migrate, scanner, gateway, or receiver.
+# The Aether material projection is an internal runtime: it reads the inbox the
+# receiver fills and writes content versions under the registry worker identity,
+# so it runs as its own service with its own login and never listens on a port.
+FROM base AS projection
+WORKDIR /app
+
+ENV NODE_ENV=production
+
+RUN addgroup --system --gid 1005 projection
+RUN adduser --system --uid 1005 projection
+
+COPY --from=builder --chown=projection:projection /deploy/worker ./
+
+USER projection
+
+CMD ["node_modules/.bin/tsx", "src/selena-aether-projection-worker.ts"]
+
+# The service name selects the final runtime stage: web, worker, migrate, scanner, gateway, receiver, or projection.
 FROM ${RAILWAY_SERVICE_NAME} AS final
