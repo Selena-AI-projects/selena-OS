@@ -1,6 +1,6 @@
 BEGIN;
 
-SELECT plan(67);
+SELECT plan(68);
 
 SELECT has_table('selena_registry', 'content_research_runs', 'research runs table exists');
 SELECT has_table('selena_registry', 'content_research_sources', 'research sources table exists');
@@ -288,6 +288,24 @@ SELECT throws_matching(
   )$$,
   'content_research_sources_source_url_check',
   'a source url the surface renders as an href must carry the https scheme'
+);
+
+SELECT lives_ok(
+  $$INSERT INTO selena_registry.content_research_sources (
+    organization_id, brand_id, run_id, platform, external_id, source_url, adapter_id,
+    channel_id, channel_name, title, description, published_at, captured_at,
+    video_type, transcript_status, transcript_failure_reason, baseline_sample_size,
+    baseline_confidence, outlier_band, outlier_maturity, relevance_score, candidate_score,
+    weight_coverage, score_components, scoring_version, baseline_version, created_by
+  ) VALUES (
+    'research-org', 'research-brand-a', '20000000-0000-4000-8000-000000000110', 'youtube',
+    'source-upper', 'HTTPS://example.test/upper', 'fixture', 'channel-1', 'Channel One',
+    'A title', 'A description', now(), now(), 'LONG', 'UNAVAILABLE',
+    'NO_TRANSCRIPT_PUBLISHED', 0,
+    'UNAVAILABLE', 'UNAVAILABLE', 'PROVISIONAL', 0.1, 0.1, 0.5, '[]'::jsonb,
+    'content.research.scoring/v1', 'radar-baseline-v1', 'research-owner'
+  )$$,
+  'the scheme is case-insensitive, as the URL standard defines it'
 );
 
 SELECT lives_ok(

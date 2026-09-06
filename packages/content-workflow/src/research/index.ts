@@ -55,7 +55,7 @@ function hasUsableProvenance(
 	source: ResearchSource,
 ): provenance is SourceProvenance {
 	if (!provenance) return false;
-	if (!provenance.externalId.trim() || !isRenderableSourceUrl(provenance.sourceUrl)) return false;
+	if (!provenance.externalId.trim() || !provenance.sourceUrl.trim()) return false;
 	if (provenance.externalId !== source.externalId) return false;
 	if (provenance.sourceUrl !== source.sourceUrl) return false;
 	if (provenance.platform !== source.platform) return false;
@@ -67,9 +67,14 @@ function hasUsableProvenance(
  * than a formatting preference. The database carries the same constraint; this
  * one exists so a malformed adapter response is dropped with the rest of its
  * source instead of failing a transaction that has already done work.
+ *
+ * The scheme is matched case-insensitively because RFC 3986 says it is, and an
+ * adapter that does not normalize `HTTPS://` is returning a valid URL. Anything
+ * this accepts the column must accept too, or the drop-early property is lost:
+ * `\S` is a strict subset of the column's `[^[:space:]]`, so it holds.
  */
 function isRenderableSourceUrl(value: string): boolean {
-	return /^https:\/\/\S+$/.test(value);
+	return /^https:\/\/\S+$/i.test(value);
 }
 
 function evidenceConfidenceFor(scored: ScoredSource): EvidenceConfidence {
@@ -121,6 +126,13 @@ export async function runResearchPipeline(input: ResearchRunInput): Promise<Rese
 		const provenance = provenanceById.get(source.externalId);
 		if (!hasUsableProvenance(provenance, source)) {
 			failures.push({ stage: "provenance", subjectId: source.externalId, code: "MISSING_PROVENANCE", occurredAt });
+			continue;
+		}
+		// Separate from the provenance failure above: an operator reading a PARTIAL
+		// run needs "the provider sent a URL we will not render" and "the provider
+		// sent no provenance" to be different problems, because the fixes differ.
+		if (!isRenderableSourceUrl(source.sourceUrl)) {
+			failures.push({ stage: "provenance", subjectId: source.externalId, code: "UNSUPPORTED_SOURCE_URL", occurredAt });
 			continue;
 		}
 		if (seen.has(source.externalId)) {

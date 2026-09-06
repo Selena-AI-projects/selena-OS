@@ -45,7 +45,7 @@ CREATE TABLE selena_registry.content_research_sources (
   -- The one adapter-filled column the surface renders as an href. A scheme
   -- constraint is the only thing standing between a future provider's payload
   -- and a `javascript:` link, and it belongs here rather than in every writer.
-  source_url text NOT NULL CHECK (source_url ~ '^https://[^[:space:]]+$'),
+  source_url text NOT NULL CHECK (source_url ~* '^https://[^[:space:]]+$'),
   adapter_id text NOT NULL CHECK (adapter_id IN ('fixture', 'video-radar')),
   channel_id text NOT NULL,
   channel_name text NOT NULL,

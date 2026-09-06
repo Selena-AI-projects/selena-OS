@@ -170,11 +170,20 @@ describe("fixture research run", () => {
 	});
 
 	// The stored URL is rendered as an href, so a scheme the browser would treat
-	// as code must never reach persistence in the first place.
+	// as code must never reach persistence in the first place. The code is its
+	// own, not the provenance one: the provenance was present and matched.
 	it("drops a source whose URL is not an https link", async () => {
 		const outcome = await run(new UnsafeUrlAdapter());
 		expect(outcome.counters.sourcesScored).toBe(0);
-		expect(outcome.failures.map((failure) => failure.code)).toEqual(["MISSING_PROVENANCE"]);
+		expect(outcome.failures.map((failure) => failure.code)).toEqual(["UNSUPPORTED_SOURCE_URL"]);
+	});
+
+	// RFC 3986 makes the scheme case-insensitive, so an adapter that does not
+	// normalize it is returning a valid URL, not a malformed one.
+	it("keeps a source whose https scheme is uppercase", async () => {
+		const outcome = await run(new UppercaseSchemeAdapter());
+		expect(outcome.counters.sourcesScored).toBe(1);
+		expect(outcome.failures).toHaveLength(0);
 	});
 
 	it("rejects an adaptation that stays too close to the source", async () => {
@@ -377,6 +386,26 @@ class MismatchedProvenanceAdapter extends FixtureResearchAdapter {
 class UnsafeUrlAdapter extends FixtureResearchAdapter {
 	override async fetch() {
 		const source = fixtureSource({ externalId: "unsafe-1", sourceUrl: "javascript:alert(1)" });
+		return {
+			sources: [source],
+			provenance: [
+				{
+					adapterId: "fixture" as const,
+					platform: "youtube" as const,
+					externalId: source.externalId,
+					sourceUrl: source.sourceUrl,
+					capturedAt: NOW.toISOString(),
+				},
+			],
+			externalProviderCalls: 0,
+		};
+	}
+}
+
+/** A source whose scheme is valid but not normalized to lower case. */
+class UppercaseSchemeAdapter extends FixtureResearchAdapter {
+	override async fetch() {
+		const source = fixtureSource({ externalId: "upper-1", sourceUrl: "HTTPS://example.test/upper-1" });
 		return {
 			sources: [source],
 			provenance: [
