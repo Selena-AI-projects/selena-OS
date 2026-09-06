@@ -212,6 +212,7 @@ export const getControlRoomWorkspaceFn = createServerFn({ method: "GET" })
 						metrics,
 						killSwitches,
 						growthBindings,
+						contentPolicies,
 					] = await Promise.all([
 						db.select().from(scrContentItems).where(scope).orderBy(desc(scrContentItems.updatedAt)).limit(40),
 						db
@@ -444,6 +445,30 @@ export const getControlRoomWorkspaceFn = createServerFn({ method: "GET" })
 									.orderBy(desc(scrGrowthProjectBindings.confirmedAt))
 									.limit(40)
 							: Promise.resolve([]),
+						// Which policy governs this brand's drafts. Not gated by the growth
+						// stage: a policy is what the Control Room reviews against, whether or
+						// not anything is delivered from Aether. Every version is kept, so the
+						// question "under which policy was this approved" outlives the policy.
+						db
+							.select({
+								id: scrContentPolicies.id,
+								policyVersion: scrContentPolicies.policyVersion,
+								requireEvidence: scrContentPolicies.requireEvidence,
+								status: scrContentPolicies.status,
+								createdBy: scrContentPolicies.createdBy,
+								activatedAt: scrContentPolicies.activatedAt,
+								revokedAt: scrContentPolicies.revokedAt,
+								revokedReason: scrContentPolicies.revokedReason,
+							})
+							.from(scrContentPolicies)
+							.where(
+								and(
+									eq(scrContentPolicies.organizationId, context.tenantId),
+									eq(scrContentPolicies.brandId, data.brandId),
+								),
+							)
+							.orderBy(desc(scrContentPolicies.activatedAt))
+							.limit(40),
 					]);
 
 					const contentById = new Map(content.map((item) => [item.id, item]));
@@ -485,6 +510,8 @@ export const getControlRoomWorkspaceFn = createServerFn({ method: "GET" })
 						metrics,
 						killSwitches,
 						growthBindings,
+						contentPolicies,
+						activeContentPolicy: contentPolicies.find((policy) => policy.status === "active") ?? null,
 						reviewQueue: versions.map((version) => ({
 							id: version.id,
 							title: contentById.get(version.contentId)?.title ?? "Archived content",

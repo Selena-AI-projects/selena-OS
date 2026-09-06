@@ -1048,8 +1048,13 @@ export const scrContentPolicies = selenaRegistrySchema
 				.references(() => brands.id),
 			policyVersion: text("policy_version").notNull(),
 			requireEvidence: boolean("require_evidence").notNull().default(false),
+			status: text("status").notNull().default("active"),
 			createdBy: text("created_by").notNull(),
 			createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+			activatedAt: timestamp("activated_at", { withTimezone: true }).defaultNow().notNull(),
+			revokedAt: timestamp("revoked_at", { withTimezone: true }),
+			revokedBy: text("revoked_by"),
+			revokedReason: text("revoked_reason"),
 			updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 		},
 		(table) => ({

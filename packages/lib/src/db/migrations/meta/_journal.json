@@ -281,6 +281,13 @@
 			"when": 1788620460000,
 			"tag": "0039_aether_events_content_draft",
 			"breakpoints": true
+		},
+		{
+			"idx": 40,
+			"version": "7",
+			"when": 1788620520000,
+			"tag": "0040_content_policy_lifecycle",
+			"breakpoints": true
 		}
 	]
 }

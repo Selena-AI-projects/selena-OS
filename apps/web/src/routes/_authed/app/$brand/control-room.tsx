@@ -10,6 +10,7 @@ import { Textarea } from "@workspace/ui/components/textarea";
 import { type FormEvent, useEffect, useState, useTransition } from "react";
 import { CONTENT_PRODUCT_DESCRIPTION, CONTENT_PRODUCT_NAME } from "@/lib/content-product";
 import { buildTitle, getAppName, getBrandName } from "@/lib/route-head";
+import { revokeContentPolicyFn, setContentPolicyFn } from "@/server/selena-content-policy";
 import {
 	addReviewEvidenceFn,
 	approveContentVersionFn,
@@ -263,6 +264,9 @@ function ControlRoomPage() {
 	const [bindingBusinessKey, setBindingBusinessKey] = useState("");
 	const [bindingEnvironment, setBindingEnvironment] = useState<(typeof GROWTH_SOURCE_ENVIRONMENTS)[number]>("local");
 	const [bindingRevokeReason, setBindingRevokeReason] = useState("");
+	const [policyVersion, setPolicyVersion] = useState("");
+	const [policyRequireEvidence, setPolicyRequireEvidence] = useState(true);
+	const [policyRevokeReason, setPolicyRevokeReason] = useState("");
 	const contentById = new Map(data.content.map((item) => [item.id, item]));
 	const versionById = new Map(data.versions.map((item) => [item.id, item]));
 	const accountById = new Map(data.accounts.map((item) => [item.id, item]));
@@ -314,6 +318,32 @@ function ControlRoomPage() {
 				setNotice("The request could not be completed. Retry the action; no content was released.");
 			}
 		});
+	}
+
+	function runShowingReason(action: () => Promise<unknown>, successMessage: string) {
+		startTransition(async () => {
+			try {
+				await action();
+				await router.invalidate();
+				setNotice(successMessage);
+			} catch (error) {
+				// Unlike the release actions, these fail for reasons the owner can fix —
+				// a version that already exists, a missing reason — so the reason is shown.
+				const reason = error instanceof Error && error.message ? error.message : "The request could not be completed.";
+				setNotice(reason);
+			}
+		});
+	}
+
+	function submitPolicy(event: FormEvent<HTMLFormElement>) {
+		event.preventDefault();
+		runShowingReason(
+			() =>
+				setContentPolicyFn({
+					data: { brandId, policyVersion: policyVersion.trim(), requireEvidence: policyRequireEvidence },
+				}),
+			"Content policy set: drafts for this brand are reviewed against it",
+		);
 	}
 
 	function submitBinding(event: FormEvent<HTMLFormElement>) {
@@ -1291,6 +1321,107 @@ function ControlRoomPage() {
 
 				{activeSection === "sources" && (
 					<div className="grid gap-5 xl:grid-cols-2">
+						<Card className="rounded-md shadow-none">
+							<CardHeader>
+								<CardTitle className="text-base">Content policy</CardTitle>
+							</CardHeader>
+							<CardContent className="space-y-3 text-sm">
+								<p className="text-muted-foreground">
+									The policy is what drafts for this brand are reviewed against. One version is in force at a time;
+									setting a new one withdraws the previous version and keeps it, so an approval made earlier still names
+									the policy it was made under. A policy is not an approval and releases nothing by itself.
+								</p>
+								<Table>
+									<TableHeader>
+										<TableRow>
+											<TableHead>Version</TableHead>
+											<TableHead>Evidence required</TableHead>
+											<TableHead>Status</TableHead>
+											<TableHead>In force since</TableHead>
+											<TableHead />
+										</TableRow>
+									</TableHeader>
+									<TableBody>
+										{data.contentPolicies.length === 0 ? (
+											<EmptyRows columns={5} label="No policy has been set" />
+										) : (
+											data.contentPolicies.map((policy) => (
+												<TableRow key={policy.id} data-testid="content-policy-row">
+													<TableCell className="font-mono text-xs">{policy.policyVersion}</TableCell>
+													<TableCell>{policy.requireEvidence ? "Yes" : "No"}</TableCell>
+													<TableCell>
+														<StatusBadge value={policy.status === "active" ? "IN FORCE" : "WITHDRAWN"} />
+													</TableCell>
+													<TableCell>{formatDate(policy.activatedAt)}</TableCell>
+													<TableCell>
+														{policy.status === "active" && data.role === "owner" && (
+															<Button
+																variant="outline"
+																size="sm"
+																disabled={pending || policyRevokeReason.trim().length === 0}
+																title={policyRevokeReason.trim() ? "Withdraw this policy" : "Write a reason first"}
+																onClick={() =>
+																	runShowingReason(
+																		() =>
+																			revokeContentPolicyFn({
+																				data: { brandId, policyId: policy.id, reason: policyRevokeReason.trim() },
+																			}),
+																		"Policy withdrawn: this brand has no policy in force",
+																	)
+																}
+															>
+																Withdraw
+															</Button>
+														)}
+													</TableCell>
+												</TableRow>
+											))
+										)}
+									</TableBody>
+								</Table>
+								{data.role === "owner" && data.activeContentPolicy && (
+									<Label className="grid gap-2">
+										Reason for withdrawing
+										<Input
+											placeholder="Why this policy should stop applying"
+											value={policyRevokeReason}
+											onChange={(event) => setPolicyRevokeReason(event.target.value)}
+										/>
+									</Label>
+								)}
+								{data.role === "owner" && (
+									<form className="grid gap-3 border-t pt-3" onSubmit={submitPolicy}>
+										<Label className="grid gap-2">
+											New policy version
+											<Input
+												required
+												placeholder="2026-09-a"
+												value={policyVersion}
+												onChange={(event) => setPolicyVersion(event.target.value)}
+											/>
+										</Label>
+										<Label className="flex items-center gap-2">
+											<input
+												type="checkbox"
+												className="size-4"
+												checked={policyRequireEvidence}
+												onChange={(event) => setPolicyRequireEvidence(event.target.checked)}
+											/>
+											Require evidence for every claim
+										</Label>
+										<p className="text-xs text-muted-foreground">
+											A version name is a label you choose, not a document: it identifies which rules were in force.
+											Repeating the version already in force changes nothing. A withdrawn version is never reinstated —
+											use a new name.
+										</p>
+										<Button disabled={pending} type="submit">
+											<IconLockCheck />
+											Set policy
+										</Button>
+									</form>
+								)}
+							</CardContent>
+						</Card>
 						<Card className="rounded-md shadow-none">
 							<CardHeader>
 								<CardTitle className="text-base">Aether sources</CardTitle>
