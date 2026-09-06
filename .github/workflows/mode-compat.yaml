@@ -32,7 +32,7 @@ concurrency:
 
 jobs:
   smoke:
-    runs-on: ubuntu-24.04
+    runs-on: [self-hosted, Linux, X64, selena-ci]
     timeout-minutes: 10
 
     services:
@@ -78,13 +78,13 @@ jobs:
       # 2. Migrations — fail if they don't apply cleanly, or (once #339 lands)
       #    if a backfill breaks on the seeded existing-install data.
       - name: Apply migrations to an empty database
-        run: pnpm -C packages/lib exec drizzle-kit migrate
+        run: pnpm -C packages/lib exec node scripts/run-migrations.mjs
 
       - name: Seed an existing local install
         run: pnpm -C e2e exec tsx seed.ts
 
       - name: Re-apply migrations against seeded data
-        run: pnpm -C packages/lib exec drizzle-kit migrate
+        run: pnpm -C packages/lib exec node scripts/run-migrations.mjs
 
       # 3. Prove migration 0014's destructive dedupe (the one migration that
       #    mutates existing auth data) keeps the correct member row and that

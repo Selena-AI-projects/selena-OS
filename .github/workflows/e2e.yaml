@@ -33,7 +33,7 @@ concurrency:
 jobs:
   e2e:
     name: E2E Integration Tests
-    runs-on: ubuntu-24.04
+    runs-on: [self-hosted, Linux, X64, selena-ci]
     timeout-minutes: 30
 
     env:
@@ -41,8 +41,12 @@ jobs:
       # can silently run against a different effective config. The override
       # scopes the worker to the no-network stub provider.
       COMPOSE_FILE: e2e/.elmo/elmo.yaml:e2e/worker-override.yaml
+      COMPOSE_PROJECT_NAME: selena-os-e2e
 
     steps:
+      - name: Remove containers from an interrupted run
+        run: docker compose down --volumes --remove-orphans || true
+
       - name: Checkout
         uses: actions/checkout@v7
 
@@ -172,6 +176,10 @@ jobs:
             e2e/test-results-worker/
           retention-days: 7
 
+      - name: Stop the test stack
+        if: ${{ always() }}
+        run: docker compose down --volumes --remove-orphans
+
   # Scheduling-policy verification: drives a real
   # worker over a real database with the no-network stub provider, in local
   # mode (legacy volume + dueness metering must match the pre-policy behavior
@@ -181,7 +189,7 @@ jobs:
   # whitelabel deployments run.
   scheduling-policy:
     name: Scheduling Policy Verification
-    runs-on: ubuntu-24.04
+    runs-on: [self-hosted, Linux, X64, selena-ci]
     timeout-minutes: 15
 
     services:
@@ -222,7 +230,7 @@ jobs:
         run: pnpm install --no-frozen-lockfile
 
       - name: Apply migrations
-        run: pnpm -C packages/lib exec drizzle-kit migrate
+        run: pnpm -C packages/lib exec node scripts/run-migrations.mjs
 
       - name: Seed local fixtures
         run: pnpm -C e2e exec tsx seed.ts

@@ -23,7 +23,7 @@ concurrency:
 jobs:
   license-check:
     name: Dependency License Audit
-    runs-on: ubuntu-24.04
+    runs-on: [self-hosted, Linux, X64, selena-ci]
     timeout-minutes: 5
 
     steps:
