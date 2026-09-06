@@ -65,6 +65,7 @@ import { Route as ApiV1SelenaPublicScanRouteImport } from './routes/api/v1/selen
 import { Route as ApiV1SelenaWebsiteCollectorRouteImport } from './routes/api/v1/selena/website-collector'
 import { Route as ApiV1ToolsAnalyzeRouteImport } from './routes/api/v1/tools/analyze'
 import { Route as AuthedAppBrandControlRoomProfileRouteImport } from './routes/_authed/app/$brand/control-room/profile'
+import { Route as AuthedAppBrandControlRoomResearchRouteImport } from './routes/_authed/app/$brand/control-room/research'
 import { Route as AuthedAppBrandPromptsIndexRouteImport } from './routes/_authed/app/$brand/prompts/index'
 import { Route as AuthedAppBrandPromptsPromptIdRouteImport } from './routes/_authed/app/$brand/prompts/$promptId'
 import { Route as AuthedAppBrandPromptsEditRouteImport } from './routes/_authed/app/$brand/prompts/edit'
@@ -380,6 +381,12 @@ const AuthedAppBrandControlRoomProfileRoute =
     path: '/profile',
     getParentRoute: () => AuthedAppBrandControlRoomRoute,
   } as any)
+const AuthedAppBrandControlRoomResearchRoute =
+  AuthedAppBrandControlRoomResearchRouteImport.update({
+    id: '/research',
+    path: '/research',
+    getParentRoute: () => AuthedAppBrandControlRoomRoute,
+  } as any)
 const AuthedAppBrandPromptsIndexRoute =
   AuthedAppBrandPromptsIndexRouteImport.update({
     id: '/prompts/',
@@ -582,6 +589,7 @@ export interface FileRoutesByFullPath {
   '/api/v1/prompts/': typeof ApiV1PromptsIndexRoute
   '/api/v1/reports/': typeof ApiV1ReportsIndexRoute
   '/app/$brand/control-room/profile': typeof AuthedAppBrandControlRoomProfileRoute
+  '/app/$brand/control-room/research': typeof AuthedAppBrandControlRoomResearchRoute
   '/app/$brand/prompts/$promptId': typeof AuthedAppBrandPromptsPromptIdRoute
   '/app/$brand/prompts/edit': typeof AuthedAppBrandPromptsEditRoute
   '/app/$brand/settings/billing': typeof AuthedAppBrandSettingsBillingRoute
@@ -660,6 +668,7 @@ export interface FileRoutesByTo {
   '/api/v1/prompts': typeof ApiV1PromptsIndexRoute
   '/api/v1/reports': typeof ApiV1ReportsIndexRoute
   '/app/$brand/control-room/profile': typeof AuthedAppBrandControlRoomProfileRoute
+  '/app/$brand/control-room/research': typeof AuthedAppBrandControlRoomResearchRoute
   '/app/$brand/prompts/$promptId': typeof AuthedAppBrandPromptsPromptIdRoute
   '/app/$brand/prompts/edit': typeof AuthedAppBrandPromptsEditRoute
   '/app/$brand/settings/billing': typeof AuthedAppBrandSettingsBillingRoute
@@ -744,6 +753,7 @@ export interface FileRoutesById {
   '/api/v1/prompts/': typeof ApiV1PromptsIndexRoute
   '/api/v1/reports/': typeof ApiV1ReportsIndexRoute
   '/_authed/app/$brand/control-room/profile': typeof AuthedAppBrandControlRoomProfileRoute
+  '/_authed/app/$brand/control-room/research': typeof AuthedAppBrandControlRoomResearchRoute
   '/_authed/app/$brand/prompts/$promptId': typeof AuthedAppBrandPromptsPromptIdRoute
   '/_authed/app/$brand/prompts/edit': typeof AuthedAppBrandPromptsEditRoute
   '/_authed/app/$brand/settings/billing': typeof AuthedAppBrandSettingsBillingRoute
@@ -828,6 +838,7 @@ export interface FileRouteTypes {
     | '/api/v1/prompts/'
     | '/api/v1/reports/'
     | '/app/$brand/control-room/profile'
+    | '/app/$brand/control-room/research'
     | '/app/$brand/prompts/$promptId'
     | '/app/$brand/prompts/edit'
     | '/app/$brand/settings/billing'
@@ -906,6 +917,7 @@ export interface FileRouteTypes {
     | '/api/v1/prompts'
     | '/api/v1/reports'
     | '/app/$brand/control-room/profile'
+    | '/app/$brand/control-room/research'
     | '/app/$brand/prompts/$promptId'
     | '/app/$brand/prompts/edit'
     | '/app/$brand/settings/billing'
@@ -989,6 +1001,7 @@ export interface FileRouteTypes {
     | '/api/v1/prompts/'
     | '/api/v1/reports/'
     | '/_authed/app/$brand/control-room/profile'
+    | '/_authed/app/$brand/control-room/research'
     | '/_authed/app/$brand/prompts/$promptId'
     | '/_authed/app/$brand/prompts/edit'
     | '/_authed/app/$brand/settings/billing'
@@ -1457,6 +1470,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthedAppBrandControlRoomProfileRouteImport
       parentRoute: typeof AuthedAppBrandControlRoomRoute
     }
+    '/_authed/app/$brand/control-room/research': {
+      id: '/_authed/app/$brand/control-room/research'
+      path: '/research'
+      fullPath: '/app/$brand/control-room/research'
+      preLoaderRoute: typeof AuthedAppBrandControlRoomResearchRouteImport
+      parentRoute: typeof AuthedAppBrandControlRoomRoute
+    }
     '/_authed/app/$brand/prompts/': {
       id: '/_authed/app/$brand/prompts/'
       path: '/prompts'
@@ -1655,12 +1675,15 @@ const AuthedAdminRouteWithChildren = AuthedAdminRoute._addFileChildren(
 
 interface AuthedAppBrandControlRoomRouteChildren {
   AuthedAppBrandControlRoomProfileRoute: typeof AuthedAppBrandControlRoomProfileRoute
+  AuthedAppBrandControlRoomResearchRoute: typeof AuthedAppBrandControlRoomResearchRoute
 }
 
 const AuthedAppBrandControlRoomRouteChildren: AuthedAppBrandControlRoomRouteChildren =
   {
     AuthedAppBrandControlRoomProfileRoute:
       AuthedAppBrandControlRoomProfileRoute,
+    AuthedAppBrandControlRoomResearchRoute:
+      AuthedAppBrandControlRoomResearchRoute,
   }
 
 const AuthedAppBrandControlRoomRouteWithChildren =

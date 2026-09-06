@@ -1,6 +1,8 @@
 import { sql } from "drizzle-orm";
 import {
+	bigint,
 	boolean,
+	doublePrecision,
 	index,
 	integer,
 	json,
@@ -1031,6 +1033,232 @@ export const scrContentChannels = selenaRegistrySchema
 			brandPlatformUnique: uniqueIndex("scr_content_channels_brand_platform_unique").on(table.brandId, table.platform),
 			brandIdx: index("scr_content_channels_brand_idx").on(table.brandId),
 			orgIdx: index("scr_content_channels_org_idx").on(table.organizationId),
+		}),
+	)
+	.enableRLS();
+
+export const scrContentResearchRunStatusEnum = selenaRegistrySchema.enum("content_research_run_status", [
+	"COMPLETED",
+	"PARTIAL",
+	"FAILED",
+]);
+export const scrContentTranscriptStatusEnum = selenaRegistrySchema.enum("content_transcript_status", [
+	"PENDING",
+	"AVAILABLE",
+	"UNAVAILABLE",
+	"BLOCKED",
+	"FAILED",
+	"UNSUPPORTED",
+]);
+export const scrContentOpportunityDecisionEnum = selenaRegistrySchema.enum("content_opportunity_decision", [
+	"SAVED",
+	"REJECTED",
+	"SENT_TO_CREATION",
+]);
+
+export const scrContentResearchRuns = selenaRegistrySchema
+	.table(
+		"content_research_runs",
+		{
+			id: uuid("id").defaultRandom().primaryKey().notNull(),
+			organizationId: text("organization_id")
+				.notNull()
+				.references(() => organization.id),
+			brandId: text("brand_id")
+				.notNull()
+				.references(() => brands.id),
+			profileVersionId: uuid("profile_version_id")
+				.notNull()
+				.references(() => scrBrandContentProfileVersions.id),
+			profileHash: text("profile_hash").notNull(),
+			idempotencyKey: text("idempotency_key").notNull(),
+			adapterId: text("adapter_id").notNull(),
+			status: scrContentResearchRunStatusEnum().notNull(),
+			pipelineVersion: text("pipeline_version").notNull(),
+			scoringVersion: text("scoring_version").notNull(),
+			baselineVersion: text("baseline_version").notNull(),
+			counters: jsonb("counters").notNull().default({}),
+			failures: jsonb("failures").notNull().default([]),
+			correlationId: uuid("correlation_id").notNull(),
+			externalProviderCalls: integer("external_provider_calls").notNull().default(0),
+			startedAt: timestamp("started_at", { withTimezone: true }).notNull(),
+			completedAt: timestamp("completed_at", { withTimezone: true }).notNull(),
+			createdBy: text("created_by").notNull(),
+			createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+		},
+		(table) => ({
+			brandIdempotencyUnique: uniqueIndex("content_research_runs_brand_idempotency_unique").on(
+				table.brandId,
+				table.idempotencyKey,
+			),
+			brandIdx: index("content_research_runs_brand_idx").on(table.brandId, table.createdAt.desc()),
+			orgIdx: index("content_research_runs_org_idx").on(table.organizationId),
+			profileIdx: index("content_research_runs_profile_idx").on(table.profileVersionId),
+		}),
+	)
+	.enableRLS();
+
+export const scrContentResearchSources = selenaRegistrySchema
+	.table(
+		"content_research_sources",
+		{
+			id: uuid("id").defaultRandom().primaryKey().notNull(),
+			organizationId: text("organization_id")
+				.notNull()
+				.references(() => organization.id),
+			brandId: text("brand_id")
+				.notNull()
+				.references(() => brands.id),
+			runId: uuid("run_id")
+				.notNull()
+				.references(() => scrContentResearchRuns.id),
+			platform: text("platform").notNull(),
+			externalId: text("external_id").notNull(),
+			sourceUrl: text("source_url").notNull(),
+			adapterId: text("adapter_id").notNull(),
+			channelId: text("channel_id").notNull(),
+			channelName: text("channel_name").notNull(),
+			title: text("title").notNull(),
+			description: text("description").notNull(),
+			publishedAt: timestamp("published_at", { withTimezone: true }).notNull(),
+			capturedAt: timestamp("captured_at", { withTimezone: true }).notNull(),
+			durationSeconds: integer("duration_seconds"),
+			videoType: text("video_type").notNull(),
+			language: text("language"),
+			views: bigint("views", { mode: "number" }),
+			likes: bigint("likes", { mode: "number" }),
+			comments: bigint("comments", { mode: "number" }),
+			transcriptStatus: scrContentTranscriptStatusEnum("transcript_status").notNull(),
+			transcriptLanguage: text("transcript_language"),
+			transcriptFailureReason: text("transcript_failure_reason"),
+			baselineViews: doublePrecision("baseline_views"),
+			baselineSampleSize: integer("baseline_sample_size").notNull(),
+			baselineConfidence: text("baseline_confidence").notNull(),
+			outlierRatio: doublePrecision("outlier_ratio"),
+			outlierBand: text("outlier_band").notNull(),
+			outlierMaturity: text("outlier_maturity").notNull(),
+			relevanceScore: doublePrecision("relevance_score").notNull(),
+			candidateScore: doublePrecision("candidate_score").notNull(),
+			weightCoverage: doublePrecision("weight_coverage").notNull(),
+			scoreComponents: jsonb("score_components").notNull(),
+			gateReasons: jsonb("gate_reasons").notNull().default([]),
+			shortlisted: boolean("shortlisted").notNull().default(false),
+			scoringVersion: text("scoring_version").notNull(),
+			baselineVersion: text("baseline_version").notNull(),
+			createdBy: text("created_by").notNull(),
+			createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+		},
+		(table) => ({
+			runExternalUnique: uniqueIndex("content_research_sources_run_external_unique").on(table.runId, table.externalId),
+			brandIdx: index("content_research_sources_brand_idx").on(
+				table.brandId,
+				table.shortlisted,
+				table.candidateScore.desc(),
+			),
+			orgIdx: index("content_research_sources_org_idx").on(table.organizationId),
+		}),
+	)
+	.enableRLS();
+
+export const scrContentResearchMetricSnapshots = selenaRegistrySchema
+	.table(
+		"content_research_metric_snapshots",
+		{
+			id: uuid("id").defaultRandom().primaryKey().notNull(),
+			organizationId: text("organization_id")
+				.notNull()
+				.references(() => organization.id),
+			brandId: text("brand_id")
+				.notNull()
+				.references(() => brands.id),
+			sourceId: uuid("source_id")
+				.notNull()
+				.references(() => scrContentResearchSources.id),
+			capturedAt: timestamp("captured_at", { withTimezone: true }).notNull(),
+			views: bigint("views", { mode: "number" }),
+			likes: bigint("likes", { mode: "number" }),
+			comments: bigint("comments", { mode: "number" }),
+			createdBy: text("created_by").notNull(),
+			createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+		},
+		(table) => ({
+			sourceCapturedUnique: uniqueIndex("content_research_metric_snapshots_source_captured_unique").on(
+				table.sourceId,
+				table.capturedAt,
+			),
+			brandIdx: index("content_research_metric_snapshots_brand_idx").on(table.brandId, table.capturedAt),
+			orgIdx: index("content_research_metric_snapshots_org_idx").on(table.organizationId),
+		}),
+	)
+	.enableRLS();
+
+export const scrContentResearchOpportunities = selenaRegistrySchema
+	.table(
+		"content_research_opportunities",
+		{
+			id: uuid("id").defaultRandom().primaryKey().notNull(),
+			organizationId: text("organization_id")
+				.notNull()
+				.references(() => organization.id),
+			brandId: text("brand_id")
+				.notNull()
+				.references(() => brands.id),
+			runId: uuid("run_id")
+				.notNull()
+				.references(() => scrContentResearchRuns.id),
+			sourceId: uuid("source_id")
+				.notNull()
+				.references(() => scrContentResearchSources.id),
+			profileVersionId: uuid("profile_version_id")
+				.notNull()
+				.references(() => scrBrandContentProfileVersions.id),
+			profileHash: text("profile_hash").notNull(),
+			opportunityKey: text("opportunity_key").notNull(),
+			proposedAngle: text("proposed_angle").notNull(),
+			proposedHook: text("proposed_hook").notNull(),
+			contentFormat: text("content_format").notNull(),
+			rationale: text("rationale").notNull(),
+			evidenceSummary: text("evidence_summary").notNull(),
+			confidence: text("confidence").notNull(),
+			factRequirements: jsonb("fact_requirements").notNull().default([]),
+			createdBy: text("created_by").notNull(),
+			createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+		},
+		(table) => ({
+			runKeyUnique: uniqueIndex("content_research_opportunities_run_key_unique").on(table.runId, table.opportunityKey),
+			runIdx: index("content_research_opportunities_run_idx").on(table.runId, table.createdAt),
+			brandIdx: index("content_research_opportunities_brand_idx").on(table.brandId, table.createdAt.desc()),
+			orgIdx: index("content_research_opportunities_org_idx").on(table.organizationId),
+		}),
+	)
+	.enableRLS();
+
+export const scrContentResearchOpportunityDecisions = selenaRegistrySchema
+	.table(
+		"content_research_opportunity_decisions",
+		{
+			id: uuid("id").defaultRandom().primaryKey().notNull(),
+			organizationId: text("organization_id")
+				.notNull()
+				.references(() => organization.id),
+			brandId: text("brand_id")
+				.notNull()
+				.references(() => brands.id),
+			opportunityId: uuid("opportunity_id")
+				.notNull()
+				.references(() => scrContentResearchOpportunities.id),
+			decision: scrContentOpportunityDecisionEnum().notNull(),
+			reason: text("reason"),
+			decidedBy: text("decided_by").notNull(),
+			createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+		},
+		(table) => ({
+			opportunityIdx: index("content_research_opportunity_decisions_opportunity_idx").on(
+				table.opportunityId,
+				table.createdAt,
+			),
+			brandIdx: index("content_research_opportunity_decisions_brand_idx").on(table.brandId, table.createdAt),
+			orgIdx: index("content_research_opportunity_decisions_org_idx").on(table.organizationId),
 		}),
 	)
 	.enableRLS();

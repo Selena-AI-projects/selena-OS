@@ -114,3 +114,87 @@
 - Authority: owner approved GitHub-hosted runners and available GitHub Actions
   minutes on 2026-09-06.
 - Affected requirements: S1-08.
+
+## 2026-09-06 — number the research and structured-content migrations 0040 and 0041
+
+- Decision: Slice 2 adds `0040_content_research_registry` and Slice 3 adds
+  `0041_structured_content_and_editorial_review`.
+- Evidence: `growth/ge1-4-local-slice` already holds
+  `0038_growth_project_bindings` (`when` 1788620400000) and
+  `0039_aether_events_content_draft` (`when` 1788620460000); issue #29 records
+  that `0037` landed first and that the next migration on either branch is
+  `0040`.
+- Consequence: keeping the planned `0038`/`0039` names would put two different
+  migrations behind each tag in one shared journal, which is the silent-skip
+  failure issue #29 exists to prevent.
+- Alternatives rejected: renumber the growth entries again (they are already
+  raised above `0037` and agreed), or accept duplicate tags.
+- Authority: owner decision on 2026-09-06 confirming `0040`/`0041`.
+- Affected requirements: Stage 1 plan 7.3B, 8.3B, 10.2 and 10.4.
+
+## 2026-09-06 — authorize the Video Radar source transfer
+
+- Decision: transfer research contracts, scoring, baseline, outlier, relevance,
+  velocity and anti-copy enforcement from
+  `parkourcafe/video-radar-marketing-tool` at
+  `b589a811a4e1f205a784e5128283f9d227143f32` into
+  `@workspace/content-workflow`.
+- Evidence: the source commit carries no `LICENSE` file and no `license` field
+  in its manifest, so the transfer needed an explicit holder decision rather
+  than an inferred one.
+- Boundary: contracts and pure domain rules only. UI, routes, auth, the
+  Supabase adapter, the JSON project registry and environment loading are not
+  transferred, and the derived `VideoRadarAdapter` stays fail-closed.
+- Authority: owner authorization on 2026-09-06 confirming they hold the source
+  and permit the transfer.
+- Affected requirements: Stage 1 plan 7.3A.
+
+## 2026-09-06 — keep Slices 2-5 off the shared staging database
+
+- Decision: run every Slice 2-5 migration and pgTAP suite against a disposable
+  local PostgreSQL cluster only; record `Staging evidence: NOT RUN` in each PR.
+- Evidence: issue #29 records that the `migrate` service autodeploy trigger was
+  removed and that, for the duration of GE-5, migrations against the shared
+  staging database are run by the owner by hand at a verified commit SHA.
+- Consequence: Stage 1 plan section 10 acceptance stays local fixture
+  acceptance, which is what it already claims to be.
+- Authority: owner decision on 2026-09-06.
+- Affected requirements: Stage 1 plan 3.4, 10.2 and 10.4.
+
+## 2026-09-06 — record the migration ordering constraint where it outlives the PR
+
+- Decision: state the `when` high-water-mark rule and the required apply order in
+  `STAGE1_EXECUTION_PLAN.md` §3.4 and as an owner gate, not only in a pull
+  request body.
+- Evidence: Drizzle applies a migration only when its journal `when` exceeds the
+  newest recorded `created_at`, so a distinct tag prevents a collision but not a
+  skip. Content OS `0040` (`when` 1788620520000) sits above
+  `growth/ge1-4-local-slice`'s `0038` (1788620400000) and `0039` (1788620460000),
+  and a database that receives `0040` first loses both silently.
+- Consequence: the growth entries are applied first or re-stamped above `0040`
+  when that branch merges. The runner guard that would refuse instead of
+  succeeding lives on the growth branch and reaches `main` with it.
+- Alternatives rejected: lowering `0040` below the growth entries, which only
+  moves the same hazard onto the other branch; relying on a note in a pull
+  request, which does not survive the merge.
+- Authority: safe implementation step within the recorded migration-numbering
+  decision.
+- Affected requirements: Stage 1 plan 3.4 and 7.3B.
+
+## 2026-09-06 — profile revocation falls back to the previous confirmed version
+
+- Open decision for the owner. Recorded rather than silently settled.
+- Behavior today: research selects the newest profile version whose own newest
+  decision is `CONFIRMED`. Revoking the version a brand is using therefore does
+  not stop research; it continues against the last still-confirmed version, and
+  the surface presents that older version as the confirmed profile.
+- Why it is not simply a bug: an undecided draft must not block research against
+  the confirmed version beneath it, so "use only the newest version" is wrong.
+  The question is whether a revoked newest version should stop research outright
+  or fall through, and that is a product judgement about what revocation means.
+- Inherited from Slice 1's `profiles.getCurrent`; Slice 2 is the first consumer
+  that acts on it.
+- Safe default until the owner decides: leave the fallback, state it plainly in
+  the plan's acceptance wording, and keep the integration coverage that pins the
+  behavior either way.
+- Affected requirements: Stage 1 plan 7.4.

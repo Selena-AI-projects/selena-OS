@@ -18,24 +18,24 @@ import {
 } from "./db/schema";
 import { sha256 } from "./selena-control-room";
 
-type AuthContext = {
+export type ContentAuthContext = {
 	actorId: string;
 	tenantId: string;
 	role: "owner" | "member" | "viewer";
 	authType: "session" | "api_key";
 };
 
-type Transaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
+export type ContentTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
 type ProfileVersionRow = typeof scrBrandContentProfileVersions.$inferSelect;
 type ProfileDecisionRow = typeof scrBrandContentProfileDecisions.$inferSelect;
 
-function assertWritable(context: AuthContext): void {
+function assertWritable(context: ContentAuthContext): void {
 	if (context.authType !== "session" || !["owner", "member"].includes(context.role)) {
-		throw new Error("Forbidden: editor or owner access required");
+		throw new Error("Forbidden: owner or member access required");
 	}
 }
 
-function assertOwner(context: AuthContext): void {
+function assertOwner(context: ContentAuthContext): void {
 	if (context.authType !== "session" || context.role !== "owner") {
 		throw new Error("Forbidden: an interactive owner session is required");
 	}
@@ -49,6 +49,69 @@ function auditMetadata(input: {
 	return Object.fromEntries(
 		Object.entries(input).filter((entry): entry is [string, string] => typeof entry[1] === "string"),
 	);
+}
+
+/**
+ * Open a transaction that carries the authenticated brand request context.
+ * Every Content OS repository goes through here, so the tenant identity a
+ * statement runs under is always the session's and never a caller's argument.
+ */
+export async function withBrandRequestContext<T>(
+	database: typeof db,
+	context: ContentAuthContext,
+	brandId: string,
+	operation: (tx: ContentTransaction) => Promise<T>,
+	serializeBrandWrites = false,
+): Promise<T> {
+	return database.transaction(async (tx) => {
+		await tx.execute(
+			sql`
+				SELECT selena_registry.set_request_context(
+					${context.actorId}, ${context.tenantId}, ${brandId}, ${context.role},
+					${randomUUID()}, ${"web"}, ${context.authType}
+				)
+			`,
+		);
+		if (serializeBrandWrites) {
+			await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${brandId}, 0))`);
+		}
+		return operation(tx as ContentTransaction);
+	});
+}
+
+/**
+ * Append one event to the brand's hash-chained audit log. Metadata is limited
+ * to identifiers, hashes, versions, status and normalized error codes by the
+ * callers; nothing here should ever carry a provider body or a transcript.
+ */
+export async function appendContentAudit(
+	tx: ContentTransaction,
+	context: ContentAuthContext,
+	brandId: string,
+	action: string,
+	aggregateType: string,
+	aggregateId: string,
+	metadata: Record<string, unknown>,
+): Promise<void> {
+	const [previous] = await tx
+		.select({ eventHash: scrAuditEvents.eventHash })
+		.from(scrAuditEvents)
+		.where(and(eq(scrAuditEvents.organizationId, context.tenantId), eq(scrAuditEvents.brandId, brandId)))
+		.orderBy(desc(scrAuditEvents.createdAt), desc(scrAuditEvents.id))
+		.limit(1);
+	const previousHash = previous?.eventHash ?? null;
+	const eventHash = sha256({ action, aggregateId, actorId: context.actorId, brandId, metadata, previousHash });
+	await tx.insert(scrAuditEvents).values({
+		organizationId: context.tenantId,
+		brandId,
+		actorId: context.actorId,
+		action,
+		aggregateType,
+		aggregateId,
+		previousHash,
+		eventHash,
+		metadata,
+	});
 }
 
 export function createContentWorkflowRepositories(database: typeof db = db) {
@@ -91,28 +154,19 @@ export function createContentWorkflowRepositories(database: typeof db = db) {
 	}
 
 	async function transact<T>(
-		context: AuthContext,
+		context: ContentAuthContext,
 		brandId: string,
-		operation: (tx: Transaction) => Promise<T>,
+		operation: (tx: ContentTransaction) => Promise<T>,
 		serializeBrandWrites = false,
 	): Promise<T> {
-		return database.transaction(async (tx) => {
-			await tx.execute(
-				sql`
-					SELECT selena_registry.set_request_context(
-						${context.actorId}, ${context.tenantId}, ${brandId}, ${context.role},
-						${randomUUID()}, ${"web"}, ${context.authType}
-					)
-				`,
-			);
-			if (serializeBrandWrites) {
-				await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${brandId}, 0))`);
-			}
-			return operation(tx as Transaction);
-		});
+		return withBrandRequestContext(database, context, brandId, operation, serializeBrandWrites);
 	}
 
-	async function readVersions(tx: Transaction, context: AuthContext, brandId: string): Promise<CurrentProfile[]> {
+	async function readVersions(
+		tx: ContentTransaction,
+		context: ContentAuthContext,
+		brandId: string,
+	): Promise<CurrentProfile[]> {
 		const versions = await tx
 			.select()
 			.from(scrBrandContentProfileVersions)
@@ -137,46 +191,28 @@ export function createContentWorkflowRepositories(database: typeof db = db) {
 	}
 
 	async function appendAudit(
-		tx: Transaction,
-		context: AuthContext,
+		tx: ContentTransaction,
+		context: ContentAuthContext,
 		brandId: string,
 		action: string,
 		aggregateId: string,
 		metadata: Record<string, unknown>,
 	) {
-		const [previous] = await tx
-			.select({ eventHash: scrAuditEvents.eventHash })
-			.from(scrAuditEvents)
-			.where(and(eq(scrAuditEvents.organizationId, context.tenantId), eq(scrAuditEvents.brandId, brandId)))
-			.orderBy(desc(scrAuditEvents.createdAt), desc(scrAuditEvents.id))
-			.limit(1);
-		const previousHash = previous?.eventHash ?? null;
-		const eventHash = sha256({ action, aggregateId, actorId: context.actorId, brandId, metadata, previousHash });
-		await tx.insert(scrAuditEvents).values({
-			organizationId: context.tenantId,
-			brandId,
-			actorId: context.actorId,
-			action,
-			aggregateType: "content_project_profile",
-			aggregateId,
-			previousHash,
-			eventHash,
-			metadata,
-		});
+		return appendContentAudit(tx, context, brandId, action, "content_project_profile", aggregateId, metadata);
 	}
 
 	return {
 		profiles: {
-			async getCurrent(context: AuthContext, brandId: string): Promise<CurrentProfile | null> {
+			async getCurrent(context: ContentAuthContext, brandId: string): Promise<CurrentProfile | null> {
 				return transact(context, brandId, async (tx) => {
 					const versions = await readVersions(tx, context, brandId);
 					return versions.find((entry) => entry.decision?.decision === "CONFIRMED") ?? null;
 				});
 			},
-			async listVersions(context: AuthContext, brandId: string): Promise<CurrentProfile[]> {
+			async listVersions(context: ContentAuthContext, brandId: string): Promise<CurrentProfile[]> {
 				return transact(context, brandId, (tx) => readVersions(tx, context, brandId));
 			},
-			async createVersion(context: AuthContext, input: CreateProfileVersionInput): Promise<ProfileVersionRef> {
+			async createVersion(context: ContentAuthContext, input: CreateProfileVersionInput): Promise<ProfileVersionRef> {
 				assertWritable(context);
 				if (input.organizationId !== context.tenantId)
 					throw new Error("Forbidden: organization is controlled by the session");
@@ -243,7 +279,7 @@ export function createContentWorkflowRepositories(database: typeof db = db) {
 				);
 			},
 			async decide(
-				context: AuthContext,
+				context: ContentAuthContext,
 				input: ConfirmProfileVersionInput,
 			): Promise<{ id: string; profileVersionId: string; decision: "CONFIRMED" | "REVOKED" }> {
 				assertOwner(context);
@@ -302,7 +338,7 @@ export function createContentWorkflowRepositories(database: typeof db = db) {
 			},
 		},
 		channels: {
-			async ensureDraftYouTube(context: AuthContext, brandId: string) {
+			async ensureDraftYouTube(context: ContentAuthContext, brandId: string) {
 				assertWritable(context);
 				return transact(
 					context,
