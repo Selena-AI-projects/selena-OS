@@ -140,6 +140,7 @@ export interface ClientConfig {
 	googleSignInOnly?: boolean;
 	/** Whether the neutral Content OS Stage 1 shell is explicitly enabled. */
 	contentOsStage1Enabled?: boolean;
+	growthEngineStage1Enabled?: boolean;
 }
 
 // ============================================================================

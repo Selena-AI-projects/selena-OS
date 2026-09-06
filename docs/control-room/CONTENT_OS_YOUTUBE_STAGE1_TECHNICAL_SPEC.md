@@ -196,6 +196,7 @@ packages/content-workflow/
 packages/lib/src/
   db/schema.ts
   content-workflow-repositories.ts
+  content-workflow-projection.ts
 apps/web/src/server/
   content-profile.ts
   content-research.ts

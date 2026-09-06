@@ -25,7 +25,33 @@
 import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 
 export const SCHEMA_VERSION = "1";
+/**
+ * Version 1.1 keeps the envelope and adds one event type, `content.draft_ready`,
+ * whose payload is a whole material. A 1.1 receiver still accepts version 1.
+ */
+export const SCHEMA_VERSION_1_1 = "1.1";
+export const SUPPORTED_SCHEMA_VERSIONS: ReadonlySet<string> = new Set([SCHEMA_VERSION, SCHEMA_VERSION_1_1]);
 export const EVENT_TASK_RESULT_READY = "task.result.ready";
+export const EVENT_CONTENT_DRAFT_READY = "content.draft_ready";
+/**
+ * Material aggregate ids are derived, not chosen: uuid5 of `<project_id>:<brief_ref>:<kind>`
+ * in this namespace. The sender and the receiver both compute it, so a sender
+ * cannot point a material at an aggregate that is not its own.
+ */
+export const GROWTH_MATERIAL_NAMESPACE = "2f7f0f5e-6b1a-5c3a-9c2e-1d4b7a8e9f01";
+export const CONTENT_KINDS = ["ARTICLE", "SOCIAL_ADAPTATION", "BRIEF", "PAGE_UPDATE", "VIDEO_SCRIPT"] as const;
+export const CLAIM_STATUSES = ["EXTRACTED", "INTERPRETED", "HYPOTHESIS", "UNKNOWN"] as const;
+export const QA_CHECKS = ["FACTS", "LINKS", "NOVELTY", "BRAND", "TECHNICAL", "ISOLATION"] as const;
+export const QA_VERDICTS = ["PASS", "FAIL", "UNKNOWN"] as const;
+export const SOURCE_KINDS = ["OWN", "EXTERNAL", "SYNTHETIC_FIXTURE"] as const;
+/** Inline body only, measured in UTF-8 bytes; artifact references are not part of 1.1. */
+export const BODY_MARKDOWN_MAX_BYTES = 48_000;
+export const CTA_URL_MAX_LENGTH = 2048;
+/**
+ * The receiver's limit for a whole HTTP body. It sits above the largest envelope
+ * the contract can produce with every field at its limit, and a test keeps it so.
+ */
+export const MAX_EVENT_BODY_BYTES = 512 * 1024;
 export const SIGNATURE_HEADER = "x-selena-signature";
 export const TIMESTAMP_HEADER = "x-selena-timestamp";
 export const TIMESTAMP_TOLERANCE_MS = 5 * 60 * 1000;
@@ -61,6 +87,30 @@ export interface EventPayload {
 	artifact_count?: number;
 }
 
+export type ContentKind = (typeof CONTENT_KINDS)[number];
+export type QaCheck = (typeof QA_CHECKS)[number];
+export type QaVerdict = (typeof QA_VERDICTS)[number];
+
+export interface ContentDraftPayload {
+	content_kind: ContentKind;
+	title: string;
+	language: string;
+	body_markdown: string;
+	metadata: {
+		cta_url: string;
+		slug?: string;
+		meta_title?: string;
+		meta_description?: string;
+		internal_links?: string[];
+	};
+	claims: Array<{ text: string; status: (typeof CLAIM_STATUSES)[number]; source_ref?: string }>;
+	evidence: Array<{ kind: string; ref: string; captured_at: string }>;
+	qa_results: Array<{ check: QaCheck; verdict: QaVerdict; detail?: string }>;
+	source: { kind: (typeof SOURCE_KINDS)[number]; ref: string; rights: string };
+	brief_ref: string;
+	business_key: string;
+}
+
 export interface EventEnvelope {
 	schema_version: string;
 	event_id: string;
@@ -70,8 +120,299 @@ export interface EventEnvelope {
 	version: number;
 	occurred_at: string;
 	trace_id: string;
-	payload: EventPayload;
+	payload: EventPayload | ContentDraftPayload;
 	payload_hash: string;
+}
+
+export function isContentDraftEvent(
+	envelope: EventEnvelope,
+): envelope is EventEnvelope & { payload: ContentDraftPayload } {
+	return envelope.event_type === EVENT_CONTENT_DRAFT_READY;
+}
+
+/** RFC 4122 version 5 (SHA-1) uuid, the same construction Python's uuid5 uses. */
+export function uuidV5(namespace: string, name: string): string {
+	const nsBytes = Buffer.from(namespace.replace(/-/g, ""), "hex");
+	const hash = createHash("sha1").update(nsBytes).update(Buffer.from(name, "utf8")).digest();
+	hash[6] = (hash[6] & 0x0f) | 0x50;
+	hash[8] = (hash[8] & 0x3f) | 0x80;
+	const hex = hash.subarray(0, 16).toString("hex");
+	return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20, 32)}`;
+}
+
+/** The project is part of the name so that knowing another project's task id buys nothing. */
+export function materialAggregateId(projectId: string, briefRef: string, contentKind: string): string {
+	return uuidV5(GROWTH_MATERIAL_NAMESPACE, `${projectId}:${briefRef}:${contentKind}`);
+}
+
+const LANGUAGE = /^[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8})*$/;
+const BUSINESS_KEY = /^[a-z_]{2,32}$/;
+/** RFC 3339 with a mandatory zone, checked as text: the platforms' date parsers disagree. */
+const RFC3339 =
+	/^\d{4}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\d|3[01])[Tt](?:[01]\d|2[0-3]):[0-5]\d:(?:[0-5]\d|60)(?:\.\d{1,9})?(?:[Zz]|[+-](?:[01]\d|2[0-3]):[0-5]\d)$/;
+/**
+ * The textual https form both sides share: a host of letters, digits, dots and
+ * hyphens (IDN as punycode) or a bracketed IPv6 without a zone id, a port without
+ * a leading zero, no `@` in the authority, no `#`. The two platforms' URL parsers
+ * disagree on percent signs in the host, zone ids and "almost IPv4" hosts, so
+ * those forms never reach a parser on either side.
+ */
+const HTTPS_URL =
+	/^https:\/\/(?:[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.?|\[[0-9A-Fa-f:.]+\])(?::[1-9][0-9]{0,4})?(?:[/?][\x21-\x22\x24-\x7e]*)?$/;
+/** A host whose last label looks numeric is IPv4 to WHATWG and a name to Python: only the strict a.b.c.d form is accepted. */
+const NUMERIC_LABEL = /^(?:[0-9]+|0[xX][0-9A-Fa-f]*)$/;
+const DOTTED_QUAD =
+	/^(?:25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])(?:\.(?:25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])){3}$/;
+/**
+ * C0 controls other than tab, LF and CR are refused in every payload string:
+ * canonical JSON spends six bytes on each, and without the ban the largest valid
+ * envelope would not fit under the receiver's body limit.
+ */
+function hasForbiddenControl(value: string): boolean {
+	for (let index = 0; index < value.length; index += 1) {
+		const unit = value.charCodeAt(index);
+		if (unit < 0x20 && unit !== 0x09 && unit !== 0x0a && unit !== 0x0d) return true;
+	}
+	return false;
+}
+
+/**
+ * A lone surrogate is a string JSON.parse will produce and no UTF-8 encoder can
+ * carry: the sender could never have hashed it and the database will refuse it.
+ */
+export function isWellFormedUtf16(value: string): boolean {
+	for (let index = 0; index < value.length; index += 1) {
+		const unit = value.charCodeAt(index);
+		if (unit >= 0xd800 && unit <= 0xdbff) {
+			const next = value.charCodeAt(index + 1);
+			if (!(next >= 0xdc00 && next <= 0xdfff)) return false;
+			index += 1;
+		} else if (unit >= 0xdc00 && unit <= 0xdfff) {
+			return false;
+		}
+	}
+	return true;
+}
+
+/** Lengths are code points, as in JSON Schema and on the sender; only the body is counted in bytes. */
+function codePoints(value: string): number {
+	let count = 0;
+	for (const _ of value) count += 1;
+	return count;
+}
+
+function requireText(value: string, field: string): void {
+	if (!isWellFormedUtf16(value)) throw new EventRejected("payload", `${field} contains a lone surrogate`);
+	if (hasForbiddenControl(value)) throw new EventRejected("payload", `${field} contains a control character`);
+}
+
+function hostIsAcceptable(value: string): boolean {
+	const authority = value.slice("https://".length).split("/", 1)[0].split("?", 1)[0];
+	if (authority.startsWith("[")) return true;
+	const host = authority.includes(":") ? authority.slice(0, authority.lastIndexOf(":")) : authority;
+	const bare = host.replace(/\.$/, "");
+	const labels = bare.split(".");
+	if (!NUMERIC_LABEL.test(labels[labels.length - 1])) return true;
+	return DOTTED_QUAD.test(bare);
+}
+
+function requireString(value: unknown, field: string, min: number, max: number): string {
+	if (typeof value !== "string") throw new EventRejected("payload", `${field} must be a string`);
+	requireText(value, field);
+	const length = codePoints(value);
+	if (length < min || length > max) {
+		throw new EventRejected("payload", `${field} must be a string of ${min}-${max} characters`);
+	}
+	return value;
+}
+
+export function isRfc3339(value: unknown): value is string {
+	return typeof value === "string" && RFC3339.test(value);
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+	return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function requireKeys(value: Record<string, unknown>, field: string, allowed: string[], required: string[]): void {
+	const unknown = Object.keys(value).filter((key) => !allowed.includes(key));
+	// The count, never the names: foreign keys of any length must not reach a log line.
+	if (unknown.length > 0) throw new EventRejected("payload", `${field} has ${unknown.length} unknown field(s)`);
+	const missing = required.filter((key) => !(key in value));
+	if (missing.length > 0) throw new EventRejected("payload", `${field} is missing fields: ${missing.join(", ")}`);
+}
+
+/**
+ * The CTA is mandatory because `content_versions.cta_url` does not admit NULL,
+ * and it is checked as a URL, not as a string: only absolute https, no
+ * credentials, no fragment.
+ */
+export function validateCtaUrl(value: unknown): string {
+	return validateHttpsUrl(value, "metadata.cta_url");
+}
+
+/**
+ * Shared check for every https address in the contract. The textual form comes
+ * first because it is the part both sides agree on exactly; the parser then
+ * rejects what looks like an address but is not one.
+ */
+export function validateHttpsUrl(value: unknown, field: string): string {
+	if (typeof value !== "string" || value.length === 0 || codePoints(value) > CTA_URL_MAX_LENGTH) {
+		throw new EventRejected("payload", `${field} is missing or too long`);
+	}
+	if (!HTTPS_URL.test(value) || !hostIsAcceptable(value)) {
+		throw new EventRejected("payload", `${field} must be an absolute https url without credentials or fragment`);
+	}
+	let url: URL;
+	try {
+		url = new URL(value);
+	} catch {
+		throw new EventRejected("payload", `${field} is not a url`);
+	}
+	if (url.protocol !== "https:" || !url.hostname || url.username || url.password || url.hash) {
+		throw new EventRejected("payload", `${field} must be an absolute https url without credentials or fragment`);
+	}
+	return value;
+}
+
+/**
+ * The material payload check shared by every consumer of a 1.1 event. Limits are
+ * the sender's limits: a payload the sender would refuse to sign is refused here.
+ */
+export function validateContentDraftPayload(payload: unknown): ContentDraftPayload {
+	if (!isRecord(payload)) throw new EventRejected("payload", "payload is not an object");
+	requireKeys(
+		payload,
+		"payload",
+		[
+			"content_kind",
+			"title",
+			"language",
+			"body_markdown",
+			"metadata",
+			"claims",
+			"evidence",
+			"qa_results",
+			"source",
+			"brief_ref",
+			"business_key",
+		],
+		[
+			"content_kind",
+			"title",
+			"language",
+			"body_markdown",
+			"metadata",
+			"claims",
+			"evidence",
+			"qa_results",
+			"source",
+			"brief_ref",
+			"business_key",
+		],
+	);
+	if (!(CONTENT_KINDS as readonly string[]).includes(payload.content_kind as string)) {
+		throw new EventRejected("payload", "content_kind is unknown");
+	}
+	requireString(payload.title, "title", 1, 200);
+	const language = requireString(payload.language, "language", 2, 16);
+	if (!LANGUAGE.test(language)) throw new EventRejected("payload", "language is not a BCP-47 tag");
+
+	const body = payload.body_markdown;
+	if (typeof body !== "string" || body.length === 0) throw new EventRejected("payload", "body_markdown is empty");
+	requireText(body, "body_markdown");
+	const bodyBytes = Buffer.byteLength(body, "utf8");
+	if (bodyBytes > BODY_MARKDOWN_MAX_BYTES) {
+		throw new EventRejected(
+			"payload",
+			`body_markdown is ${bodyBytes} bytes; at most ${BODY_MARKDOWN_MAX_BYTES} bytes are accepted and attachments are not part of this contract version`,
+		);
+	}
+
+	const metadata = payload.metadata;
+	if (!isRecord(metadata)) throw new EventRejected("payload", "metadata is not an object");
+	requireKeys(
+		metadata,
+		"metadata",
+		["cta_url", "slug", "meta_title", "meta_description", "internal_links"],
+		["cta_url"],
+	);
+	validateCtaUrl(metadata.cta_url);
+	for (const [field, limit] of [
+		["slug", 200],
+		["meta_title", 200],
+		["meta_description", 500],
+	] as const) {
+		if (field in metadata) requireString(metadata[field], `metadata.${field}`, 1, limit);
+	}
+	if ("internal_links" in metadata) {
+		const links = metadata.internal_links;
+		if (!Array.isArray(links) || links.length > 20) {
+			throw new EventRejected("payload", "metadata.internal_links must be a list of at most 20 urls");
+		}
+		for (const link of links) validateHttpsUrl(link, "metadata.internal_links");
+	}
+
+	const claims = payload.claims;
+	if (!Array.isArray(claims) || claims.length > 50)
+		throw new EventRejected("payload", "claims must be a list of at most 50");
+	for (const claim of claims) {
+		if (!isRecord(claim)) throw new EventRejected("payload", "claims entries must be objects");
+		requireKeys(claim, "claims", ["text", "status", "source_ref"], ["text", "status"]);
+		requireString(claim.text, "claims.text", 1, 500);
+		if (!(CLAIM_STATUSES as readonly string[]).includes(claim.status as string)) {
+			throw new EventRejected("payload", "claims.status is unknown");
+		}
+		if ("source_ref" in claim) requireString(claim.source_ref, "claims.source_ref", 1, 500);
+	}
+
+	const evidence = payload.evidence;
+	if (!Array.isArray(evidence) || evidence.length > 50)
+		throw new EventRejected("payload", "evidence must be a list of at most 50");
+	for (const item of evidence) {
+		if (!isRecord(item)) throw new EventRejected("payload", "evidence entries must be objects");
+		requireKeys(item, "evidence", ["kind", "ref", "captured_at"], ["kind", "ref", "captured_at"]);
+		requireString(item.kind, "evidence.kind", 1, 50);
+		requireString(item.ref, "evidence.ref", 1, 500);
+		if (!isRfc3339(item.captured_at)) {
+			throw new EventRejected("payload", "evidence.captured_at is not an RFC 3339 date with a zone");
+		}
+	}
+
+	const qa = payload.qa_results;
+	if (!Array.isArray(qa) || qa.length !== QA_CHECKS.length) {
+		throw new EventRejected("payload", `qa_results must hold exactly ${QA_CHECKS.length} checks`);
+	}
+	const seen = new Set<string>();
+	for (const result of qa) {
+		if (!isRecord(result)) throw new EventRejected("payload", "qa_results entries must be objects");
+		requireKeys(result, "qa_results", ["check", "verdict", "detail"], ["check", "verdict"]);
+		const check = result.check as string;
+		if (!(QA_CHECKS as readonly string[]).includes(check) || seen.has(check)) {
+			throw new EventRejected("payload", "qa_results must name each check exactly once");
+		}
+		seen.add(check);
+		if (!(QA_VERDICTS as readonly string[]).includes(result.verdict as string)) {
+			throw new EventRejected("payload", "qa_results.verdict is unknown");
+		}
+		if ("detail" in result) requireString(result.detail, "qa_results.detail", 0, 500);
+	}
+
+	const source = payload.source;
+	if (!isRecord(source)) throw new EventRejected("payload", "source is not an object");
+	requireKeys(source, "source", ["kind", "ref", "rights"], ["kind", "ref", "rights"]);
+	if (!(SOURCE_KINDS as readonly string[]).includes(source.kind as string))
+		throw new EventRejected("payload", "source.kind is unknown");
+	requireString(source.ref, "source.ref", 1, 500);
+	requireString(source.rights, "source.rights", 1, 200);
+
+	if (typeof payload.brief_ref !== "string" || !UUID.test(payload.brief_ref)) {
+		throw new EventRejected("payload", "brief_ref is not a uuid");
+	}
+	if (typeof payload.business_key !== "string" || !BUSINESS_KEY.test(payload.business_key)) {
+		throw new EventRejected("payload", "business_key does not match ^[a-z_]{2,32}$");
+	}
+	return payload as unknown as ContentDraftPayload;
 }
 
 /**
@@ -146,6 +487,9 @@ function requireUuid(envelope: Record<string, unknown>, field: string): void {
 }
 
 export function parseEnvelope(body: string): EventEnvelope {
+	// A lone surrogate survives JSON.parse but not the database's jsonb, and the
+	// sender could never have hashed it: refuse it here rather than retry forever.
+	if (!isWellFormedUtf16(body)) throw new EventRejected("body", "body is not well-formed unicode");
 	let parsed: unknown;
 	try {
 		parsed = JSON.parse(body);
@@ -159,24 +503,46 @@ export function parseEnvelope(body: string): EventEnvelope {
 
 	// An unknown envelope version is refused rather than guessed at: a receiver
 	// that infers the meaning of fields eventually infers it wrongly.
-	if (envelope.schema_version !== SCHEMA_VERSION) {
+	if (typeof envelope.schema_version !== "string" || !SUPPORTED_SCHEMA_VERSIONS.has(envelope.schema_version)) {
 		throw new EventRejected("schema_version", "unknown envelope schema version");
 	}
-	if (envelope.event_type !== EVENT_TASK_RESULT_READY) {
+	const isDraft = envelope.event_type === EVENT_CONTENT_DRAFT_READY;
+	if (isDraft) {
+		// The material event did not exist in version 1, so a version 1 envelope
+		// claiming to carry one is a sender that does not know the contract.
+		if (envelope.schema_version === SCHEMA_VERSION) {
+			throw new EventRejected("event_type", "content.draft_ready requires schema version 1.1");
+		}
+	} else if (envelope.event_type !== EVENT_TASK_RESULT_READY) {
 		throw new EventRejected("event_type", "unknown event type");
 	}
 	for (const field of ["event_id", "project_id", "aggregate_id", "trace_id"]) requireUuid(envelope, field);
 	if (!Number.isInteger(envelope.version) || (envelope.version as number) < 1) {
 		throw new EventRejected("fields", "aggregate version must be a positive integer");
 	}
-	if (typeof envelope.occurred_at !== "string" || Number.isNaN(Date.parse(envelope.occurred_at))) {
-		throw new EventRejected("fields", "occurred_at is not a date");
+	if (!isRfc3339(envelope.occurred_at)) {
+		throw new EventRejected("fields", "occurred_at is not an RFC 3339 date with a zone");
 	}
 
 	const payload = envelope.payload;
 	if (payload === null || typeof payload !== "object" || Array.isArray(payload)) {
 		throw new EventRejected("payload", "payload is not an object");
 	}
+	// The hash is checked before the payload's own rules, for both versions, so
+	// that a body which merely disagrees with its hash is named for that and not
+	// for a field inside it.
+	if (typeof envelope.payload_hash !== "string" || payloadHash(payload) !== envelope.payload_hash) {
+		throw new EventRejected("payload_hash", "payload_hash does not match the payload");
+	}
+	if (isDraft) {
+		const draft = validateContentDraftPayload(payload);
+		const expected = materialAggregateId(envelope.project_id as string, draft.brief_ref, draft.content_kind);
+		if (envelope.aggregate_id !== expected) {
+			throw new EventRejected("payload", "aggregate_id is not derived from project_id, brief_ref and content_kind");
+		}
+		return envelope as unknown as EventEnvelope;
+	}
+
 	const { title, status, summary, artifact_count: artifactCount } = payload as Record<string, unknown>;
 	if (typeof title !== "string" || title.length === 0 || title.length > 200) {
 		throw new EventRejected("payload", "payload title is missing or too long");
@@ -187,12 +553,16 @@ export function parseEnvelope(body: string): EventEnvelope {
 	if (typeof summary !== "string" || summary.length > 4000) {
 		throw new EventRejected("payload", "payload summary is missing or too long");
 	}
+	// An escaped lone surrogate (`\ud800` in the JSON text) passes the body check
+	// above and would still be refused by jsonb; the sender could not have hashed it.
+	for (const [field, value] of [
+		["title", title],
+		["summary", summary],
+	] as const) {
+		if (!isWellFormedUtf16(value)) throw new EventRejected("payload", `payload ${field} contains a lone surrogate`);
+	}
 	if (artifactCount !== undefined && (!Number.isInteger(artifactCount) || (artifactCount as number) < 0)) {
 		throw new EventRejected("payload", "artifact_count must be a non-negative integer");
-	}
-
-	if (typeof envelope.payload_hash !== "string" || payloadHash(payload) !== envelope.payload_hash) {
-		throw new EventRejected("payload_hash", "payload_hash does not match the payload");
 	}
 
 	return envelope as unknown as EventEnvelope;

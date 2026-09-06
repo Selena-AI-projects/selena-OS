@@ -18,15 +18,20 @@ import {
 	acceptEvent,
 	type EventEnvelope,
 	EventRejected,
+	MAX_EVENT_BODY_BYTES,
 	SIGNATURE_HEADER,
 	TIMESTAMP_HEADER,
 } from "@workspace/lib/selena-aether-bridge";
 import { Pool, type PoolClient } from "pg";
 
 const RECEIVE_PATH = "/v1/bridge/aether";
-// The envelope carries a title and a short summary, nothing else, so anything
-// approaching this size is not an event this receiver is meant to accept.
-const MAX_BODY_BYTES = 64 * 1024;
+// Since contract 1.1 an event may carry a whole material. The limit is the
+// contract's: it sits above the largest envelope the contract can describe, and
+// a body beyond it is not an event this receiver is meant to accept.
+const MAX_BODY_BYTES = MAX_EVENT_BODY_BYTES;
+// The recording function refuses a version redelivered with different content,
+// or an event id reused for different content, with this SQLSTATE.
+const CONFLICT_SQLSTATE = "SE409";
 
 function requiredEnv(name: string): string {
 	const value = process.env[name];
@@ -60,6 +65,13 @@ function createReceiverPool(connectionString: string): Pool {
 
 export type RecordOutcome = "recorded" | "duplicate" | "stale";
 
+export class RecordConflict extends Error {
+	constructor() {
+		super("event conflicts with what was already recorded");
+		this.name = "RecordConflict";
+	}
+}
+
 /**
  * The recording function decides the outcome, not this process: duplicate and
  * stale are answered from the rows already stored, so two receivers running at
@@ -91,6 +103,7 @@ export async function recordEvent(client: PoolClient, envelope: EventEnvelope): 
 		return outcome;
 	} catch (error) {
 		await client.query("ROLLBACK");
+		if ((error as { code?: unknown })?.code === CONFLICT_SQLSTATE) throw new RecordConflict();
 		throw error;
 	}
 }
@@ -177,6 +190,14 @@ export function createReceiverServer(options: { secrets: string[]; pool: Receive
 			// event circling until its attempts ran out.
 			return sendJson(response, 202, { outcome, event_id: envelope.event_id });
 		} catch (error) {
+			if (error instanceof RecordConflict) {
+				// Not a retry and not a server fault: the sender delivered a version
+				// that disagrees with what was recorded. Retrying cannot fix that.
+				console.warn(
+					`aether event conflict: event=${envelope.event_id} aggregate=${envelope.aggregate_id} version=${envelope.version} trace=${envelope.trace_id}`,
+				);
+				return sendJson(response, 409, { error: "rejected", reason: "conflict", event_id: envelope.event_id });
+			}
 			// The sender must retry, so this is a server error — but its text
 			// stays here rather than travelling back across the bridge.
 			console.error("Aether receiver could not record an event", error);

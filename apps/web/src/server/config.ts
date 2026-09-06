@@ -8,6 +8,7 @@ import { getDefaultDelayHours } from "@workspace/lib/constants";
 import { countUsers } from "@workspace/lib/db/provisioning";
 import { getDeployment } from "@/lib/config/server";
 import { isContentOsStage1Enabled } from "@/lib/content-os-stage1.server";
+import { isGrowthEngineStage1Enabled } from "@/lib/growth-engine-stage1.server";
 import { isSelenaStagingGoogleSignInEnabled } from "@/lib/selena-staging-google-auth.server";
 
 export type PublicClientConfig = Omit<ClientConfig, "branding"> & {
@@ -59,6 +60,7 @@ export const getClientConfig = createServerFn({ method: "GET" }).handler(async (
 		googleSignInEnabled: deployment.mode === "cloud" || googleSignInOnly,
 		googleSignInOnly,
 		contentOsStage1Enabled: isContentOsStage1Enabled(),
+		growthEngineStage1Enabled: isGrowthEngineStage1Enabled(),
 	};
 });
 

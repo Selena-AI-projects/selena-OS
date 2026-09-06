@@ -11,6 +11,7 @@ import fixtures from "./contracts/control-room-event.v1.fixtures.json" with { ty
 import {
 	acceptEvent,
 	canonicalJson,
+	type EventPayload,
 	EventRejected,
 	isStale,
 	parseEnvelope,
@@ -42,8 +43,9 @@ describe("the sender and the receiver agree on the wire format", () => {
 			signedAt(fixture),
 		);
 		expect(envelope.event_type).toBe("task.result.ready");
-		expect(envelope.payload.status).toBe("pending_approval");
-		expect(envelope.payload.title).toContain("«Other Bali»");
+		const payload = envelope.payload as EventPayload;
+		expect(payload.status).toBe("pending_approval");
+		expect(payload.title).toContain("«Other Bali»");
 	});
 
 	it("reproduces the sender's canonical serialization byte for byte", () => {
