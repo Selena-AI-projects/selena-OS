@@ -802,8 +802,15 @@ export function createContentCreationRepositories(database: typeof db = db) {
 						throw new ContentCreationError("PROFILE_NOT_CONFIRMED", "Script generation requires a confirmed profile");
 					}
 
-					const ideaRun = await store.readGenerationRun(tx, latest.generationRunId);
-					if (!ideaRun?.researchOpportunityId) {
+					// The idea lives in the IDEAS run, which is the *first* version's
+					// generation run. Reading it off the latest version works only until
+					// the first revision, when the latest version's run is a SCRIPT run
+					// whose output has no ideas in it at all.
+					const conceptVersion = versions[versions.length - 1];
+					const ideaRun = conceptVersion?.generationRunId
+						? await store.readGenerationRun(tx, conceptVersion.generationRunId)
+						: undefined;
+					if (!ideaRun || ideaRun.kind !== "IDEAS" || !ideaRun.researchOpportunityId) {
 						throw new ContentCreationError("EVIDENCE_REQUIRED", "The version has no research lineage to build on");
 					}
 					const { evidence } = await evidenceForOpportunity(tx, store, ideaRun.researchOpportunityId);

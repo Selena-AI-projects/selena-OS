@@ -175,6 +175,23 @@ describe.skipIf(!disposableDatabaseUrl)("content creation PostgreSQL adapter", (
 		expect(scriptVersion?.structuredBody?.script?.sections.length).toBeGreaterThan(1);
 		expect(afterScript.items[0].workflowStage).toBe("SCRIPT_DRAFTED");
 
+		// A second revision has to resolve the idea from the IDEAS run, not from the
+		// latest version's run — which by then is a SCRIPT run whose output holds no
+		// ideas at all. This is the case the browser run caught.
+		const revised = await creation.generateScript(member, {
+			brandId,
+			contentId: selected.contentId,
+			idempotencyKey: `revision-${suffix}`,
+			revision: true,
+		});
+		expect(revised.version).toBe(3);
+		const afterRevision = await creation.getCreation(owner, brandId);
+		const revisionHistory = afterRevision.versionsByItem[selected.contentId];
+		expect(revisionHistory).toHaveLength(3);
+		// The earlier versions are untouched by the revision.
+		expect(revisionHistory.find((entry) => entry.version === 1)?.contentHash).toBe(selected.contentHash);
+		expect(revisionHistory.find((entry) => entry.version === 2)?.contentHash).toBe(scripted.contentHash);
+
 		// The Gemini adapter is disabled and has no transport, so asking for it is
 		// recorded as a refusal rather than becoming a call.
 		const refused = await creation.generateIdeas(member, {
