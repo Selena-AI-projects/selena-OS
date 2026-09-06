@@ -17,6 +17,7 @@ import { createHash } from "node:crypto";
 import { readdirSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { Client } from "pg";
+import { connectionSettings } from "./db-connection.mjs";
 
 const databaseUrl = process.env.SELENA_MIGRATION_DATABASE_URL ?? process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error("DATABASE_URL is required for the inspector");
@@ -36,7 +37,12 @@ const KNOWN_FOREIGN = new Map([
 	],
 ]);
 
-/** Objects each migration is responsible for, so "applied" is checked against the schema too. */
+/**
+ * Objects each migration is responsible for, so "applied" is checked against the
+ * schema too. Read from the catalogue rather than `information_schema`, whose
+ * views hide anything the querying role has no privilege on — a missing column
+ * and an unreadable one would otherwise look the same.
+ */
 const OBJECT_CHECKS = [
 	["0021 content registry", "to_regclass('selena_registry.content_items') IS NOT NULL"],
 	["0021 content versions", "to_regclass('selena_registry.content_versions') IS NOT NULL"],
@@ -60,15 +66,23 @@ const OBJECT_CHECKS = [
 	["0038 resolve_growth_binding", "to_regprocedure('selena_registry.resolve_growth_binding(uuid,text)') IS NOT NULL"],
 	[
 		"0039 aether_events.projected_content_version_id",
-		"EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'selena_ingest_raw' AND table_name = 'aether_events' AND column_name = 'projected_content_version_id')",
+		"EXISTS (SELECT 1 FROM pg_attribute a JOIN pg_class c ON c.oid = a.attrelid " +
+			"JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'selena_ingest_raw' AND c.relname = 'aether_events' " +
+			"AND a.attname = 'projected_content_version_id' AND a.attnum > 0 AND NOT a.attisdropped)",
 	],
 	[
 		"0039 aether_events.projection_attempts",
-		"EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'selena_ingest_raw' AND table_name = 'aether_events' AND column_name = 'projection_attempts')",
+		"EXISTS (SELECT 1 FROM pg_attribute a JOIN pg_class c ON c.oid = a.attrelid " +
+			"JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'selena_ingest_raw' AND c.relname = 'aether_events' " +
+			"AND a.attname = 'projection_attempts' AND a.attnum > 0 AND NOT a.attisdropped)",
 	],
+	// 0039 adds this column outright, so a "yes" before migrating is not evidence
+	// that 0039 ran — it is a warning that 0039 will fail.
 	[
 		"0039 content_items.kind",
-		"EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'selena_registry' AND table_name = 'content_items' AND column_name = 'kind')",
+		"EXISTS (SELECT 1 FROM pg_attribute a JOIN pg_class c ON c.oid = a.attrelid " +
+			"JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'selena_registry' AND c.relname = 'content_items' " +
+			"AND a.attname = 'kind' AND a.attnum > 0 AND NOT a.attisdropped)",
 	],
 	[
 		"0039 claim_next_aether_draft_event",
@@ -112,14 +126,13 @@ const COUNTED_TABLES = [
  * Lock modes a migration takes and ordinary reads and writes do not. `pg_locks`
  * is readable by every role, unlike the query text in `pg_stat_activity`, so
  * this answers "is someone migrating right now" without depending on privilege.
+ *
+ * `ShareUpdateExclusiveLock` is deliberately absent: it is what VACUUM and
+ * ANALYZE take, so autovacuum would raise this alarm continuously on a live
+ * database. Nothing is lost by leaving it out — altering a table takes
+ * `AccessExclusiveLock`, which is listed.
  */
-const DDL_LOCK_MODES = [
-	"AccessExclusiveLock",
-	"ExclusiveLock",
-	"ShareRowExclusiveLock",
-	"ShareLock",
-	"ShareUpdateExclusiveLock",
-];
+const DDL_LOCK_MODES = ["AccessExclusiveLock", "ExclusiveLock", "ShareRowExclusiveLock", "ShareLock"];
 
 const WATCHED_SCHEMAS = ["public", "drizzle", "selena_registry", "selena_release", "selena_audit", "selena_ingest_raw"];
 
@@ -135,7 +148,7 @@ function readLocalMigrations() {
 	}));
 }
 
-function assertJournalCoversFolder(local) {
+function journalGaps(local) {
 	const onDisk = readdirSync(migrationsFolder)
 		.filter((name) => name.endsWith(".sql"))
 		.map((name) => name.replace(/\.sql$/, ""));
@@ -146,10 +159,13 @@ function assertJournalCoversFolder(local) {
 
 async function main() {
 	const local = readLocalMigrations();
-	const untracked = assertJournalCoversFolder(local);
+	const untracked = journalGaps(local);
 	const byHash = new Map(local.map((entry) => [entry.hash, entry]));
 
-	const client = new Client({ connectionString: databaseUrl });
+	// The same transport rules the migration runner enforces on this database,
+	// plus a connect timeout: the statement and lock timeouts below only start
+	// once a connection exists, so a host that never answers would hang past both.
+	const client = new Client({ ...connectionSettings(databaseUrl), connectionTimeoutMillis: 15_000 });
 	await client.connect();
 	const report = {
 		database: null,
@@ -161,6 +177,9 @@ async function main() {
 		objects: {},
 		roles: {},
 		counts: {},
+		untracked_files: untracked,
+		newest_recorded: null,
+		would_be_skipped: [],
 	};
 	try {
 		await client.query("BEGIN TRANSACTION READ ONLY");
@@ -186,15 +205,25 @@ async function main() {
 			  WHERE datname = current_database() AND pid <> pg_backend_pid() AND backend_type = 'client backend'
 			  GROUP BY 1, 2 ORDER BY 1, 2`,
 		);
+		// `pg_locks` spans the cluster, and its `relation` is an OID that means
+		// nothing outside its own database — hence the explicit database filter.
 		const ledgerLocks = await client.query(
 			`SELECT l.pid, l.mode, l.granted
 			   FROM pg_locks l JOIN pg_class c ON c.oid = l.relation JOIN pg_namespace n ON n.oid = c.relnamespace
-			  WHERE l.pid <> pg_backend_pid() AND n.nspname = 'drizzle' AND c.relname = '__drizzle_migrations'`,
+			  WHERE l.pid <> pg_backend_pid()
+			    AND l.database = (SELECT oid FROM pg_database WHERE datname = current_database())
+			    AND n.nspname = 'drizzle' AND c.relname = '__drizzle_migrations'`,
 		);
 		const ddlLocks = await client.query(
 			`SELECT l.pid, l.mode, n.nspname || '.' || c.relname AS relation
-			   FROM pg_locks l JOIN pg_class c ON c.oid = l.relation JOIN pg_namespace n ON n.oid = c.relnamespace
-			  WHERE l.pid <> pg_backend_pid() AND l.mode = ANY($1::text[]) AND n.nspname = ANY($2::text[])
+			   FROM pg_locks l
+			   JOIN pg_class c ON c.oid = l.relation
+			   JOIN pg_namespace n ON n.oid = c.relnamespace
+			   JOIN pg_stat_activity a ON a.pid = l.pid
+			  WHERE l.pid <> pg_backend_pid()
+			    AND l.database = (SELECT oid FROM pg_database WHERE datname = current_database())
+			    AND a.backend_type = 'client backend'
+			    AND l.mode = ANY($1::text[]) AND n.nspname = ANY($2::text[])
 			  ORDER BY 3, 2`,
 			[DDL_LOCK_MODES, WATCHED_SCHEMAS],
 		);
@@ -303,21 +332,47 @@ async function main() {
 		}
 
 		console.log("");
-		console.log("row counts (counts only, no content is read):");
-		const existing = await client.query(
-			"SELECT c.relname, n.nspname FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE c.relkind = 'r' AND n.nspname || '.' || c.relname = ANY($1::text[])",
+		// A count is what this login is allowed to see, not what the table holds.
+		// Most of these force row level security, and under it even the table's
+		// owner is filtered unless a request context is set — so the flag is
+		// printed beside the number rather than leaving a 0 to be misread.
+		console.log("rows visible to this login (no content is read):");
+		const tableFacts = await client.query(
+			`SELECT n.nspname || '.' || c.relname AS name, c.relrowsecurity AS rls, c.relforcerowsecurity AS forced,
+			        has_table_privilege(c.oid, 'SELECT') AS readable
+			   FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+			  WHERE c.relkind = 'r' AND n.nspname || '.' || c.relname = ANY($1::text[])`,
 			[COUNTED_TABLES],
 		);
-		const existingNames = new Set(existing.rows.map((row) => `${row.nspname}.${row.relname}`));
+		const facts = new Map(tableFacts.rows.map((row) => [row.name, row]));
 		for (const table of COUNTED_TABLES) {
-			if (!existingNames.has(table)) {
+			const fact = facts.get(table);
+			if (!fact) {
 				report.counts[table] = null;
-				console.log(`  ${"absent".padStart(7)}  ${table}`);
+				console.log(`  ${"absent".padStart(8)}  ${table}`);
 				continue;
 			}
-			const { rows } = await client.query(`SELECT count(*)::int AS n FROM ${table}`);
-			report.counts[table] = rows[0].n;
-			console.log(`  ${String(rows[0].n).padStart(7)}  ${table}`);
+			const note = fact.forced ? " (forced RLS)" : fact.rls ? " (RLS)" : "";
+			if (!fact.readable) {
+				report.counts[table] = { readable: false, forced_rls: fact.forced };
+				console.log(`  ${"no read".padStart(8)}  ${table}${note}`);
+				continue;
+			}
+			// One savepoint per count. A read-only transaction refuses everything
+			// after its first error, so without this a single lock timeout — the
+			// very thing worth reporting — would destroy the rest of the report.
+			await client.query("SAVEPOINT counted");
+			try {
+				const { rows } = await client.query(`SELECT count(*)::int AS n FROM ${table}`);
+				await client.query("RELEASE SAVEPOINT counted");
+				report.counts[table] = { rows: rows[0].n, forced_rls: fact.forced };
+				console.log(`  ${String(rows[0].n).padStart(8)}  ${table}${note}`);
+			} catch (error) {
+				await client.query("ROLLBACK TO SAVEPOINT counted");
+				const code = error?.code ?? "error";
+				report.counts[table] = { error: code, forced_rls: fact.forced };
+				console.log(`  ${String(code).padStart(8)}  ${table}${note}`);
+			}
 		}
 	} finally {
 		await client.query("ROLLBACK").catch(() => undefined);
@@ -342,11 +397,12 @@ function redact(message) {
 	return message
 		.replace(/\b[a-z+]+:\/\/\S+/gi, "<url>")
 		.replace(/\b(?:\d{1,3}\.){3}\d{1,3}(?::\d+)?\b/g, "<address>")
+		.replace(/\b(?:[0-9a-f]{0,4}:){2,7}[0-9a-f]{0,4}(?::\d+)?\b/gi, "<address>")
 		.replace(/\b[a-z0-9-]+(?:\.[a-z0-9-]+)+(?::\d+)?\b/gi, "<host>");
 }
 
 main().catch((error) => {
 	// The message only, and scrubbed: a stack from `pg` carries the connection target.
 	console.error(`inspection failed: ${redact(error instanceof Error ? error.message : "unknown error")}`);
-	process.exit(1);
+	process.exitCode = 1;
 });

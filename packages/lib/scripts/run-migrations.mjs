@@ -5,6 +5,7 @@ import { join, resolve } from "node:path";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
 import { Client } from "pg";
+import { connectionSettings } from "./db-connection.mjs";
 import { databaseNameFrom, provisionRuntimeLogins } from "./provision-runtime-logins.mjs";
 
 const isStagingMvp = process.env.SELENA_STAGING_MVP === "true";
@@ -14,35 +15,8 @@ if (!databaseUrl) {
 	throw new Error("DATABASE_URL is required for the migration runner");
 }
 
-/**
- * The connection settings every connection to this database must use, so the
- * runtime logins are verified over the same transport the migrations ran on
- * rather than an unencrypted one that happened to be easier to build.
- */
-function connectionSettings() {
-	if (!isStagingMvp) return { connectionString: databaseUrl };
-
-	const rootCertificatePath = process.env.PGSSLROOTCERT;
-	if (!rootCertificatePath) {
-		throw new Error("PGSSLROOTCERT is required for staging migrations");
-	}
-
-	const url = new URL(databaseUrl);
-	for (const key of ["sslmode", "sslrootcert", "sslcert", "sslkey"]) {
-		url.searchParams.delete(key);
-	}
-
-	return {
-		connectionString: url.toString(),
-		ssl: {
-			ca: readFileSync(rootCertificatePath, "utf8"),
-			rejectUnauthorized: true,
-		},
-	};
-}
-
 function createClient() {
-	return new Client(connectionSettings());
+	return new Client(connectionSettings(databaseUrl, isStagingMvp));
 }
 
 const migrationsFolder = resolve(process.cwd(), "src/db/migrations");
@@ -95,7 +69,12 @@ async function grantSchemaOwnerMigrationLedgerAccess(client) {
  * out of order. Two branches numbering migrations independently produce exactly
  * that, and it is invisible until something fails far away.
  *
- * The check is the same comparison drizzle is about to make, made out loud.
+ * A migration this checkout cannot find in the ledger has two possible causes,
+ * and they need opposite responses. Either it has never been applied and landed
+ * out of order — re-date it — or it was applied and its file has since changed,
+ * so its recorded hash no longer matches — never re-date it, because that
+ * re-runs DDL against a database that already has it. The two are told apart by
+ * whether the ledger holds a row at that migration's own timestamp.
  */
 async function refuseSilentlySkippedMigrations(client) {
 	const { rows } = await client.query("SELECT to_regclass('drizzle.__drizzle_migrations') IS NOT NULL AS exists");
@@ -104,10 +83,18 @@ async function refuseSilentlySkippedMigrations(client) {
 	const recorded = await client.query("SELECT hash, created_at FROM drizzle.__drizzle_migrations");
 	if (recorded.rows.length === 0) return;
 	const applied = new Set(recorded.rows.map((row) => row.hash));
-	const newest = recorded.rows.reduce((max, row) => Math.max(max, Number(row.created_at)), 0);
+	const recordedAt = new Set(recorded.rows.map((row) => Number(row.created_at)));
+
+	// The same row drizzle reads to decide what to apply, read the same way:
+	// `created_at` is nullable, and DESC puts a null first, so taking a maximum
+	// here would disagree with the tool this check exists to predict.
+	const { rows: newestRows } = await client.query(
+		"SELECT created_at FROM drizzle.__drizzle_migrations ORDER BY created_at DESC LIMIT 1",
+	);
+	const newest = Number(newestRows[0]?.created_at ?? 0);
 
 	const journal = JSON.parse(readFileSync(join(migrationsFolder, "meta", "_journal.json"), "utf8"));
-	const skipped = journal.entries
+	const unrecorded = journal.entries
 		.map((entry) => ({
 			tag: entry.tag,
 			when: entry.when,
@@ -115,8 +102,19 @@ async function refuseSilentlySkippedMigrations(client) {
 				.update(readFileSync(join(migrationsFolder, `${entry.tag}.sql`)))
 				.digest("hex"),
 		}))
-		.filter((entry) => !applied.has(entry.hash) && entry.when <= newest);
+		.filter((entry) => !applied.has(entry.hash));
 
+	const drifted = unrecorded.filter((entry) => recordedAt.has(entry.when));
+	if (drifted.length > 0) {
+		throw new Error(
+			`refusing to migrate: ${drifted.map((entry) => `${entry.tag} (when ${entry.when})`).join(", ")} ` +
+				"is recorded in this database at its own timestamp but under a different hash, so the file changed " +
+				"after it was applied. Do NOT raise its `when`: that re-runs it against a database that already has " +
+				"it. Restore the file to what was applied, or reconcile the ledger deliberately.",
+		);
+	}
+
+	const skipped = unrecorded.filter((entry) => entry.when <= newest);
 	if (skipped.length === 0) return;
 	throw new Error(
 		`refusing to migrate: ${skipped.map((entry) => `${entry.tag} (when ${entry.when})`).join(", ")} ` +
@@ -171,7 +169,7 @@ async function main() {
 		// Doing it here rather than as a second command keeps the two from
 		// drifting apart, and it is a no-op where no runtime password is set.
 		await client.query("RESET ROLE");
-		const { connectionString, ssl } = connectionSettings();
+		const { connectionString, ssl } = connectionSettings(databaseUrl, isStagingMvp);
 		await provisionRuntimeLogins(client, databaseNameFrom(databaseUrl), { adminUrl: connectionString, ssl });
 	} finally {
 		await client.end();
