@@ -1056,6 +1056,27 @@ export const scrContentOpportunityDecisionEnum = selenaRegistrySchema.enum("cont
 	"SENT_TO_CREATION",
 ]);
 
+export const scrContentKindEnum = selenaRegistrySchema.enum("content_kind", ["GENERIC_POST", "YOUTUBE_VIDEO"]);
+export const scrContentWorkflowStageEnum = selenaRegistrySchema.enum("content_workflow_stage", [
+	"DRAFT",
+	"IDEA_SELECTED",
+	"SCRIPT_DRAFTED",
+	"IN_REVIEW",
+	"APPROVED",
+	"ARCHIVED",
+]);
+export const scrGenerationRunKindEnum = selenaRegistrySchema.enum("generation_run_kind", [
+	"IDEAS",
+	"SCRIPT",
+	"SCRIPT_REVISION",
+]);
+export const scrGenerationRunStatusEnum = selenaRegistrySchema.enum("generation_run_status", ["COMPLETED", "FAILED"]);
+export const scrEditorialDecisionEnum = selenaRegistrySchema.enum("editorial_decision", [
+	"APPROVED",
+	"CHANGES_REQUESTED",
+	"REJECTED",
+]);
+
 export const scrContentResearchRuns = selenaRegistrySchema
 	.table(
 		"content_research_runs",
@@ -1358,6 +1379,89 @@ export const scrChannelProviderBindings = selenaRegistrySchema
 	)
 	.enableRLS();
 
+export const scrGenerationRuns = selenaRegistrySchema
+	.table(
+		"generation_runs",
+		{
+			id: uuid("id").defaultRandom().primaryKey().notNull(),
+			organizationId: text("organization_id")
+				.notNull()
+				.references(() => organization.id),
+			brandId: text("brand_id")
+				.notNull()
+				.references(() => brands.id),
+			kind: scrGenerationRunKindEnum("kind").notNull(),
+			status: scrGenerationRunStatusEnum("status").notNull(),
+			adapterId: text("adapter_id").notNull(),
+			provider: text("provider").notNull(),
+			model: text("model"),
+			promptVersion: text("prompt_version").notNull(),
+			schemaVersion: text("schema_version").notNull(),
+			pipelineVersion: text("pipeline_version").notNull(),
+			inputSnapshotHash: text("input_snapshot_hash").notNull(),
+			outputHash: text("output_hash"),
+			validatedOutput: jsonb("validated_output"),
+			profileVersionId: uuid("profile_version_id")
+				.notNull()
+				.references(() => scrBrandContentProfileVersions.id),
+			profileHash: text("profile_hash").notNull(),
+			researchRunId: uuid("research_run_id").references(() => scrContentResearchRuns.id),
+			researchOpportunityId: uuid("research_opportunity_id").references(() => scrContentResearchOpportunities.id),
+			idempotencyKey: text("idempotency_key").notNull(),
+			correlationId: uuid("correlation_id").notNull(),
+			requestedCallCount: integer("requested_call_count").notNull().default(0),
+			actualCallCount: integer("actual_call_count").notNull().default(0),
+			estimatedCostMicros: bigint("estimated_cost_micros", { mode: "number" }),
+			actualCostMicros: bigint("actual_cost_micros", { mode: "number" }),
+			errorCode: text("error_code"),
+			startedAt: timestamp("started_at", { withTimezone: true }).notNull(),
+			completedAt: timestamp("completed_at", { withTimezone: true }).notNull(),
+			createdBy: text("created_by").notNull(),
+			createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+		},
+		(table) => ({
+			brandIdempotencyUnique: uniqueIndex("generation_runs_brand_idempotency_unique").on(
+				table.brandId,
+				table.idempotencyKey,
+			),
+			brandIdx: index("generation_runs_brand_idx").on(table.brandId, table.createdAt.desc()),
+			opportunityIdx: index("generation_runs_opportunity_idx").on(table.researchOpportunityId, table.createdAt.desc()),
+			orgIdx: index("generation_runs_org_idx").on(table.organizationId),
+		}),
+	)
+	.enableRLS();
+
+export const scrEditorialApprovals = selenaRegistrySchema
+	.table(
+		"editorial_approvals",
+		{
+			id: uuid("id").defaultRandom().primaryKey().notNull(),
+			organizationId: text("organization_id")
+				.notNull()
+				.references(() => organization.id),
+			brandId: text("brand_id")
+				.notNull()
+				.references(() => brands.id),
+			contentVersionId: uuid("content_version_id")
+				.notNull()
+				.references(() => scrContentVersions.id),
+			decision: scrEditorialDecisionEnum("decision").notNull(),
+			contentHash: text("content_hash").notNull(),
+			profileHash: text("profile_hash").notNull(),
+			evidenceHash: text("evidence_hash").notNull(),
+			assetBundleHash: text("asset_bundle_hash").notNull(),
+			reason: text("reason"),
+			decidedBy: text("decided_by").notNull(),
+			createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+		},
+		(table) => ({
+			versionIdx: index("editorial_approvals_version_idx").on(table.contentVersionId, table.createdAt.desc()),
+			brandIdx: index("editorial_approvals_brand_idx").on(table.brandId, table.createdAt.desc()),
+			orgIdx: index("editorial_approvals_org_idx").on(table.organizationId),
+		}),
+	)
+	.enableRLS();
+
 export const scrContentItems = selenaRegistrySchema
 	.table(
 		"content_items",
@@ -1371,6 +1475,9 @@ export const scrContentItems = selenaRegistrySchema
 				.references(() => brands.id),
 			title: text("title").notNull(),
 			status: scrContentStatusEnum().notNull().default("DRAFT"),
+			contentKind: scrContentKindEnum("content_kind").notNull().default("GENERIC_POST"),
+			contentChannelId: uuid("content_channel_id").references(() => scrContentChannels.id),
+			workflowStage: scrContentWorkflowStageEnum("workflow_stage").notNull().default("DRAFT"),
 			createdBy: text("created_by").notNull(),
 			createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 			updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
@@ -1378,6 +1485,7 @@ export const scrContentItems = selenaRegistrySchema
 		(table) => ({
 			brandIdx: index("scr_content_items_brand_idx").on(table.brandId),
 			orgIdx: index("scr_content_items_org_idx").on(table.organizationId),
+			kindStageIdx: index("content_items_kind_stage_idx").on(table.brandId, table.contentKind, table.workflowStage),
 		}),
 	)
 	.enableRLS();
@@ -1404,6 +1512,12 @@ export const scrContentVersions = selenaRegistrySchema
 			disclosure: jsonb("disclosure").notNull().default({}),
 			policyVersion: text("policy_version").notNull(),
 			contentHash: text("content_hash").notNull(),
+			formatVersion: text("format_version").notNull().default("legacy.text/v1"),
+			structuredBody: jsonb("structured_body"),
+			projectProfileVersionId: uuid("project_profile_version_id").references(() => scrBrandContentProfileVersions.id),
+			researchRunId: uuid("research_run_id").references(() => scrContentResearchRuns.id),
+			generationRunId: uuid("generation_run_id").references(() => scrGenerationRuns.id),
+			hashVersion: text("hash_version").notNull().default("selena.content/v1"),
 			evidenceExpiresAt: timestamp("evidence_expires_at", { withTimezone: true }),
 			immutable: boolean("immutable").notNull().default(true),
 			createdBy: text("created_by").notNull(),
