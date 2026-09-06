@@ -13,7 +13,13 @@ import fixtures from "@workspace/lib/contracts/control-room-event.v1.fixtures.js
 import { MAX_EVENT_BODY_BYTES, SIGNATURE_HEADER, TIMESTAMP_HEADER } from "@workspace/lib/selena-aether-bridge";
 import type { PoolClient } from "pg";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createReceiverServer, type RecordOutcome, receiverSecrets } from "./selena-aether-receiver";
+import {
+	createReceiverServer,
+	type ReceiverCredential,
+	type RecordOutcome,
+	receiverSecrets,
+	testCredential,
+} from "./selena-aether-receiver";
 
 const SECRETS = [fixtures.secret];
 const ACCEPTED = fixtures.cases.find((entry) => entry.name === "accepted");
@@ -60,7 +66,7 @@ async function withReceiver<T>(
 	task: (base: string, statements: string[]) => Promise<T>,
 ): Promise<T> {
 	const { pool, statements } = fakePool(behaviour);
-	const server = createReceiverServer({ secrets: SECRETS, pool });
+	const server = createReceiverServer({ credentials: [{ label: "live", secrets: SECRETS }], pool });
 	await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
 	const { port } = server.address() as AddressInfo;
 	try {
@@ -75,8 +81,16 @@ async function withReceiverSecrets<T>(
 	behaviour: ClientBehaviour,
 	task: (base: string, statements: string[]) => Promise<T>,
 ): Promise<T> {
+	return withCredentials([{ label: "live", secrets }], behaviour, task);
+}
+
+async function withCredentials<T>(
+	credentials: ReceiverCredential[],
+	behaviour: ClientBehaviour,
+	task: (base: string, statements: string[]) => Promise<T>,
+): Promise<T> {
 	const { pool, statements } = fakePool(behaviour);
-	const server = createReceiverServer({ secrets, pool });
+	const server = createReceiverServer({ credentials, pool });
 	await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
 	const { port } = server.address() as AddressInfo;
 	try {
@@ -304,5 +318,51 @@ describe("contract version 1.1 over the wire", () => {
 			// Read in full, then refused for what it is: an unsigned body, not a large one.
 			expect(response.status).toBe(401);
 		});
+	});
+	it("accepts a test credential only for the projects it is allowed to speak for", async () => {
+		atDraftSigningTime();
+		const project = JSON.parse(DRAFT.body).project_id as string;
+		const live: ReceiverCredential = { label: "live", secrets: ["a-different-live-secret"] };
+		const test = testCredential(fixturesV11.secret, project);
+		if (!test) throw new Error("the test credential should exist");
+		await withCredentials([live, test], { outcome: "recorded" }, async (base, statements) => {
+			const response = await post(base, DRAFT);
+			expect(response.status).toBe(202);
+			expect(statements.length).toBeGreaterThan(0);
+		});
+	});
+
+	it("refuses a test credential for a project it may not speak for", async () => {
+		atDraftSigningTime();
+		const live: ReceiverCredential = { label: "live", secrets: ["a-different-live-secret"] };
+		const test = testCredential(fixturesV11.secret, "11111111-2222-4333-8444-555555555555");
+		if (!test) throw new Error("the test credential should exist");
+		await withCredentials([live, test], { outcome: "recorded" }, async (base, statements) => {
+			const response = await post(base, DRAFT);
+			// Signed by a key the receiver holds, for a project that key cannot deliver for.
+			expect(response.status).toBe(401);
+			expect(statements).toHaveLength(0);
+		});
+	});
+
+	it("does not let the live credential be narrowed by the test allowlist", async () => {
+		atDraftSigningTime();
+		const live: ReceiverCredential = { label: "live", secrets: [fixturesV11.secret] };
+		const test = testCredential("an-unused-test-secret", "11111111-2222-4333-8444-555555555555");
+		if (!test) throw new Error("the test credential should exist");
+		await withCredentials([live, test], { outcome: "recorded" }, async (base) => {
+			const response = await post(base, DRAFT);
+			expect(response.status).toBe(202);
+		});
+	});
+
+	it("refuses to configure a test credential without an allowlist", () => {
+		expect(() => testCredential("a-secret", "")).toThrow(/SELENA_AETHER_BRIDGE_TEST_PROJECTS/);
+		expect(() => testCredential("a-secret", "   ,  ")).toThrow(/SELENA_AETHER_BRIDGE_TEST_PROJECTS/);
+	});
+
+	it("has no test credential when none is configured", () => {
+		expect(testCredential(undefined, "some-project")).toBeNull();
+		expect(testCredential("   ", "some-project")).toBeNull();
 	});
 });
