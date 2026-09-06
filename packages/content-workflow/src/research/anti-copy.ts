@@ -51,10 +51,20 @@ const STOPWORDS = new Set([
 	"should",
 ]);
 
+/**
+ * Unicode letters and numbers, not `[a-z0-9]`.
+ *
+ * The transferred version stripped every non-ASCII character, so a Russian
+ * title tokenized to nothing, two identical Russian strings scored zero
+ * similarity, and the anti-copy rule failed open for a language this product
+ * supports as a first-class route. The stopword list stays English-only, which
+ * only makes the check more conservative elsewhere: an unfiltered stopword is
+ * one more token that has to match.
+ */
 export function contentTokens(text: string): string[] {
 	return text
 		.toLowerCase()
-		.replace(/[^a-z0-9\s]/g, " ")
+		.replace(/[^\p{L}\p{N}\s]/gu, " ")
 		.split(/\s+/)
 		.filter((token) => token.length > 2 && !STOPWORDS.has(token));
 }

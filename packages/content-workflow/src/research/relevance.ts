@@ -31,9 +31,11 @@ function containsKeyword(haystack: string, keyword: string): boolean {
 	const needle = keyword.toLowerCase().trim();
 	if (!needle) return false;
 	// Word-boundary match for single tokens so "ai" does not match "chair";
-	// multi-word keywords are matched as phrases.
-	if (/^[a-z0-9]+$/i.test(needle)) {
-		return new RegExp(`(^|[^a-z0-9])${needle}([^a-z0-9]|$)`, "i").test(haystack);
+	// multi-word keywords are matched as phrases. The classes are Unicode, so a
+	// Cyrillic term gets the same boundary treatment an ASCII one does instead of
+	// falling through to a looser substring match.
+	if (/^[\p{L}\p{N}]+$/u.test(needle)) {
+		return new RegExp(`(^|[^\\p{L}\\p{N}])${needle}([^\\p{L}\\p{N}]|$)`, "iu").test(haystack);
 	}
 	return haystack.includes(needle);
 }

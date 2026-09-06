@@ -41,10 +41,24 @@ export * from "./relevance";
 export * from "./score";
 export * from "./video-type";
 
-/** A source with no usable provenance is dropped, never stored as anonymous. */
-function hasUsableProvenance(provenance: SourceProvenance | undefined): provenance is SourceProvenance {
+/**
+ * A source with no usable provenance is dropped, never stored as anonymous.
+ *
+ * The provenance is checked against the source it claims to describe, not just
+ * in isolation: a record that agrees on the external id but disagrees on the
+ * platform or URL would otherwise be accepted, and persistence would then store
+ * the source's URL beside the provenance's adapter and capture time — evidence
+ * lineage that does not establish where the stored source actually came from.
+ */
+function hasUsableProvenance(
+	provenance: SourceProvenance | undefined,
+	source: ResearchSource,
+): provenance is SourceProvenance {
 	if (!provenance) return false;
 	if (!provenance.externalId.trim() || !provenance.sourceUrl.trim()) return false;
+	if (provenance.externalId !== source.externalId) return false;
+	if (provenance.sourceUrl !== source.sourceUrl) return false;
+	if (provenance.platform !== source.platform) return false;
 	return Number.isFinite(new Date(provenance.capturedAt).getTime());
 }
 
@@ -95,7 +109,7 @@ export async function runResearchPipeline(input: ResearchRunInput): Promise<Rese
 	for (const source of fetched.sources) {
 		counters.sourcesDiscovered += 1;
 		const provenance = provenanceById.get(source.externalId);
-		if (!hasUsableProvenance(provenance)) {
+		if (!hasUsableProvenance(provenance, source)) {
 			failures.push({ stage: "provenance", subjectId: source.externalId, code: "MISSING_PROVENANCE", occurredAt });
 			continue;
 		}

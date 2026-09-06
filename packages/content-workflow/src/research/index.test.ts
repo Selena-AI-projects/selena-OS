@@ -161,6 +161,14 @@ describe("fixture research run", () => {
 		expect(outcome.counters.sourcesScored).toBe(1);
 	});
 
+	// Provenance that agrees on the id but disagrees on the URL would otherwise
+	// be stored beside a source it does not describe.
+	it("drops a source whose provenance describes a different location", async () => {
+		const outcome = await run(new MismatchedProvenanceAdapter());
+		expect(outcome.counters.sourcesScored).toBe(0);
+		expect(outcome.failures.map((failure) => failure.code)).toEqual(["MISSING_PROVENANCE"]);
+	});
+
 	it("rejects an adaptation that stays too close to the source", async () => {
 		const outcome = await run(new EchoingAdapter());
 		expect(outcome.counters.opportunitiesRejectedByAntiCopy).toBeGreaterThan(0);
@@ -178,6 +186,24 @@ describe("anti-copy rule", () => {
 	it("accepts a genuinely different angle", () => {
 		expect(
 			isTooSimilarToSource("How I doubled my studio bookings in 30 days", "What reminder timing actually changes"),
+		).toBe(false);
+	});
+
+	// An ASCII-only tokenizer reduced these to nothing, so the rule scored two
+	// identical strings as completely dissimilar and failed open for a language
+	// the product supports as a first-class route.
+	it("catches a copied title written in a non-Latin script", () => {
+		const source = "Как я удвоил количество записей в студии за 30 дней";
+		expect(isTooSimilarToSource(source, source)).toBe(true);
+		expect(isTooSimilarToSource(source, "Как я удвоил количество записей в салоне за 30 дней")).toBe(true);
+	});
+
+	it("still accepts a different angle in the same script", () => {
+		expect(
+			isTooSimilarToSource(
+				"Как я удвоил количество записей в студии за 30 дней",
+				"Что на самом деле меняет напоминание",
+			),
 		).toBe(false);
 	});
 });
@@ -311,6 +337,26 @@ class DuplicatingAdapter extends FixtureResearchAdapter {
 					platform: "youtube" as const,
 					externalId: source.externalId,
 					sourceUrl: source.sourceUrl,
+					capturedAt: NOW.toISOString(),
+				},
+			],
+			externalProviderCalls: 0,
+		};
+	}
+}
+
+/** Provenance that agrees on the external id but points at a different location. */
+class MismatchedProvenanceAdapter extends FixtureResearchAdapter {
+	override async fetch() {
+		const source = fixtureSource();
+		return {
+			sources: [source],
+			provenance: [
+				{
+					adapterId: "fixture" as const,
+					platform: "youtube" as const,
+					externalId: source.externalId,
+					sourceUrl: "https://example.test/somewhere-else",
 					capturedAt: NOW.toISOString(),
 				},
 			],

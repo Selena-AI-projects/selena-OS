@@ -152,11 +152,17 @@ function ResearchPage() {
 							Scored against confirmed profile version {confirmedProfile.version} (
 							<span className="font-mono">{confirmedProfile.profileHash.slice(0, 12)}…</span>)
 						</p>
-						<div>
-							<Button className="min-h-11" type="button" disabled={pending} onClick={importFixture}>
-								<IconDownload aria-hidden="true" /> Import fixture research
-							</Button>
-						</div>
+						{canDecide ? (
+							<div>
+								<Button className="min-h-11" type="button" disabled={pending} onClick={importFixture}>
+									<IconDownload aria-hidden="true" /> Import fixture research
+								</Button>
+							</div>
+						) : (
+							// A viewer's import would always be refused server-side, so the
+							// control says why instead of offering an action that cannot work.
+							<p className="text-muted-foreground text-sm">Importing research needs edit access to this project.</p>
+						)}
 					</CardContent>
 				</Card>
 			)}
