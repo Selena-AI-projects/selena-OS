@@ -169,6 +169,14 @@ describe("fixture research run", () => {
 		expect(outcome.failures.map((failure) => failure.code)).toEqual(["MISSING_PROVENANCE"]);
 	});
 
+	// The stored URL is rendered as an href, so a scheme the browser would treat
+	// as code must never reach persistence in the first place.
+	it("drops a source whose URL is not an https link", async () => {
+		const outcome = await run(new UnsafeUrlAdapter());
+		expect(outcome.counters.sourcesScored).toBe(0);
+		expect(outcome.failures.map((failure) => failure.code)).toEqual(["MISSING_PROVENANCE"]);
+	});
+
 	it("rejects an adaptation that stays too close to the source", async () => {
 		const outcome = await run(new EchoingAdapter());
 		expect(outcome.counters.opportunitiesRejectedByAntiCopy).toBeGreaterThan(0);
@@ -357,6 +365,26 @@ class MismatchedProvenanceAdapter extends FixtureResearchAdapter {
 					platform: "youtube" as const,
 					externalId: source.externalId,
 					sourceUrl: "https://example.test/somewhere-else",
+					capturedAt: NOW.toISOString(),
+				},
+			],
+			externalProviderCalls: 0,
+		};
+	}
+}
+
+/** A source whose URL carries a scheme the surface would render as a link. */
+class UnsafeUrlAdapter extends FixtureResearchAdapter {
+	override async fetch() {
+		const source = fixtureSource({ externalId: "unsafe-1", sourceUrl: "javascript:alert(1)" });
+		return {
+			sources: [source],
+			provenance: [
+				{
+					adapterId: "fixture" as const,
+					platform: "youtube" as const,
+					externalId: source.externalId,
+					sourceUrl: source.sourceUrl,
 					capturedAt: NOW.toISOString(),
 				},
 			],

@@ -42,7 +42,10 @@ CREATE TABLE selena_registry.content_research_sources (
   run_id uuid NOT NULL REFERENCES selena_registry.content_research_runs(id),
   platform text NOT NULL CHECK (platform = 'youtube'),
   external_id text NOT NULL CHECK (length(btrim(external_id)) > 0),
-  source_url text NOT NULL CHECK (length(btrim(source_url)) > 0),
+  -- The one adapter-filled column the surface renders as an href. A scheme
+  -- constraint is the only thing standing between a future provider's payload
+  -- and a `javascript:` link, and it belongs here rather than in every writer.
+  source_url text NOT NULL CHECK (source_url ~ '^https://[^[:space:]]+$'),
   adapter_id text NOT NULL CHECK (adapter_id IN ('fixture', 'video-radar')),
   channel_id text NOT NULL,
   channel_name text NOT NULL,

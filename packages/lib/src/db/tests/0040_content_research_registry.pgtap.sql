@@ -1,6 +1,6 @@
 BEGIN;
 
-SELECT plan(66);
+SELECT plan(67);
 
 SELECT has_table('selena_registry', 'content_research_runs', 'research runs table exists');
 SELECT has_table('selena_registry', 'content_research_sources', 'research sources table exists');
@@ -269,6 +269,25 @@ SELECT throws_matching(
   )$$,
   'content_research_sources_transcript_failure_reason_check',
   'a transcript failure records a normalized code, not provider prose'
+);
+
+SELECT throws_matching(
+  $$INSERT INTO selena_registry.content_research_sources (
+    organization_id, brand_id, run_id, platform, external_id, source_url, adapter_id,
+    channel_id, channel_name, title, description, published_at, captured_at,
+    video_type, transcript_status, transcript_failure_reason, baseline_sample_size,
+    baseline_confidence, outlier_band, outlier_maturity, relevance_score, candidate_score,
+    weight_coverage, score_components, scoring_version, baseline_version, created_by
+  ) VALUES (
+    'research-org', 'research-brand-a', '20000000-0000-4000-8000-000000000110', 'youtube',
+    'source-scheme', 'javascript:alert(1)', 'fixture', 'channel-1', 'Channel One',
+    'A title', 'A description', now(), now(), 'LONG', 'UNAVAILABLE',
+    'NO_TRANSCRIPT_PUBLISHED', 0,
+    'UNAVAILABLE', 'UNAVAILABLE', 'PROVISIONAL', 0.1, 0.1, 0.5, '[]'::jsonb,
+    'content.research.scoring/v1', 'radar-baseline-v1', 'research-owner'
+  )$$,
+  'content_research_sources_source_url_check',
+  'a source url the surface renders as an href must carry the https scheme'
 );
 
 SELECT lives_ok(

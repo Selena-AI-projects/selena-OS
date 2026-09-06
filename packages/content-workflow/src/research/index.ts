@@ -55,11 +55,21 @@ function hasUsableProvenance(
 	source: ResearchSource,
 ): provenance is SourceProvenance {
 	if (!provenance) return false;
-	if (!provenance.externalId.trim() || !provenance.sourceUrl.trim()) return false;
+	if (!provenance.externalId.trim() || !isRenderableSourceUrl(provenance.sourceUrl)) return false;
 	if (provenance.externalId !== source.externalId) return false;
 	if (provenance.sourceUrl !== source.sourceUrl) return false;
 	if (provenance.platform !== source.platform) return false;
 	return Number.isFinite(new Date(provenance.capturedAt).getTime());
+}
+
+/**
+ * A source URL is rendered as a link, so the scheme is a safety property rather
+ * than a formatting preference. The database carries the same constraint; this
+ * one exists so a malformed adapter response is dropped with the rest of its
+ * source instead of failing a transaction that has already done work.
+ */
+function isRenderableSourceUrl(value: string): boolean {
+	return /^https:\/\/\S+$/.test(value);
 }
 
 function evidenceConfidenceFor(scored: ScoredSource): EvidenceConfidence {
