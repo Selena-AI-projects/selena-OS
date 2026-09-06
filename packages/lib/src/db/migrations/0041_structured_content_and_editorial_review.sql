@@ -60,6 +60,12 @@ CREATE TABLE selena_registry.generation_runs (
   profile_hash text NOT NULL CHECK (profile_hash ~ '^[a-f0-9]{64}$'),
   research_run_id uuid REFERENCES selena_registry.content_research_runs(id),
   research_opportunity_id uuid REFERENCES selena_registry.content_research_opportunities(id),
+  -- Which draft the run was for. An IDEAS run has none, because the draft is
+  -- what selecting one of its ideas creates; a script run always has one. A
+  -- failed script run therefore still says which draft it failed on, and an
+  -- idempotency key can be checked against the request it was used for rather
+  -- than only against the brand.
+  content_item_id uuid REFERENCES selena_registry.content_items(id),
   idempotency_key text NOT NULL CHECK (length(btrim(idempotency_key)) > 0),
   correlation_id uuid NOT NULL,
   requested_call_count integer DEFAULT 0 NOT NULL CHECK (requested_call_count >= 0),
@@ -84,6 +90,10 @@ CREATE TABLE selena_registry.generation_runs (
     OR (status = 'FAILED' AND validated_output IS NULL AND output_hash IS NULL AND error_code IS NOT NULL)
   ),
   CONSTRAINT generation_runs_calls_within_request CHECK (actual_call_count <= requested_call_count),
+  CONSTRAINT generation_runs_item_matches_kind CHECK (
+    (kind = 'IDEAS' AND content_item_id IS NULL)
+    OR (kind <> 'IDEAS' AND content_item_id IS NOT NULL)
+  ),
   -- Stage 1 spends nothing, and the schema says so rather than the code alone.
   -- Written against the counters rather than against the provider name: the
   -- application records every Stage 1 run as provider 'none', so a disjunct on
@@ -98,6 +108,8 @@ CREATE INDEX generation_runs_brand_idx ON selena_registry.generation_runs (brand
 CREATE INDEX generation_runs_opportunity_idx
   ON selena_registry.generation_runs (research_opportunity_id, created_at DESC);
 CREATE INDEX generation_runs_org_idx ON selena_registry.generation_runs (organization_id);
+CREATE INDEX generation_runs_item_idx
+  ON selena_registry.generation_runs (content_item_id, created_at DESC);
 
 -- ── which idea a draft is ───────────────────────────────────────────────────
 -- Identity by position in the run rather than by title: a title is editable and
@@ -230,10 +242,23 @@ CREATE POLICY content_items_schema_owner_select ON selena_registry.content_items
 CREATE FUNCTION selena_release.reject_unsupported_youtube_release() RETURNS trigger
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, pg_temp AS $$
 DECLARE
-  kind selena_registry.content_kind;
+  is_youtube boolean;
   found boolean;
 BEGIN
-  SELECT item.content_kind, true INTO kind, found
+  -- The version's own format is read first, and the item's kind second. A
+  -- content_version admits no UPDATE and no DELETE from any runtime role, so
+  -- format_version is a statement that cannot be edited after the fact;
+  -- content_kind is a column the ordinary web runtime may UPDATE through
+  -- content_items_web_update. A gate that consulted only the mutable one would
+  -- be opened by flipping the kind, releasing, and flipping it back — no
+  -- operator, no gateway, no new provider value. The kind is kept in the
+  -- condition because a YouTube draft whose version is still legacy text is a
+  -- YouTube release too.
+  SELECT
+      version.format_version = 'content.youtube-video/v1'
+        OR item.content_kind = 'YOUTUBE_VIDEO',
+      true
+    INTO is_youtube, found
   FROM selena_registry.content_versions version
   JOIN selena_registry.content_items item ON item.id = version.content_id
   WHERE version.id = NEW.content_version_id;
@@ -247,7 +272,9 @@ BEGIN
       USING ERRCODE = 'raise_exception';
   END IF;
 
-  IF kind IS DISTINCT FROM 'YOUTUBE_VIDEO' THEN
+  -- COALESCE to true rather than to false: an unreadable answer is gated, not
+  -- waved through.
+  IF NOT COALESCE(is_youtube, true) THEN
     RETURN NEW;
   END IF;
 
@@ -257,6 +284,11 @@ BEGIN
     JOIN selena_registry.channel_provider_bindings binding
       ON binding.channel_account_id = account.id
     WHERE account.id = NEW.channel_account_id
+      -- The account has to be the one this release is for. Without these two the
+      -- gate would open on any tenant's allowlisted YouTube account, which is a
+      -- decision another organization made about its own channel.
+      AND account.organization_id = NEW.organization_id
+      AND account.brand_id = NEW.brand_id
       AND account.platform = 'youtube'
       AND account.allowlisted
       AND account.status = 'ACTIVE'
@@ -316,6 +348,15 @@ CREATE POLICY generation_runs_web_insert ON selena_registry.generation_runs
       ORDER BY decided.created_at DESC, decided.id DESC
       LIMIT 1
     ) = 'CONFIRMED'
+    AND (
+      selena_registry.generation_runs.content_item_id IS NULL
+      OR EXISTS (
+        SELECT 1 FROM selena_registry.content_items item
+        WHERE item.id = selena_registry.generation_runs.content_item_id
+          AND item.organization_id = selena_registry.generation_runs.organization_id
+          AND item.brand_id = selena_registry.generation_runs.brand_id
+      )
+    )
     -- The research a generation runs against must be this brand's own.
     AND (
       selena_registry.generation_runs.research_run_id IS NULL
@@ -397,6 +438,17 @@ CREATE POLICY content_versions_web_insert ON selena_registry.content_versions
     selena_registry.can_write_brand(organization_id, brand_id, ARRAY['web'])
     -- Every reference to the new row is schema-qualified: an unqualified name
     -- inside EXISTS resolves against the subquery's own table.
+    --
+    -- content_id was never checked either. The version number is unique across
+    -- the whole table, so a session could not only hang a version off another
+    -- brand's item but take the next version number that item's own next write
+    -- was going to use.
+    AND EXISTS (
+      SELECT 1 FROM selena_registry.content_items item
+      WHERE item.id = selena_registry.content_versions.content_id
+        AND item.organization_id = selena_registry.content_versions.organization_id
+        AND item.brand_id = selena_registry.content_versions.brand_id
+    )
     AND (
       selena_registry.content_versions.project_profile_version_id IS NULL
       OR EXISTS (
@@ -425,6 +477,81 @@ CREATE POLICY content_versions_web_insert ON selena_registry.content_versions
       )
     )
   );
+
+-- content_items carries lineage of its own now, and 0021's insert and update
+-- policies are a bare can_write_brand. The single-column foreign keys prove the
+-- referenced rows exist and nothing more, so a session could hang another
+-- brand's generation run or content channel on its own item — and the idea a
+-- script's evidence is drawn from is resolved through exactly those two columns.
+DROP POLICY content_items_web_insert ON selena_registry.content_items;
+CREATE POLICY content_items_web_insert ON selena_registry.content_items
+  FOR INSERT TO selena_web_runtime
+  WITH CHECK (
+    selena_registry.can_write_brand(organization_id, brand_id, ARRAY['web'])
+    AND (
+      selena_registry.content_items.content_channel_id IS NULL
+      OR EXISTS (
+        SELECT 1 FROM selena_registry.content_channels channel
+        WHERE channel.id = selena_registry.content_items.content_channel_id
+          AND channel.organization_id = selena_registry.content_items.organization_id
+          AND channel.brand_id = selena_registry.content_items.brand_id
+      )
+    )
+    AND (
+      selena_registry.content_items.idea_generation_run_id IS NULL
+      OR EXISTS (
+        SELECT 1 FROM selena_registry.generation_runs generation
+        WHERE generation.id = selena_registry.content_items.idea_generation_run_id
+          AND generation.organization_id = selena_registry.content_items.organization_id
+          AND generation.brand_id = selena_registry.content_items.brand_id
+      )
+    )
+  );
+DROP POLICY content_items_web_update ON selena_registry.content_items;
+CREATE POLICY content_items_web_update ON selena_registry.content_items
+  FOR UPDATE TO selena_web_runtime
+  USING (selena_registry.can_write_brand(organization_id, brand_id, ARRAY['web']))
+  WITH CHECK (
+    selena_registry.can_write_brand(organization_id, brand_id, ARRAY['web'])
+    AND (
+      selena_registry.content_items.content_channel_id IS NULL
+      OR EXISTS (
+        SELECT 1 FROM selena_registry.content_channels channel
+        WHERE channel.id = selena_registry.content_items.content_channel_id
+          AND channel.organization_id = selena_registry.content_items.organization_id
+          AND channel.brand_id = selena_registry.content_items.brand_id
+      )
+    )
+    AND (
+      selena_registry.content_items.idea_generation_run_id IS NULL
+      OR EXISTS (
+        SELECT 1 FROM selena_registry.generation_runs generation
+        WHERE generation.id = selena_registry.content_items.idea_generation_run_id
+          AND generation.organization_id = selena_registry.content_items.organization_id
+          AND generation.brand_id = selena_registry.content_items.brand_id
+      )
+    )
+  );
+
+-- What a draft is is not an editable field. The release guard reads it, the
+-- CHECK that a YouTube video names a channel is written against it, and the
+-- creation surfaces filter on it; a column three rules depend on should not be
+-- one an ordinary UPDATE can turn over. The guard no longer depends on this
+-- being true, which is why this is a second lock rather than the only one.
+CREATE FUNCTION selena_registry.reject_content_kind_change() RETURNS trigger
+LANGUAGE plpgsql SET search_path = pg_catalog, pg_temp AS $$
+BEGIN
+  IF NEW.content_kind IS DISTINCT FROM OLD.content_kind THEN
+    RAISE EXCEPTION
+      'Selena refuses to change the kind of an existing content item'
+      USING ERRCODE = 'raise_exception';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+CREATE TRIGGER content_items_kind_immutable
+  BEFORE UPDATE ON selena_registry.content_items
+  FOR EACH ROW EXECUTE FUNCTION selena_registry.reject_content_kind_change();
 
 CREATE TRIGGER generation_runs_append_only
   BEFORE UPDATE OR DELETE ON selena_registry.generation_runs

@@ -1,6 +1,6 @@
 BEGIN;
 
-SELECT plan(58);
+SELECT plan(70);
 
 SELECT has_table('selena_registry', 'generation_runs', 'generation runs table exists');
 SELECT has_table('selena_registry', 'editorial_approvals', 'editorial approvals table exists');
@@ -114,7 +114,27 @@ INSERT INTO selena_registry.content_research_opportunities (
    'opp-b', 'An angle', 'A hook', 'LONG_VIDEO', 'A rationale', 'Evidence', 'HIGH', '[]'::jsonb, 'creation-owner');
 
 INSERT INTO selena_registry.content_channels (id, organization_id, brand_id, platform, created_by)
-VALUES ('40000000-0000-4000-8000-000000000301', 'creation-org', 'creation-brand-a', 'youtube', 'creation-owner');
+VALUES
+  ('40000000-0000-4000-8000-000000000301', 'creation-org', 'creation-brand-a', 'youtube', 'creation-owner'),
+  ('40000000-0000-4000-8000-000000000302', 'creation-org', 'creation-brand-b', 'youtube', 'creation-owner');
+
+-- A sibling brand's item and generation run, seeded before the role switch
+-- because the web runtime is refused from writing them at all. They exist so the
+-- lineage columns on content_items have something real to be pointed at.
+INSERT INTO selena_registry.content_items (id, organization_id, brand_id, title, created_by)
+VALUES ('40000000-0000-4000-8000-000000000502', 'creation-org', 'creation-brand-b', 'B post', 'creation-owner');
+INSERT INTO selena_registry.generation_runs (
+  id, organization_id, brand_id, kind, status, adapter_id, provider,
+  prompt_version, schema_version, pipeline_version, input_snapshot_hash, output_hash,
+  validated_output, profile_version_id, profile_hash, idempotency_key, correlation_id,
+  started_at, completed_at, created_by
+) VALUES (
+  '40000000-0000-4000-8000-000000000403', 'creation-org', 'creation-brand-b', 'IDEAS', 'COMPLETED',
+  'fixture', 'none', 'fixture/v1', 'content.creation.idea/v1', 'content.creation/v1',
+  repeat('1', 64), repeat('2', 64), '{"ideas":[]}'::jsonb,
+  '40000000-0000-4000-8000-000000000002', repeat('b', 64),
+  'gen-b', '50000000-0000-4000-8000-000000000018', now(), now(), 'creation-owner'
+);
 
 SET LOCAL ROLE selena_web_runtime;
 SELECT selena_registry.set_request_context(
@@ -261,6 +281,71 @@ SELECT lives_ok(
     'YOUTUBE_VIDEO', '40000000-0000-4000-8000-000000000301', 'IDEA_SELECTED', 'creation-owner'
   )$$,
   'a YouTube video item can be created for a DRAFT_ONLY channel'
+);
+
+-- content_items now carries lineage of its own, and 0021 governed both writes
+-- with a bare can_write_brand. The foreign keys prove the referenced rows exist
+-- and say nothing about whose they are.
+SELECT throws_ok(
+  $$INSERT INTO selena_registry.content_items (
+    organization_id, brand_id, title, content_kind, content_channel_id, created_by
+  ) VALUES (
+    'creation-org', 'creation-brand-a', 'A video', 'YOUTUBE_VIDEO',
+    '40000000-0000-4000-8000-000000000302', 'creation-owner'
+  )$$,
+  42501,
+  'new row violates row-level security policy for table "content_items"',
+  'a draft cannot be created for a sibling brand''s channel'
+);
+SELECT throws_ok(
+  $$UPDATE selena_registry.content_items
+      SET content_channel_id = '40000000-0000-4000-8000-000000000302'
+      WHERE id = '40000000-0000-4000-8000-000000000501'$$,
+  42501,
+  'new row violates row-level security policy for table "content_items"',
+  'a draft cannot be moved onto a sibling brand''s channel'
+);
+SELECT throws_ok(
+  $$UPDATE selena_registry.content_items
+      SET selected_idea_index = 0, idea_generation_run_id = '40000000-0000-4000-8000-000000000403'
+      WHERE id = '40000000-0000-4000-8000-000000000501'$$,
+  42501,
+  'new row violates row-level security policy for table "content_items"',
+  'a draft cannot name a sibling brand''s generation run as the idea it came from'
+);
+SELECT lives_ok(
+  $$UPDATE selena_registry.content_items
+      SET selected_idea_index = 0, idea_generation_run_id = '40000000-0000-4000-8000-000000000401'
+      WHERE id = '40000000-0000-4000-8000-000000000501'$$,
+  'a draft names its own brand''s generation run, so this is a condition and not a refusal'
+);
+
+-- What a draft is decides whether the release guard gates it, whether a channel
+-- is required, and whether the creation surfaces list it. An UPDATE is not a way
+-- to change the answer.
+SELECT throws_matching(
+  $$UPDATE selena_registry.content_items SET content_kind = 'GENERIC_POST'
+      WHERE id = '40000000-0000-4000-8000-000000000501'$$,
+  'refuses to change the kind of an existing content item',
+  'the kind of an existing draft cannot be edited'
+);
+SELECT lives_ok(
+  $$UPDATE selena_registry.content_items SET workflow_stage = 'SCRIPT_DRAFTED'
+      WHERE id = '40000000-0000-4000-8000-000000000501'$$,
+  'an ordinary stage change is untouched by the kind lock'
+);
+
+SELECT throws_ok(
+  $$INSERT INTO selena_registry.content_versions (
+    organization_id, brand_id, content_id, version, body, cta_url,
+    policy_version, content_hash, created_by
+  ) VALUES (
+    'creation-org', 'creation-brand-a', '40000000-0000-4000-8000-000000000502', 1,
+    'Legacy body', 'https://example.test/cta', 'brand-pack/v1', repeat('7', 64), 'creation-owner'
+  )$$,
+  42501,
+  'new row violates row-level security policy for table "content_versions"',
+  'a version cannot be hung off a sibling brand''s draft, taking the version number its own next write needs'
 );
 
 -- A version written before this migration is legacy text with a V1 hash, and
@@ -494,9 +579,16 @@ SELECT selena_registry.set_request_context(
   '50000000-0000-4000-8000-000000000020', 'web', 'session'
 );
 SELECT is(
-  (SELECT count(*)::integer FROM selena_registry.generation_runs),
+  (SELECT count(*)::integer FROM selena_registry.generation_runs WHERE brand_id <> 'creation-brand-b'),
   0,
   'a sibling brand sees none of the first brand''s generation runs'
+);
+-- Counted against its own row rather than against an empty table: a policy that
+-- returned nothing to anybody would pass the assertion above and be useless.
+SELECT is(
+  (SELECT count(*)::integer FROM selena_registry.generation_runs),
+  1,
+  'and does see its own'
 );
 SELECT is(
   (SELECT count(*)::integer FROM selena_registry.editorial_approvals),
@@ -643,6 +735,110 @@ SELECT throws_matching(
   )$$,
   'no allowlisted YouTube channel account with a publication adapter exists',
   'a YouTube video cannot be given a release manifest in Stage 1'
+);
+
+-- The kind of a draft is a column the ordinary web runtime may UPDATE, so a gate
+-- that read only it would be opened by flipping the kind, releasing, and
+-- flipping it back. Here the item says GENERIC_POST and the version says
+-- content.youtube-video/v1, and the version is the one that cannot be edited.
+INSERT INTO selena_registry.content_items (
+  id, organization_id, brand_id, title, content_kind, created_by
+) VALUES (
+  '40000000-0000-4000-8000-000000000905', 'creation-org', 'creation-brand-a', 'A disguised video',
+  'GENERIC_POST', 'creation-owner'
+);
+INSERT INTO selena_registry.content_versions (
+  id, organization_id, brand_id, content_id, version, body, cta_url, policy_version, content_hash,
+  format_version, hash_version, structured_body, project_profile_version_id, research_run_id,
+  generation_run_id, created_by
+) VALUES (
+  '40000000-0000-4000-8000-000000000906', 'creation-org', 'creation-brand-a',
+  '40000000-0000-4000-8000-000000000905', 1, 'Rendered body', 'https://example.test/cta',
+  'brand-pack/v1', repeat('3', 64), 'content.youtube-video/v1', 'content.workflow/v2',
+  '{"schema":"content.youtube-video/v1"}'::jsonb,
+  '40000000-0000-4000-8000-000000000001', '40000000-0000-4000-8000-000000000101',
+  '40000000-0000-4000-8000-000000000401', 'creation-owner'
+);
+INSERT INTO selena_registry.approvals (
+  id, organization_id, brand_id, content_version_id, channel_account_id, decision,
+  binding_hash, content_hash, asset_bundle_hash, policy_version, disclosure_hash, approver_id, expires_at
+) VALUES (
+  '40000000-0000-4000-8000-000000000907', 'creation-org', 'creation-brand-a',
+  '40000000-0000-4000-8000-000000000906', '40000000-0000-4000-8000-000000000701', 'APPROVED',
+  repeat('b', 64), repeat('3', 64), repeat('f', 64), 'brand-pack/v1', repeat('d', 64),
+  'creation-owner', now() + interval '1 day'
+);
+SELECT throws_matching(
+  $$INSERT INTO selena_release.release_intents (
+    organization_id, brand_id, content_version_id, approval_id, channel_account_id,
+    platform, idempotency_key, correlation_id, created_by
+  ) VALUES (
+    'creation-org', 'creation-brand-a', '40000000-0000-4000-8000-000000000906',
+    '40000000-0000-4000-8000-000000000907', '40000000-0000-4000-8000-000000000701',
+    'youtube', 'release-disguised', '50000000-0000-4000-8000-000000000033', 'creation-owner'
+  )$$,
+  'no allowlisted YouTube channel account with a publication adapter exists',
+  'the gate reads the version''s own immutable format, not only the item''s editable kind'
+);
+SELECT throws_matching(
+  $$UPDATE selena_registry.content_items SET content_kind = 'GENERIC_POST'
+      WHERE id = '40000000-0000-4000-8000-000000000501'$$,
+  'refuses to change the kind of an existing content item',
+  'the kind is held by a trigger, so bypassing row security does not unlock it'
+);
+
+-- The tenant half of the gate cannot be reached while 0033's allowlist refuses
+-- every YouTube provider value, so the allowlist is lifted for the rest of this
+-- transaction — which is rolled back — to rehearse the day a YouTube adapter is
+-- admitted. Without this the predicate would be untested until the migration
+-- that introduces the adapter, which is the wrong time to discover it is absent.
+ALTER TABLE selena_registry.channel_provider_bindings
+  DROP CONSTRAINT channel_provider_bindings_provider_known;
+INSERT INTO selena_registry.channel_accounts (id, organization_id, brand_id, platform, provider_account_ref, created_by)
+VALUES ('40000000-0000-4000-8000-000000000702', 'creation-org', 'creation-brand-b', 'youtube', 'yt-ref-b', 'creation-owner');
+INSERT INTO selena_registry.channel_provider_bindings (
+  organization_id, brand_id, channel_account_id, provider, environment, active, created_by
+) VALUES (
+  'creation-org', 'creation-brand-b', '40000000-0000-4000-8000-000000000702',
+  'youtube', 'PRODUCTION', true, 'creation-owner'
+);
+INSERT INTO selena_registry.approvals (
+  id, organization_id, brand_id, content_version_id, channel_account_id, decision,
+  binding_hash, content_hash, asset_bundle_hash, policy_version, disclosure_hash, approver_id, expires_at
+) VALUES (
+  '40000000-0000-4000-8000-000000000908', 'creation-org', 'creation-brand-a',
+  '40000000-0000-4000-8000-000000000602', '40000000-0000-4000-8000-000000000702', 'APPROVED',
+  repeat('b', 64), repeat('8', 64), repeat('f', 64), 'brand-pack/v1', repeat('d', 64),
+  'creation-owner', now() + interval '1 day'
+);
+SELECT throws_matching(
+  $$INSERT INTO selena_release.release_intents (
+    organization_id, brand_id, content_version_id, approval_id, channel_account_id,
+    platform, idempotency_key, correlation_id, created_by
+  ) VALUES (
+    'creation-org', 'creation-brand-a', '40000000-0000-4000-8000-000000000602',
+    '40000000-0000-4000-8000-000000000908', '40000000-0000-4000-8000-000000000702',
+    'youtube', 'release-foreign-account', '50000000-0000-4000-8000-000000000034', 'creation-owner'
+  )$$,
+  'no allowlisted YouTube channel account with a publication adapter exists',
+  'another brand''s allowlisted YouTube account does not open this brand''s gate'
+);
+INSERT INTO selena_registry.channel_provider_bindings (
+  organization_id, brand_id, channel_account_id, provider, environment, active, created_by
+) VALUES (
+  'creation-org', 'creation-brand-a', '40000000-0000-4000-8000-000000000701',
+  'youtube', 'PRODUCTION', true, 'creation-owner'
+);
+SELECT lives_ok(
+  $$INSERT INTO selena_release.release_intents (
+    organization_id, brand_id, content_version_id, approval_id, channel_account_id,
+    platform, idempotency_key, correlation_id, created_by
+  ) VALUES (
+    'creation-org', 'creation-brand-a', '40000000-0000-4000-8000-000000000602',
+    '40000000-0000-4000-8000-000000000801', '40000000-0000-4000-8000-000000000701',
+    'youtube', 'release-own-account', '50000000-0000-4000-8000-000000000035', 'creation-owner'
+  )$$,
+  'the brand''s own allowlisted YouTube account with a YouTube adapter does open the gate'
 );
 
 -- The guard reads content_items through a SECURITY DEFINER function owned by

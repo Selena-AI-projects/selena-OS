@@ -362,6 +362,11 @@ function toItemView(item: ContentItemRow) {
 		contentKind: item.contentKind,
 		workflowStage: item.workflowStage,
 		contentChannelId: item.contentChannelId,
+		// The identity of the idea a draft came from. A title is editable and need
+		// not be unique, so a surface that answers "is this one already taken" by
+		// name answers it wrongly as soon as two ideas read alike.
+		selectedIdeaIndex: item.selectedIdeaIndex,
+		ideaGenerationRunId: item.ideaGenerationRunId,
 		createdAt: item.createdAt.toISOString(),
 	};
 }
@@ -426,6 +431,7 @@ export function createContentCreationRepositories(database: typeof db = db) {
 			profile: ConfirmedProfileRef;
 			researchRunId: string | null;
 			researchOpportunityId: string | null;
+			contentItemId: string | null;
 			inputSnapshot: unknown;
 			schemaVersion: string;
 			requestedCallCount: number;
@@ -478,6 +484,7 @@ export function createContentCreationRepositories(database: typeof db = db) {
 			profileHash: input.profile.profileHash,
 			researchRunId: input.researchRunId,
 			researchOpportunityId: input.researchOpportunityId,
+			contentItemId: input.contentItemId,
 			idempotencyKey: input.idempotencyKey,
 			correlationId,
 			// The ceiling the run was permitted, not a constant. The database refuses
@@ -668,6 +675,14 @@ export function createContentCreationRepositories(database: typeof db = db) {
 				async (tx) => {
 					const existing = await store.findGenerationByIdempotencyKey(tx, input.idempotencyKey);
 					if (existing) {
+						// Same reasoning as the script path: the key identifies a request,
+						// and a run for another opportunity is not this request's answer.
+						if (existing.kind !== "IDEAS" || existing.researchOpportunityId !== input.opportunityId) {
+							throw new ContentCreationError(
+								"IDEMPOTENCY_KEY_CONFLICT",
+								"That idempotency key was already used for a different request",
+							);
+						}
 						return { id: existing.id, status: existing.status, errorCode: existing.errorCode, reused: true };
 					}
 
@@ -693,6 +708,7 @@ export function createContentCreationRepositories(database: typeof db = db) {
 						profile,
 						researchRunId,
 						researchOpportunityId: input.opportunityId,
+						contentItemId: null,
 						inputSnapshot: { evidence, profileHash: profile.profileHash },
 						schemaVersion: CREATION_VERSIONS.ideaSchema,
 						requestedCallCount: permittedCalls(adapterId),
@@ -862,6 +878,16 @@ export function createContentCreationRepositories(database: typeof db = db) {
 					// records the call was then rolled back.
 					const existingRun = await store.findGenerationByIdempotencyKey(tx, input.idempotencyKey);
 					if (existingRun) {
+						// The key is unique per brand, not per request, so the run it finds
+						// need not be the one this call is a repeat of. Handing back another
+						// draft's script — or reporting an idea run's success as this
+						// draft's failure — is worse than refusing.
+						if (existingRun.contentItemId !== input.contentId) {
+							throw new ContentCreationError(
+								"IDEMPOTENCY_KEY_CONFLICT",
+								"That idempotency key was already used for a different request",
+							);
+						}
 						const [latestForKey] = await tx
 							.select()
 							.from(scrContentVersions)
@@ -922,6 +948,7 @@ export function createContentCreationRepositories(database: typeof db = db) {
 						profile,
 						researchRunId: latest.researchRunId,
 						researchOpportunityId: ideaRun.researchOpportunityId,
+						contentItemId: input.contentId,
 						inputSnapshot: { evidence: scriptEvidence, contentId: input.contentId, version: latest.version },
 						schemaVersion: CREATION_VERSIONS.scriptSchema,
 						requestedCallCount: permittedCalls(adapterId),

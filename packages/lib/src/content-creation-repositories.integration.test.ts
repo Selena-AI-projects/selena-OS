@@ -198,6 +198,29 @@ describe.skipIf(!disposableDatabaseUrl)("content creation PostgreSQL adapter", (
 		});
 		expect(repeatedRevision).toMatchObject({ status: "COMPLETED", version: 3, contentHash: revised.contentHash });
 
+		// The key is unique per brand, not per request, so the run it finds need not
+		// be the one the caller is repeating. Handing back another draft's script, or
+		// reporting an idea run as this draft's outcome, is worse than refusing.
+		await expect(
+			creation.generateScript(member, {
+				brandId,
+				contentId: selected.contentId,
+				idempotencyKey: `ideas-${suffix}`,
+			}),
+		).rejects.toMatchObject({ code: "IDEMPOTENCY_KEY_CONFLICT" });
+		const secondDraft = await creation.selectIdea(member, { brandId, generationRunId: ideas.id, ideaIndex: 1 });
+		await expect(
+			creation.generateScript(member, {
+				brandId,
+				contentId: secondDraft.contentId,
+				idempotencyKey: `revision-${suffix}`,
+				revision: true,
+			}),
+		).rejects.toMatchObject({ code: "IDEMPOTENCY_KEY_CONFLICT" });
+		await expect(
+			creation.generateIdeas(member, { brandId, opportunityId, idempotencyKey: `revision-${suffix}` }),
+		).rejects.toMatchObject({ code: "IDEMPOTENCY_KEY_CONFLICT" });
+
 		// Selecting the same idea again finds the draft it already made.
 		const reselected = await creation.selectIdea(member, {
 			brandId,
@@ -344,18 +367,22 @@ describe.skipIf(!disposableDatabaseUrl)("content creation PostgreSQL adapter", (
 		// The four gates are asserted one at a time through the server path, not
 		// only in the pure module: a misspelt environment variable would otherwise
 		// pass every test in the repository.
-		const gateCases: [string, Record<string, string | undefined>][] = [
-			["the live flag alone", { CONTENT_OS_GEMINI_LIVE: undefined }],
-			["the call ceiling alone", { CONTENT_OS_GEMINI_MAX_CALLS: undefined }],
-			["the credential alone", { CONTENT_OS_GEMINI_CREDENTIAL_PRESENT: undefined }],
-			["every gate open", {}],
+		// Each case names the code it must be refused with. Asserting only "FAILED"
+		// would let a misspelt environment variable pass: every gate refuses, so
+		// three of the four cases would be refused by the wrong one and nothing
+		// would say so.
+		const gateCases: [string, Record<string, string | undefined>, string][] = [
+			["the live flag alone", { CONTENT_OS_GEMINI_LIVE: undefined }, "ADAPTER_DISABLED"],
+			["the call ceiling alone", { CONTENT_OS_GEMINI_MAX_CALLS: undefined }, "PROVIDER_QUOTA_EXCEEDED"],
+			["the credential alone", { CONTENT_OS_GEMINI_CREDENTIAL_PRESENT: undefined }, "PROVIDER_AUTH_FAILED"],
+			["every gate open", {}, "PROVIDER_UNAVAILABLE"],
 		];
 		const original = {
 			CONTENT_OS_GEMINI_LIVE: process.env.CONTENT_OS_GEMINI_LIVE,
 			CONTENT_OS_GEMINI_MAX_CALLS: process.env.CONTENT_OS_GEMINI_MAX_CALLS,
 			CONTENT_OS_GEMINI_CREDENTIAL_PRESENT: process.env.CONTENT_OS_GEMINI_CREDENTIAL_PRESENT,
 		};
-		for (const [label, missing] of gateCases) {
+		for (const [label, missing, expectedCode] of gateCases) {
 			process.env.CONTENT_OS_GEMINI_LIVE = "true";
 			process.env.CONTENT_OS_GEMINI_MAX_CALLS = "5";
 			process.env.CONTENT_OS_GEMINI_CREDENTIAL_PRESENT = "true";
@@ -367,6 +394,7 @@ describe.skipIf(!disposableDatabaseUrl)("content creation PostgreSQL adapter", (
 				adapterId: "gemini",
 			});
 			expect(gated.status, label).toBe("FAILED");
+			expect(gated.errorCode, label).toBe(expectedCode);
 			// Even with every gate open there is no transport, so nothing dispatches.
 			expect(creationProviderCallCount(), label).toBe(0);
 		}

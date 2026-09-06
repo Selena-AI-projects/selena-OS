@@ -52,14 +52,33 @@ function IdeasPage() {
 	const savedOpportunities = research.opportunities.filter(
 		(opportunity) => opportunity.state === "SAVED" || opportunity.state === "SENT_TO_CREATION",
 	);
-	const selectedTitles = new Set(creation.items.map((item) => item.title));
+	// Keyed by the run and the position within it, which is what a selection
+	// actually records. Two ideas may carry the same title, and a draft's title is
+	// editable afterwards.
+	const selectedIdeas = new Set(
+		creation.items
+			.filter((item) => item.ideaGenerationRunId !== null && item.selectedIdeaIndex !== null)
+			.map((item) => `${item.ideaGenerationRunId}:${item.selectedIdeaIndex}`),
+	);
 
-	function act(action: () => Promise<unknown>, success: string, onDone?: () => void) {
+	/**
+	 * A refused generation resolves with a FAILED result rather than throwing, so
+	 * that its record survives the transaction. Treating "it resolved" as success
+	 * would report six ideas that were never written. Selecting an idea has no
+	 * such result — it reports failure by throwing — so the status is read only
+	 * where there is one.
+	 */
+	function act(action: () => Promise<object>, success: string, onDone?: () => void) {
 		startTransition(async () => {
 			try {
-				await action();
+				const result = await action();
 				await router.invalidate();
 				onDone?.();
+				if ("status" in result && result.status === "FAILED") {
+					const code = "errorCode" in result ? result.errorCode : null;
+					setNotice({ kind: "error", message: `Generation did not produce ideas (${code ?? "unknown reason"})` });
+					return;
+				}
 				setNotice({ kind: "success", message: success });
 			} catch (error) {
 				setNotice({
@@ -196,9 +215,10 @@ function IdeasPage() {
 				<section className="flex flex-col gap-3">
 					<h2 className="font-serif text-xl">The six ideas</h2>
 					{creation.ideas.map((idea, index) => {
-						const alreadySelected = selectedTitles.has(idea.title);
+						const alreadySelected = selectedIdeas.has(`${creation.ideaRun?.id}:${index}`);
 						return (
-							<Card key={idea.title}>
+							// biome-ignore lint/suspicious/noArrayIndexKey: the position in the run is the idea's identity — it is what a selection records and what the server resolves evidence by — and a run is stored immutable output that is never reordered or filtered.
+							<Card key={`${creation.ideaRun?.id}-${index}`}>
 								<CardHeader>
 									<CardTitle className="flex flex-wrap items-center gap-2 text-base">
 										<IconBulb aria-hidden="true" className="size-4 shrink-0" />

@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import {
+	type AnyPgColumn,
 	bigint,
 	boolean,
 	doublePrecision,
@@ -1407,6 +1408,9 @@ export const scrGenerationRuns = selenaRegistrySchema
 			profileHash: text("profile_hash").notNull(),
 			researchRunId: uuid("research_run_id").references(() => scrContentResearchRuns.id),
 			researchOpportunityId: uuid("research_opportunity_id").references(() => scrContentResearchOpportunities.id),
+			// Annotated because content_items points back at this table: without a
+			// declared return type the two definitions infer through each other.
+			contentItemId: uuid("content_item_id").references((): AnyPgColumn => scrContentItems.id),
 			idempotencyKey: text("idempotency_key").notNull(),
 			correlationId: uuid("correlation_id").notNull(),
 			requestedCallCount: integer("requested_call_count").notNull().default(0),
@@ -1479,7 +1483,7 @@ export const scrContentItems = selenaRegistrySchema
 			contentChannelId: uuid("content_channel_id").references(() => scrContentChannels.id),
 			workflowStage: scrContentWorkflowStageEnum("workflow_stage").notNull().default("DRAFT"),
 			selectedIdeaIndex: integer("selected_idea_index"),
-			ideaGenerationRunId: uuid("idea_generation_run_id").references(() => scrGenerationRuns.id),
+			ideaGenerationRunId: uuid("idea_generation_run_id").references((): AnyPgColumn => scrGenerationRuns.id),
 			createdBy: text("created_by").notNull(),
 			createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 			updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
