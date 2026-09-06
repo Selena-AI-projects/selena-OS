@@ -439,10 +439,9 @@ CREATE POLICY content_versions_web_insert ON selena_registry.content_versions
     -- Every reference to the new row is schema-qualified: an unqualified name
     -- inside EXISTS resolves against the subquery's own table.
     --
-    -- content_id was never checked either. The version number is unique across
-    -- the whole table, so a session could not only hang a version off another
-    -- brand's item but take the next version number that item's own next write
-    -- was going to use.
+    -- A version belongs to a draft, and the draft has to be this brand's. Version
+    -- numbers are unique per draft, so writing into another brand's draft also
+    -- takes the number that draft's own next write needs.
     AND EXISTS (
       SELECT 1 FROM selena_registry.content_items item
       WHERE item.id = selena_registry.content_versions.content_id
