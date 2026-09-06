@@ -60,7 +60,12 @@ CREATE TABLE selena_registry.content_research_sources (
   -- an unavailable transcript into text nobody has the rights to.
   transcript_status selena_registry.content_transcript_status NOT NULL,
   transcript_language text,
-  transcript_failure_reason text,
+  -- Normalized codes only, for the same reason the run's failures column carries
+  -- them: this is the one field on this surface a future provider string could
+  -- reach, and it is handed to the browser in the loader payload.
+  transcript_failure_reason text CHECK (
+    transcript_failure_reason IS NULL OR transcript_failure_reason ~ '^[A-Z][A-Z0-9_]{2,63}$'
+  ),
   -- A median over an even sample is the mean of the middle two, so this is
   -- fractional. Rounding it would distort the denominator every ratio divides by.
   baseline_views double precision CHECK (baseline_views IS NULL OR baseline_views >= 0),
