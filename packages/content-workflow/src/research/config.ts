@@ -63,7 +63,13 @@ export const researchConfig = {
 		minOutlierRatio: 1.5,
 		minRelevance: 0.35,
 		allowedBaselineConfidence: ["HIGH", "MEDIUM", "LOW"],
-		/** Ceilings, never targets. If only 17 shorts clear the gate, 17 are returned. */
+		/**
+		 * Ceilings, never targets. If only 17 shorts clear the gate, 17 are returned.
+		 *
+		 * Upstream called this `weeklyQuota` and applied it across a week of runs.
+		 * Here it is a per-run ceiling, because a run is the unit a brand reviews:
+		 * the numbers are the transferred ones, the window is not.
+		 */
 		quota: { short: 50, long: 20 },
 	},
 	relevance: {

@@ -60,6 +60,13 @@ const STOPWORDS = new Set([
  * supports as a first-class route. The stopword list stays English-only, which
  * only makes the check more conservative elsewhere: an unfiltered stopword is
  * one more token that has to match.
+ *
+ * The scope of that fix is every script that separates words with whitespace.
+ * Splitting on `\s+` still reduces a Chinese or Japanese sentence to a single
+ * token, so a near-identical CJK title scores zero and the rule fails open
+ * there exactly as it used to everywhere. Those languages are outside the
+ * English and Russian scope the product contract names; covering them needs a
+ * segmenter, not a character class.
  */
 export function contentTokens(text: string): string[] {
 	return text
