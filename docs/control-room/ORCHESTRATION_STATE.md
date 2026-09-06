@@ -19,6 +19,12 @@
   not by code: the refusal guard lives on the growth branch.
 - **No required CI check runs pgTAP or the integration harness.** The RLS these
   slices depend on is defended by suites somebody has to run by hand.
+- **No required CI check runs the formatter or the linter.** Adding one is not a
+  wiring change: `biome check .` reports 326 errors and 358 warnings across the
+  repository as it stands, so a lint gate would have to be preceded by a
+  repository-wide cleanup that is not this programme's to make. Recorded here
+  rather than fixed, because a reformatting of the migration journal already
+  reached a pushed commit once and nothing in CI saw it.
 
 ## Owner decisions waiting
 
@@ -29,6 +35,12 @@
   it can be changed without guesswork once decided.
 
 ## Carried into Slice 4
+
+The shared app shell's sidebar trigger is 28 px square, below the 44 px the
+mobile matrix asks of a tap target. It is a `packages/ui` component every route
+inherits, so fixing it in a content slice would change every surface in the
+product on a content branch. The Slice 3 browser run records it at 390 px on
+both new surfaces rather than excluding it.
 
 Two findings from Slice 2's round-six review, both symmetric in cost across the
 merge that closed it:

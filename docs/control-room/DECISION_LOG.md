@@ -198,3 +198,37 @@
   the plan's acceptance wording, and keep the integration coverage that pins the
   behavior either way.
 - Affected requirements: Stage 1 plan 7.4.
+
+## 2026-09-06 — a release gate reads what a version is, not a column that can be edited
+
+- Decision: `selena_release.reject_unsupported_youtube_release` keys on
+  `content_versions.format_version`, and `content_items.content_kind` becomes
+  immutable through a trigger.
+- Evidence: `content_items_web_update` is a bare `can_write_brand` and 0021
+  grants UPDATE on every column, so an ordinary web session could flip
+  `content_kind` to `GENERIC_POST`, create a release intent for a
+  `content.youtube-video/v1` version, and flip it back. No operator, no gateway
+  and no new provider value were involved. `content_versions` admits no UPDATE
+  and no DELETE from any runtime role, so its own statement of what it is cannot
+  be edited the same way.
+- Consequence: the kind stays in the condition — a YouTube draft whose newest
+  version is still legacy text is gated too — but it is no longer the only
+  thing consulted, and it can no longer be changed at all.
+- Alternatives rejected: the trigger alone, which would leave the guard reading
+  a column whose immutability is enforced somewhere else; `format_version`
+  alone, which would stop gating a YouTube draft before its first structured
+  version.
+- Affected requirements: Stage 1 plan 9.4.
+
+## 2026-09-06 — an idempotency key is checked against the request it was used for
+
+- Decision: `generation_runs` records the content item a script run was for, and
+  a key already spent on a different request is refused with
+  `IDEMPOTENCY_KEY_CONFLICT` rather than answered with the earlier request's
+  result.
+- Evidence: the key is unique per brand. A key reused across drafts returned the
+  other draft's script as this one's; a key reused from an idea run reported that
+  run's success as this draft's failure.
+- Consequence: a failed script run also says which draft it failed on, which it
+  previously did not record anywhere.
+- Affected requirements: Stage 1 plan 7.5.
