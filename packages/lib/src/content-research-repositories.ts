@@ -11,6 +11,7 @@ import {
 	RESEARCH_VERSIONS,
 	type ResearchAdapter,
 	type ResearchAdapterId,
+	type ResearchErrorCode,
 	type ResearchProject,
 	type ResearchRunCounters,
 	type ResearchRunFailure,
@@ -77,14 +78,14 @@ function researchAdapter(adapterId: ResearchAdapterId, imported?: ResearchSource
 }
 
 /** A run that never produced a result is still recorded, with a normalized code. */
-function failedOutcome(code: string, occurredAt: string): ResearchRunOutcome {
+function failedOutcome(code: ResearchErrorCode, occurredAt: string): ResearchRunOutcome {
 	return {
 		status: "FAILED",
 		pipelineVersion: RESEARCH_VERSIONS.pipeline,
 		scoringVersion: RESEARCH_VERSIONS.scoring,
 		baselineVersion: RESEARCH_VERSIONS.baseline,
 		counters: emptyRunCounters(),
-		failures: [{ stage: "adapter", subjectId: null, code: code as never, occurredAt }],
+		failures: [{ stage: "adapter", subjectId: null, code, occurredAt }],
 		scored: [],
 		opportunities: [],
 	};
@@ -306,15 +307,29 @@ export function createPostgresRadarStore(options: {
 	}
 
 	async function readRunDetail(tx: ContentTransaction, runId: string) {
+		// RLS already scopes these reads; the explicit tenant predicates are the
+		// second lock, so a future change to a policy cannot silently widen a read.
 		const sources = await tx
 			.select()
 			.from(scrContentResearchSources)
-			.where(eq(scrContentResearchSources.runId, runId))
+			.where(
+				and(
+					eq(scrContentResearchSources.organizationId, context.tenantId),
+					eq(scrContentResearchSources.brandId, brandId),
+					eq(scrContentResearchSources.runId, runId),
+				),
+			)
 			.orderBy(desc(scrContentResearchSources.candidateScore));
 		const opportunities = await tx
 			.select()
 			.from(scrContentResearchOpportunities)
-			.where(eq(scrContentResearchOpportunities.runId, runId))
+			.where(
+				and(
+					eq(scrContentResearchOpportunities.organizationId, context.tenantId),
+					eq(scrContentResearchOpportunities.brandId, brandId),
+					eq(scrContentResearchOpportunities.runId, runId),
+				),
+			)
 			.orderBy(desc(scrContentResearchOpportunities.createdAt));
 		const decisions = await tx
 			.select()
