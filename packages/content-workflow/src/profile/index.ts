@@ -41,7 +41,7 @@ export const projectProfileInputSchema = z.object({
 		needs: boundedStringArray.default([]),
 	}),
 	voice: z.object({
-		traits: nonEmptyStringArray,
+		traits: boundedStringArray.min(1),
 		examples: boundedStringArray.default([]),
 		exclusions: boundedStringArray.default([]),
 	}),
