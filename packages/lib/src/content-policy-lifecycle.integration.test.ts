@@ -121,8 +121,11 @@ describe.skipIf(!disposableDatabaseUrl)("content policy lifecycle", () => {
 		expect(secondId).not.toBe(firstId);
 
 		const rows = await root.query(
+			// Both versions were set in one transaction, so they share activated_at;
+			// the superseded one is the one that has been withdrawn.
 			`SELECT id, policy_version, status, require_evidence, revoked_reason
-			   FROM selena_registry.content_policies WHERE brand_id = $1 ORDER BY activated_at`,
+			   FROM selena_registry.content_policies WHERE brand_id = $1
+			  ORDER BY activated_at, revoked_at NULLS LAST`,
 			[brandId],
 		);
 		expect(rows.rows).toHaveLength(2);
@@ -136,12 +139,17 @@ describe.skipIf(!disposableDatabaseUrl)("content policy lifecycle", () => {
 			  ORDER BY created_at, id`,
 			[organizationId, brandId],
 		);
-		expect(audit.rows.map((row) => row.action)).toEqual([
+		// One transaction, one created_at for all three rows, so the order is not
+		// observable here; what is, is which decisions were recorded and about what.
+		expect(audit.rows.map((row) => row.action).sort()).toEqual([
+			"content.policy_set",
 			"content.policy_set",
 			"content.policy_superseded",
-			"content.policy_set",
 		]);
-		expect(audit.rows[0].metadata).toMatchObject({ policyVersion: "2026-09-a", requireEvidence: true });
+		expect(
+			audit.rows.find((row) => row.action === "content.policy_set" && row.metadata?.policyVersion === "2026-09-a")
+				?.metadata,
+		).toMatchObject({ policyVersion: "2026-09-a", requireEvidence: true });
 	});
 
 	it("never reinstates a withdrawn version", async () => {
