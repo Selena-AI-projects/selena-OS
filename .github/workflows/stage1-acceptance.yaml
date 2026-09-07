@@ -1,0 +1,128 @@
+# Content OS Stage 1 acceptance (Slice 5, disposable-database evidence class)
+#
+# Manually dispatched. Boots a disposable PostgreSQL 17 container, applies the
+# full migration chain, then runs the named acceptance vertical
+# (packages/lib/src/content-stage1-acceptance.integration.test.ts) as the
+# provisioned selena_web_login: profile → owner confirmation → fixture
+# research → saved opportunity → six ideas → selected idea → script → revision,
+# with cross-brand denial and externalProviderCalls proven zero three ways.
+#
+# The JSON summary the test writes is published to the run's step summary and
+# uploaded as an artifact — that upload is the recorded evidence. This run is
+# disposable-database evidence only: it says nothing about staging, production,
+# or the browser surface, which remain separate acceptance gates.
+#
+# No provider credential is read, no provider is called, nothing is published.
+
+name: Stage 1 Acceptance
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  stage1-acceptance:
+    name: Fixture vertical acceptance
+    runs-on: [self-hosted, Linux, X64, selena-ci]
+    timeout-minutes: 20
+
+    env:
+      PGTAP_CONTAINER: stage1-acceptance-${{ github.run_id }}-${{ github.run_attempt }}
+      BETTER_AUTH_SECRET: stage1-acceptance-ci-secret-0123456789
+      APP_URL: http://localhost:3000
+      DISABLE_TELEMETRY: 1
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --no-frozen-lockfile
+
+      - name: Start disposable PostgreSQL 17
+        run: |
+          set -euo pipefail
+          docker rm -f "$PGTAP_CONTAINER" 2>/dev/null || true
+          docker run -d --name "$PGTAP_CONTAINER" \
+            -e POSTGRES_PASSWORD=disposable \
+            -p 127.0.0.1:0:5432 \
+            postgres:17
+          for i in $(seq 1 30); do
+            if docker exec "$PGTAP_CONTAINER" pg_isready -U postgres >/dev/null 2>&1; then
+              break
+            fi
+            if [ "$i" -eq 30 ]; then
+              echo "::error::PostgreSQL did not become ready in time"
+              docker logs "$PGTAP_CONTAINER"
+              exit 1
+            fi
+            sleep 2
+          done
+          port="$(docker port "$PGTAP_CONTAINER" 5432/tcp | head -n1 | awk -F: '{print $NF}')"
+          web_password="$(openssl rand -hex 24)"
+          echo "::add-mask::$web_password"
+          {
+            echo "SELENA_DISPOSABLE_DATABASE_URL=postgres://postgres:disposable@127.0.0.1:${port}/postgres"
+            echo "DATABASE_URL=postgres://postgres:disposable@127.0.0.1:${port}/postgres"
+            echo "SELENA_WEB_DB_PASSWORD=${web_password}"
+            echo "SELENA_WEB_DATABASE_URL=postgres://selena_web_login:${web_password}@127.0.0.1:${port}/postgres"
+          } >> "$GITHUB_ENV"
+
+      - name: Create the harness roles
+        run: |
+          set -euo pipefail
+          for role in anon authenticated service_role; do
+            docker exec "$PGTAP_CONTAINER" psql -U postgres -q -c "create role ${role} nologin" 2>/dev/null || true
+          done
+
+      - name: Apply the full migration chain
+        run: pnpm -C packages/lib exec node scripts/run-migrations.mjs
+
+      - name: Run the Stage 1 acceptance vertical as the web login
+        run: |
+          set -euo pipefail
+          cd packages/lib
+          DATABASE_URL="$SELENA_WEB_DATABASE_URL" \
+          SELENA_STAGE1_ACCEPTANCE_REPORT="$RUNNER_TEMP/stage1-acceptance.json" \
+            pnpm exec vitest run src/content-stage1-acceptance.integration.test.ts
+
+      - name: Publish the acceptance summary
+        run: |
+          set -euo pipefail
+          if [ ! -f "$RUNNER_TEMP/stage1-acceptance.json" ]; then
+            echo "::error::The acceptance test passed but wrote no summary — treat the run as unproven"
+            exit 1
+          fi
+          {
+            echo "## Content OS Stage 1 acceptance — disposable-database evidence"
+            echo ""
+            echo '```json'
+            cat "$RUNNER_TEMP/stage1-acceptance.json"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload the acceptance evidence
+        uses: actions/upload-artifact@v7
+        with:
+          name: stage1-acceptance-evidence
+          path: ${{ runner.temp }}/stage1-acceptance.json
+          retention-days: 90
+
+      - name: Remove the disposable database
+        if: ${{ always() }}
+        run: docker rm -f "$PGTAP_CONTAINER" 2>/dev/null || true
