@@ -324,6 +324,51 @@ async function reportOutcome() {
 	}
 }
 
+/**
+ * What arrived after the source was confirmed: the events by outcome, and the
+ * materials they became, grouped by the brief they share. Read-only.
+ */
+async function reportMaterials() {
+	const client = new pg.Client({ connectionString: DATABASE_URL });
+	await client.connect();
+	try {
+		const events = await client.query(
+			`SELECT source_project_id, event_type, version,
+			        CASE WHEN projected_content_version_id IS NOT NULL THEN 'projected'
+			             WHEN projection_error IS NOT NULL AND projected_at IS NOT NULL THEN 'refused'
+			             WHEN projection_error IS NOT NULL THEN 'deferred'
+			             ELSE 'pending' END AS outcome,
+			        projection_error, projection_attempts
+			   FROM selena_ingest_raw.aether_events ORDER BY received_at`,
+		);
+		const items = await client.query(
+			`SELECT i.id, i.title, i.status, i.kind, i.external_source, i.brief_ref,
+			        (SELECT json_agg(json_build_object('version', v.version, 'policy', v.policy_version, 'created_by', v.created_by) ORDER BY v.version)
+			           FROM selena_registry.content_versions v WHERE v.content_id = i.id) AS versions
+			   FROM selena_registry.content_items i WHERE i.brand_id = $1 ORDER BY i.brief_ref, i.kind`,
+			[ORGANIZATION_ID],
+		);
+		const elsewhere = await client.query(
+			`SELECT count(*)::int AS n FROM selena_registry.content_items WHERE brand_id <> $1 AND external_source IS NOT NULL`,
+			[ORGANIZATION_ID],
+		);
+		log(`\nevents (${events.rows.length}):`);
+		for (const row of events.rows) {
+			log(
+				`  ${row.source_project_id} ${row.event_type} v${row.version}: ${row.outcome}` +
+					`${row.projection_error ? ` ${row.projection_error}` : ""} (attempts ${row.projection_attempts})`,
+			);
+		}
+		log(`materials for ${ORGANIZATION_ID} (${items.rows.length}):`);
+		for (const row of items.rows) {
+			log(`  brief ${row.brief_ref} ${row.kind} "${row.title}" ${row.status} versions=${JSON.stringify(row.versions)}`);
+		}
+		log(`materials from external sources under any other brand: ${elsewhere.rows[0].n}`);
+	} finally {
+		await client.end();
+	}
+}
+
 async function main() {
 	const browser = await chromium.launch();
 	const context = await browser.newContext({ baseURL: BASE_URL });
@@ -347,6 +392,22 @@ async function main() {
 				await describe(page, path);
 			}
 			log("\ndiscovery finished; nothing was changed through the interface");
+			return;
+		}
+
+		if (MODE === "verify") {
+			await reportMaterials();
+			for (const section of ["inbox", "review"]) {
+				await open(page, `/app/${ORGANIZATION_ID}/control-room#${section}`);
+				await page.waitForTimeout(2000);
+				const rows = await page.$$eval('[data-testid="review-queue-row"]', (nodes) =>
+					nodes.map((node) => ({ kind: node.getAttribute("data-kind"), text: (node.textContent ?? "").trim().slice(0, 160) })),
+				);
+				log(`\n${section}: rows the synthetic owner sees (${rows.length}):`);
+				for (const row of rows) log(`  [${row.kind}] ${row.text}`);
+				await describe(page, `/app/${ORGANIZATION_ID}/control-room#${section}`);
+			}
+			log("\nverification finished; nothing was changed");
 			return;
 		}
 
