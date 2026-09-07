@@ -1,0 +1,126 @@
+# Data Integrity: pgTAP + gated integration tests
+#
+# Every pgTAP suite in packages/lib/src/db/tests is a database-destructive
+# fixture proving the guarantees no other required check exercises: forced RLS
+# and cross-brand denial, append-only triggers, owner-only decisions, release
+# fail-closed rules. The @workspace/lib integration tests carry the same
+# guarantees at the repository-adapter level and are skipped everywhere unless
+# SELENA_DISPOSABLE_DATABASE_URL is set — so without this workflow, CI never
+# runs them.
+#
+# The job creates its own disposable PostgreSQL 17 container on a random port,
+# applies the full migration chain, runs everything, and destroys the
+# container. It never touches staging or production, never reads a provider
+# credential, never calls a provider, and never publishes content.
+
+name: Data Integrity
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  data-integrity:
+    name: pgTAP and integration tests
+    runs-on: [self-hosted, Linux, X64, selena-ci]
+    timeout-minutes: 25
+
+    env:
+      PGTAP_CONTAINER: pgtap-${{ github.run_id }}-${{ github.run_attempt }}
+      BETTER_AUTH_SECRET: data-integrity-ci-secret-0123456789
+      APP_URL: http://localhost:3000
+      DISABLE_TELEMETRY: 1
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --no-frozen-lockfile
+
+      # A random published port keeps concurrent runs on this shared
+      # self-hosted runner from colliding; the container name is already
+      # unique per run and attempt.
+      - name: Start disposable PostgreSQL 17
+        run: |
+          set -euo pipefail
+          docker rm -f "$PGTAP_CONTAINER" 2>/dev/null || true
+          docker run -d --name "$PGTAP_CONTAINER" \
+            -e POSTGRES_PASSWORD=disposable \
+            -p 127.0.0.1:0:5432 \
+            postgres:17
+          for i in $(seq 1 30); do
+            if docker exec "$PGTAP_CONTAINER" pg_isready -U postgres >/dev/null 2>&1; then
+              break
+            fi
+            if [ "$i" -eq 30 ]; then
+              echo "::error::PostgreSQL did not become ready in time"
+              docker logs "$PGTAP_CONTAINER"
+              exit 1
+            fi
+            sleep 2
+          done
+          port="$(docker port "$PGTAP_CONTAINER" 5432/tcp | head -n1 | awk -F: '{print $NF}')"
+          if [ -z "$port" ]; then
+            echo "::error::Could not resolve the published PostgreSQL port"
+            exit 1
+          fi
+          url="postgres://postgres:disposable@127.0.0.1:${port}/postgres"
+          {
+            echo "SELENA_DISPOSABLE_DATABASE_URL=${url}"
+            echo "DATABASE_URL=${url}"
+          } >> "$GITHUB_ENV"
+
+      # The official postgres image ships the PGDG apt repository, so the
+      # matching pgTAP package installs directly into the running container.
+      - name: Install the pgTAP extension
+        run: |
+          docker exec "$PGTAP_CONTAINER" bash -ceu \
+            'apt-get update -qq >/dev/null && apt-get install -y -qq postgresql-17-pgtap >/dev/null'
+          docker exec "$PGTAP_CONTAINER" psql -U postgres -c 'CREATE EXTENSION IF NOT EXISTS pgtap;'
+
+      - name: Apply the full migration chain
+        run: pnpm -C packages/lib exec node scripts/run-migrations.mjs
+
+      - name: Run every pgTAP suite
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          suites=(packages/lib/src/db/tests/*.pgtap.sql)
+          if [ "${#suites[@]}" -eq 0 ]; then
+            echo "::error::No pgTAP suites found — the glob is broken, not the database"
+            exit 1
+          fi
+          echo "Running ${#suites[@]} pgTAP suites"
+          for suite in "${suites[@]}"; do
+            echo "== ${suite}"
+            pnpm --filter @workspace/lib test:pgtap "${suite#packages/lib/}"
+          done
+
+      # With SELENA_DISPOSABLE_DATABASE_URL exported, the describe.skipIf
+      # integration suites in @workspace/lib stop skipping and run for real.
+      - name: Run database integration tests
+        run: pnpm --filter @workspace/lib test
+
+      - name: Remove the disposable database
+        if: ${{ always() }}
+        run: docker rm -f "$PGTAP_CONTAINER" 2>/dev/null || true
