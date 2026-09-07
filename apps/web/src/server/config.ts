@@ -38,10 +38,15 @@ export const getClientConfig = createServerFn({ method: "GET" }).handler(async (
 
 	const userCount = await countUsers();
 	const hasUsers = userCount > 0;
-	// Cloud is public self-serve, so registration is always open. Otherwise it's
-	// only reachable in local mode before the first user signs up — once the
-	// instance is bootstrapped, both the UI and API reject signups.
-	const canRegister = deployment.features.selfServeSignup || (deployment.mode === "local" && !hasUsers);
+	// Cloud is public self-serve, so registration is always open. A local
+	// install opens it to bootstrap itself, and keeps it open once it can
+	// take invitations — an invited colleague has to reach the form to
+	// create the account their invitation is waiting for. The form being
+	// reachable grants nothing: an address nobody invited is turned away by
+	// the signup guard, which is where the boundary actually lives.
+	const canRegister =
+		deployment.features.selfServeSignup ||
+		(deployment.mode === "local" && (!hasUsers || deployment.features.teamInvites));
 
 	const googleSignInOnly = deployment.mode === "local" && isSelenaStagingGoogleSignInEnabled();
 
