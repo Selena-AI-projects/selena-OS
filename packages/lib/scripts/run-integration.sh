@@ -9,8 +9,10 @@
 #   packages/lib/scripts/run-integration.sh [database-name]
 #
 # The runtime login's password is generated here and never printed, stored or
-# committed. Loopback authentication on a disposable cluster does not need it;
-# it exists because the provisioning step requires one.
+# committed. It is carried into the connection string the tests use, because a
+# cluster that authenticates loopback connections (scram, md5) refuses a URL
+# that omits it — and a harness that only works under `trust` silently stops
+# being runnable on the machines that have it turned on.
 set -euo pipefail
 
 DATABASE="${1:-selena_integration_run}"
@@ -24,12 +26,14 @@ for role in selena_web_login selena_gateway_login selena_scanner_login selena_wo
 done
 "${PSQL[@]}" "psql -q -d postgres -c 'create database ${DATABASE}'"
 
+# Hex, so it needs no percent-encoding to sit in a URL.
+WEB_PASSWORD="$(openssl rand -hex 24)"
 ADMIN_URL="postgresql://postgres@127.0.0.1:5432/${DATABASE}"
-WEB_URL="postgresql://selena_web_login@127.0.0.1:5432/${DATABASE}"
+WEB_URL="postgresql://selena_web_login:${WEB_PASSWORD}@127.0.0.1:5432/${DATABASE}"
 
 (
   cd "${PACKAGE}"
-  SELENA_WEB_DB_PASSWORD="$(openssl rand -hex 24)" DATABASE_URL="${ADMIN_URL}" node scripts/run-migrations.mjs
+  SELENA_WEB_DB_PASSWORD="${WEB_PASSWORD}" DATABASE_URL="${ADMIN_URL}" node scripts/run-migrations.mjs
 )
 
 cd "${PACKAGE}"

@@ -116,6 +116,26 @@ function assertInteractiveOwner(context: ContentAuthContext): void {
 	}
 }
 
+/**
+ * The driver's error is wrapped by the query builder, so the policy violation is
+ * not on the error that reaches the caller — it is somewhere down the `cause`
+ * chain. Matching only on the outermost message means the one refusal this
+ * module exists to report is the one it would fail to recognise.
+ */
+export function isEditorialPolicyRefusal(error: unknown): boolean {
+	for (let current: unknown = error, depth = 0; current && depth < 8; depth += 1) {
+		if (typeof current !== "object") break;
+		const candidate = current as { code?: unknown; message?: unknown; cause?: unknown };
+		// 42501 is insufficient_privilege, which is what a failed WITH CHECK raises.
+		if (candidate.code === "42501") return true;
+		if (typeof candidate.message === "string" && /violates row-level security policy/i.test(candidate.message)) {
+			return true;
+		}
+		current = candidate.cause;
+	}
+	return false;
+}
+
 function toAssetView(row: typeof scrContentAssets.$inferSelect): ReviewAssetView {
 	return {
 		id: row.id,
@@ -429,8 +449,7 @@ export function createContentReviewRepositories(database: typeof db = db) {
 			// checks in TypeScript. When it refuses, the reason is that one of those
 			// bindings does not hold *now* — reporting it as an internal error would
 			// hide the one outcome the slice exists to produce.
-			const message = error instanceof Error ? error.message : "";
-			if (/row-level security|violates row-level security policy/i.test(message)) {
+			if (isEditorialPolicyRefusal(error)) {
 				throw new ContentReviewError(
 					"STALE_DECISION",
 					"The database refused this decision: it no longer describes the version as stored",
@@ -666,19 +685,18 @@ export function createContentReviewRepositories(database: typeof db = db) {
 					if (described.standingDecision !== "APPROVED") {
 						throw new ContentReviewError("NOT_APPROVED", "This version has no standing approval to take back");
 					}
-					// Revocation binds the hashes of the approval being withdrawn, which
-					// the policy requires to match a standing APPROVED row. Reading them
-					// from the decision rather than from the caller means an owner can
-					// withdraw an approval that has already gone stale — which is exactly
-					// when withdrawing it matters most.
 					const standing = described.decisions.find((decision) => decision.decision === "APPROVED");
-					if (!standing) throw new ContentReviewError("NOT_APPROVED", "This version has no standing approval to take back");
-					const binding: DecisionBinding = {
-						contentHash: standing.contentHash,
-						profileHash: standing.profileHash,
-						evidenceHash: standing.evidenceHash,
-						assetBundleHash: standing.assetBundleHash,
-					};
+					if (!standing) {
+						throw new ContentReviewError("NOT_APPROVED", "This version has no standing approval to take back");
+					}
+					// A revocation says the version is not approved *as it stands now*, so
+					// it binds the hashes the version derives now rather than the ones the
+					// withdrawn approval carried. Those two differ exactly when the
+					// approval has gone stale — which is when withdrawing it matters most,
+					// and binding the stale pair would make that the one case revocation
+					// could not reach. Which approval was withdrawn is recorded on the
+					// audit event; the policy ties the row to the standing one already.
+					const binding = described.binding;
 
 					const id = await recordDecision(tx, context, input.brandId, {
 						contentVersionId: version.id,
