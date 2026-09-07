@@ -61,8 +61,11 @@ jobs:
       - name: Unit tests
         run: pnpm turbo test
 
+      # Bounded because this is a 4 vCPU / 8 GB self-hosted runner: turbo's
+      # default fan-out lets the web nitro render share the box with other
+      # package builds, and it is their combined peak the kernel kills.
       - name: Build
-        run: pnpm build
+        run: pnpm turbo build --concurrency=2
 
       - name: Verify the build left the working tree clean
         run: |
