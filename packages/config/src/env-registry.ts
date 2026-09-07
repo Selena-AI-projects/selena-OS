@@ -209,6 +209,28 @@ export const ENV_REGISTRY: EnvVarSpec[] = [
 		description: "Deployed Trigger.dev task identifier for the Selena release workflow.",
 	},
 	{
+		name: "BLOTATO_API_KEY",
+		scope: "server",
+		requiredBy: "optional",
+		credential: true,
+		description:
+			"Blotato workspace API key for the LinkedIn release provider; reads work in every environment, publishing only where the release policy allows it.",
+	},
+	{
+		name: "BLOTATO_ALLOWED_ACCOUNT_ID",
+		scope: "server",
+		requiredBy: "optional",
+		description:
+			"The one Blotato social account this deployment may address; a credential unlocks a whole workspace, so the audience is pinned here rather than chosen per release.",
+	},
+	{
+		name: "BLOTATO_ALLOWED_PAGE_ID",
+		scope: "server",
+		requiredBy: "optional",
+		description:
+			"LinkedIn company page under the allowed Blotato account that releases target; omit to post as the account itself.",
+	},
+	{
 		name: "APP_URL",
 		scope: "server",
 		requiredBy: ["cloud"],

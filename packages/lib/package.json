@@ -56,6 +56,7 @@
 		"./selena-release-provider": "./src/selena-release-provider.ts",
 		"./selena-release-provider-postiz": "./src/selena-release-provider-postiz.ts",
 		"./selena-release-provider-blotato": "./src/selena-release-provider-blotato.ts",
+		"./selena-release-providers": "./src/selena-release-providers.ts",
 		"./selena-release-publish-policy": "./src/selena-release-publish-policy.ts",
 		"./selena-blotato": "./src/selena-blotato.ts",
 		"./selena-postiz": "./src/selena-postiz.ts",

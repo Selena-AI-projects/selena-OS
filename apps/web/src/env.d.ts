@@ -54,6 +54,9 @@ declare global {
 			readonly GROWTH_ENGINE_STAGE1_ENABLED?: string;
 			readonly SELENA_GROWTH_SOURCE_ENVIRONMENT?: string;
 			readonly SELENA_RELEASE_PUBLISH_ENABLED?: string;
+			readonly BLOTATO_API_KEY?: string;
+			readonly BLOTATO_ALLOWED_ACCOUNT_ID?: string;
+			readonly BLOTATO_ALLOWED_PAGE_ID?: string;
 			readonly SELENA_SCANNER_URL?: string;
 			readonly SELENA_SCANNER_INTERNAL_TOKEN?: string;
 			readonly SELENA_STORAGE_API_URL?: string;

@@ -29,6 +29,7 @@ import {
 	releaseIntentIdempotencyKey,
 	sha256,
 } from "@workspace/lib/selena-control-room";
+import { configureReleaseProviders } from "@workspace/lib/selena-release-providers";
 import { and, desc, eq, isNull, sql } from "drizzle-orm";
 import { z } from "zod";
 import { isGrowthEngineStage1Enabled } from "../lib/growth-engine-stage1.server";
@@ -1458,4 +1459,37 @@ export const setReleaseKillSwitchFn = createServerFn({ method: "POST" })
 			});
 			return { enabled: data.enabled };
 		});
+	});
+
+/**
+ * What the runtime's publishing credential can see, and nothing more.
+ *
+ * The provider is built here from the runtime's own configuration and reached
+ * only for a read: the same registry that would carry a dispatch refuses to
+ * shape one outside a production contour with the publish flag set, so asking
+ * this question cannot become an act of publishing. Owner-only, because the
+ * answer names the account a release would land on.
+ */
+export const getReleaseProviderStatusFn = createServerFn({ method: "GET" })
+	.validator(brandSchema)
+	.handler(async ({ data }) => {
+		const context = await resolveSessionAuthContext();
+		assertHumanReviewer(context);
+		// The database boundary is what establishes this owner may read this brand;
+		// the provider call happens after it, outside the transaction.
+		await withControlRoomTransaction(context, data.brandId, async () => undefined);
+
+		const configuration = configureReleaseProviders();
+		if (configuration.state !== "CONFIGURED") {
+			return { missing: configuration.missing, state: "NOT_CONFIGURED" as const };
+		}
+		const provider = configuration.registry.resolve(configuration.providerId);
+		const connection = await provider.validateConnection();
+		return {
+			account: connection.state === "CONNECTED" ? connection.account : null,
+			environment: configuration.environment,
+			providerId: configuration.providerId,
+			reason: connection.state === "MISCONFIGURED" ? connection.reason : null,
+			state: connection.state,
+		};
 	});
