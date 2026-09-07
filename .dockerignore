@@ -71,9 +71,6 @@ docker/init-scripts
 
 # Directories not needed in Docker builds
 e2e
-# ...except the staging check, which is a runtime of its own and has to be in
-# the image that runs it. Temporary, with the stage that uses it.
-!e2e/staging
 .elmo
 **/.elmo
 apps/cli
