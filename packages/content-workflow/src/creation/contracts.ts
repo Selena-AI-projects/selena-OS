@@ -212,6 +212,14 @@ export const CREATION_ERROR_CODES = [
 	"EVIDENCE_REQUIRED",
 	"CONTENT_IMMUTABLE",
 	"IDEMPOTENCY_KEY_CONFLICT",
+	// Private storage or the scanner could not be reached. Distinct from an
+	// internal error because it says the thumbnail was *not* saved, which is the
+	// one thing a caller must not have to infer.
+	"BLOCKED_STORAGE",
+	"ASSET_NOT_CLEAN",
+	"ASSET_OUT_OF_VERSION",
+	"ASSET_RIGHTS_EXPIRED",
+	"ASSET_CONSENT_EXPIRED",
 	"INTERNAL_ERROR",
 ] as const;
 

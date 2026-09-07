@@ -38,6 +38,7 @@ import {
 
 export * from "./adapters";
 export * from "./contracts";
+export * from "./thumbnails";
 
 export const CREATION_VERSIONS = {
 	pipeline: "content.creation/v1",
