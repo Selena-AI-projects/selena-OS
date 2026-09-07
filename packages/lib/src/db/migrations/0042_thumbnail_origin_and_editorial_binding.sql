@@ -102,6 +102,14 @@ ALTER TABLE selena_registry.editorial_approvals
 DROP TYPE selena_registry.editorial_decision;
 ALTER TYPE selena_registry.editorial_decision_next RENAME TO editorial_decision;
 
+-- Which decision is the standing one has to be answerable without guessing.
+-- Several decisions can land in one transaction, where `now()` is identical for
+-- all of them, and falling back to the primary key orders by a random uuid. The
+-- sequence is GENERATED ALWAYS so the order is the order the rows were written
+-- and not something a caller can choose.
+ALTER TABLE selena_registry.editorial_approvals
+  ADD COLUMN decided_seq bigint GENERATED ALWAYS AS IDENTITY;
+
 -- Withdrawing an approval has to say why, for the same reason rejecting does:
 -- the author is left with a changed verdict and needs the next step.
 ALTER TABLE selena_registry.editorial_approvals
@@ -159,7 +167,7 @@ CREATE POLICY editorial_approvals_web_insert ON selena_registry.editorial_approv
         WHERE prior.content_version_id = selena_registry.editorial_approvals.content_version_id
           AND prior.content_hash = selena_registry.editorial_approvals.content_hash
           AND prior.decision IN ('APPROVED', 'REVOKED')
-        ORDER BY prior.created_at DESC, prior.id DESC
+        ORDER BY prior.decided_seq DESC
         LIMIT 1
       ) = 'APPROVED'
     )
