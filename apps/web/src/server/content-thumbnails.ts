@@ -6,7 +6,7 @@ import { resolveSessionAuthContext } from "@/lib/selena-auth-context.server";
 
 /**
  * The Create-side read for thumbnails. Attaching one is a multipart upload and
- * lives at `/api/v1/selena/control-room/thumbnails`; this only says what is
+ * lives at `/api/selena/control-room/thumbnails`; this only says what is
  * already attached and whether it can go in front of a reviewer.
  */
 

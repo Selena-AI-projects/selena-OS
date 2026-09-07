@@ -1,11 +1,11 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { MAX_SELENA_ASSET_BYTES, validateSelenaAsset } from "@workspace/lib/selena-private-storage";
 import { z } from "zod";
-import { isContentOsStage1Enabled } from "../../../../../lib/content-os-stage1.server";
-import { resolveSessionAuthContext } from "../../../../../lib/selena-auth-context.server";
-import { uploadSelenaPrivateAsset } from "../../../../../lib/selena-scanner-client";
-import { describeThumbnailAttachFailure, type ThumbnailAttachFailure } from "../../../../../lib/thumbnail-attach.server";
-import { assertControlRoomContentVersionWriteAccess } from "../../../../../server/selena-control-room-access.server";
+import { isContentOsStage1Enabled } from "../../../../lib/content-os-stage1.server";
+import { resolveSessionAuthContext } from "../../../../lib/selena-auth-context.server";
+import { uploadSelenaPrivateAsset } from "../../../../lib/selena-scanner-client";
+import { describeThumbnailAttachFailure, type ThumbnailAttachFailure } from "../../../../lib/thumbnail-attach.server";
+import { assertControlRoomContentVersionWriteAccess } from "../../../../server/selena-control-room-access.server";
 
 /**
  * Attaching a thumbnail to a content version.
@@ -13,6 +13,10 @@ import { assertControlRoomContentVersionWriteAccess } from "../../../../../serve
  * Separate from the general asset upload because this one owes the caller a
  * normalized code rather than a sentence, and because the caller has to be able
  * to tell `BLOCKED_STORAGE` from everything else.
+ *
+ * Not under `/api/v1/`: that prefix is the key-authenticated public API, and a
+ * session upload from the browser carries no key. This route authenticates by
+ * session and refuses outright when Stage 1 is off.
  *
  * Bytes never come back out of here and never reach the database. The scanner
  * writes an opaque storage reference and a SHA-256; this route answers with an
@@ -31,7 +35,7 @@ function refuse(result: ThumbnailAttachFailure): Response {
 	return Response.json({ error: result.message, code: result.code }, { status: result.status });
 }
 
-export const Route = createFileRoute("/api/v1/selena/control-room/thumbnails")({
+export const Route = createFileRoute("/api/selena/control-room/thumbnails")({
 	server: {
 		handlers: {
 			POST: async ({ request }) => {

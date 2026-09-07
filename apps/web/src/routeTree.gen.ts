@@ -49,6 +49,7 @@ import { Route as AuthedAppBrandShareOfVoiceRouteImport } from './routes/_authed
 import { Route as AuthedAppBrandVisibilityRouteImport } from './routes/_authed/app/$brand/visibility'
 import { Route as AuthedReportsRenderReportIdRouteImport } from './routes/_authed/reports/render/$reportId'
 import { Route as ApiPlausibleEventIndexRouteImport } from './routes/api/plausible/event/index'
+import { Route as ApiSelenaControlRoomThumbnailsRouteImport } from './routes/api/selena/control-room/thumbnails'
 import { Route as ApiV1BrandsIndexRouteImport } from './routes/api/v1/brands/index'
 import { Route as ApiV1BrandsBrandIdRouteImport } from './routes/api/v1/brands/$brandId'
 import { Route as ApiV1CompetitorsIndexRouteImport } from './routes/api/v1/competitors/index'
@@ -82,7 +83,6 @@ import { Route as AuthedAppBrandSettingsMembersRouteImport } from './routes/_aut
 import { Route as AuthedAppBrandSettingsPromptsRouteImport } from './routes/_authed/app/$brand/settings/prompts'
 import { Route as ApiPlausibleJsScriptIndexRouteImport } from './routes/api/plausible/js/script/index'
 import { Route as ApiV1PromptsPromptIdSnapshotRouteImport } from './routes/api/v1/prompts/$promptId/snapshot'
-import { Route as ApiV1SelenaControlRoomThumbnailsRouteImport } from './routes/api/v1/selena/control-room/thumbnails'
 import { Route as ApiV1SelenaCyclesIndexRouteImport } from './routes/api/v1/selena/cycles/index'
 import { Route as ApiV1SelenaFindingsIndexRouteImport } from './routes/api/v1/selena/findings/index'
 import { Route as ApiV1SelenaLocksIndexRouteImport } from './routes/api/v1/selena/locks/index'
@@ -303,6 +303,12 @@ const ApiPlausibleEventIndexRoute = ApiPlausibleEventIndexRouteImport.update({
   path: '/api/plausible/event/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiSelenaControlRoomThumbnailsRoute =
+  ApiSelenaControlRoomThumbnailsRouteImport.update({
+    id: '/api/selena/control-room/thumbnails',
+    path: '/api/selena/control-room/thumbnails',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiV1BrandsIndexRoute = ApiV1BrandsIndexRouteImport.update({
   id: '/api/v1/brands/',
   path: '/api/v1/brands/',
@@ -488,12 +494,6 @@ const ApiV1PromptsPromptIdSnapshotRoute =
     path: '/snapshot',
     getParentRoute: () => ApiV1PromptsPromptIdRoute,
   } as any)
-const ApiV1SelenaControlRoomThumbnailsRoute =
-  ApiV1SelenaControlRoomThumbnailsRouteImport.update({
-    id: '/api/v1/selena/control-room/thumbnails',
-    path: '/api/v1/selena/control-room/thumbnails',
-    getParentRoute: () => rootRouteImport,
-  } as any)
 const ApiV1SelenaCyclesIndexRoute = ApiV1SelenaCyclesIndexRouteImport.update({
   id: '/api/v1/selena/cycles/',
   path: '/api/v1/selena/cycles/',
@@ -606,6 +606,7 @@ export interface FileRoutesByFullPath {
   '/app/$brand/share-of-voice': typeof AuthedAppBrandShareOfVoiceRoute
   '/app/$brand/visibility': typeof AuthedAppBrandVisibilityRoute
   '/reports/render/$reportId': typeof AuthedReportsRenderReportIdRoute
+  '/api/selena/control-room/thumbnails': typeof ApiSelenaControlRoomThumbnailsRoute
   '/api/v1/brands/$brandId': typeof ApiV1BrandsBrandIdRoute
   '/api/v1/competitors/$competitorId': typeof ApiV1CompetitorsCompetitorIdRoute
   '/api/v1/prompts/$promptId': typeof ApiV1PromptsPromptIdRouteWithChildren
@@ -638,7 +639,6 @@ export interface FileRoutesByFullPath {
   '/app/$brand/settings/members': typeof AuthedAppBrandSettingsMembersRoute
   '/app/$brand/settings/prompts': typeof AuthedAppBrandSettingsPromptsRoute
   '/api/v1/prompts/$promptId/snapshot': typeof ApiV1PromptsPromptIdSnapshotRoute
-  '/api/v1/selena/control-room/thumbnails': typeof ApiV1SelenaControlRoomThumbnailsRoute
   '/api/v1/selena/payments/test': typeof ApiV1SelenaPaymentsTestRoute
   '/api/v1/selena/readiness/verify': typeof ApiV1SelenaReadinessVerifyRoute
   '/app/$brand/prompts/': typeof AuthedAppBrandPromptsIndexRoute
@@ -690,6 +690,7 @@ export interface FileRoutesByTo {
   '/app/$brand/share-of-voice': typeof AuthedAppBrandShareOfVoiceRoute
   '/app/$brand/visibility': typeof AuthedAppBrandVisibilityRoute
   '/reports/render/$reportId': typeof AuthedReportsRenderReportIdRoute
+  '/api/selena/control-room/thumbnails': typeof ApiSelenaControlRoomThumbnailsRoute
   '/api/v1/brands/$brandId': typeof ApiV1BrandsBrandIdRoute
   '/api/v1/competitors/$competitorId': typeof ApiV1CompetitorsCompetitorIdRoute
   '/api/v1/prompts/$promptId': typeof ApiV1PromptsPromptIdRouteWithChildren
@@ -722,7 +723,6 @@ export interface FileRoutesByTo {
   '/app/$brand/settings/members': typeof AuthedAppBrandSettingsMembersRoute
   '/app/$brand/settings/prompts': typeof AuthedAppBrandSettingsPromptsRoute
   '/api/v1/prompts/$promptId/snapshot': typeof ApiV1PromptsPromptIdSnapshotRoute
-  '/api/v1/selena/control-room/thumbnails': typeof ApiV1SelenaControlRoomThumbnailsRoute
   '/api/v1/selena/payments/test': typeof ApiV1SelenaPaymentsTestRoute
   '/api/v1/selena/readiness/verify': typeof ApiV1SelenaReadinessVerifyRoute
   '/app/$brand/prompts': typeof AuthedAppBrandPromptsIndexRoute
@@ -780,6 +780,7 @@ export interface FileRoutesById {
   '/_authed/app/$brand/share-of-voice': typeof AuthedAppBrandShareOfVoiceRoute
   '/_authed/app/$brand/visibility': typeof AuthedAppBrandVisibilityRoute
   '/_authed/reports/render/$reportId': typeof AuthedReportsRenderReportIdRoute
+  '/api/selena/control-room/thumbnails': typeof ApiSelenaControlRoomThumbnailsRoute
   '/api/v1/brands/$brandId': typeof ApiV1BrandsBrandIdRoute
   '/api/v1/competitors/$competitorId': typeof ApiV1CompetitorsCompetitorIdRoute
   '/api/v1/prompts/$promptId': typeof ApiV1PromptsPromptIdRouteWithChildren
@@ -812,7 +813,6 @@ export interface FileRoutesById {
   '/_authed/app/$brand/settings/members': typeof AuthedAppBrandSettingsMembersRoute
   '/_authed/app/$brand/settings/prompts': typeof AuthedAppBrandSettingsPromptsRoute
   '/api/v1/prompts/$promptId/snapshot': typeof ApiV1PromptsPromptIdSnapshotRoute
-  '/api/v1/selena/control-room/thumbnails': typeof ApiV1SelenaControlRoomThumbnailsRoute
   '/api/v1/selena/payments/test': typeof ApiV1SelenaPaymentsTestRoute
   '/api/v1/selena/readiness/verify': typeof ApiV1SelenaReadinessVerifyRoute
   '/_authed/app/$brand/prompts/': typeof AuthedAppBrandPromptsIndexRoute
@@ -870,6 +870,7 @@ export interface FileRouteTypes {
     | '/app/$brand/share-of-voice'
     | '/app/$brand/visibility'
     | '/reports/render/$reportId'
+    | '/api/selena/control-room/thumbnails'
     | '/api/v1/brands/$brandId'
     | '/api/v1/competitors/$competitorId'
     | '/api/v1/prompts/$promptId'
@@ -902,7 +903,6 @@ export interface FileRouteTypes {
     | '/app/$brand/settings/members'
     | '/app/$brand/settings/prompts'
     | '/api/v1/prompts/$promptId/snapshot'
-    | '/api/v1/selena/control-room/thumbnails'
     | '/api/v1/selena/payments/test'
     | '/api/v1/selena/readiness/verify'
     | '/app/$brand/prompts/'
@@ -954,6 +954,7 @@ export interface FileRouteTypes {
     | '/app/$brand/share-of-voice'
     | '/app/$brand/visibility'
     | '/reports/render/$reportId'
+    | '/api/selena/control-room/thumbnails'
     | '/api/v1/brands/$brandId'
     | '/api/v1/competitors/$competitorId'
     | '/api/v1/prompts/$promptId'
@@ -986,7 +987,6 @@ export interface FileRouteTypes {
     | '/app/$brand/settings/members'
     | '/app/$brand/settings/prompts'
     | '/api/v1/prompts/$promptId/snapshot'
-    | '/api/v1/selena/control-room/thumbnails'
     | '/api/v1/selena/payments/test'
     | '/api/v1/selena/readiness/verify'
     | '/app/$brand/prompts'
@@ -1043,6 +1043,7 @@ export interface FileRouteTypes {
     | '/_authed/app/$brand/share-of-voice'
     | '/_authed/app/$brand/visibility'
     | '/_authed/reports/render/$reportId'
+    | '/api/selena/control-room/thumbnails'
     | '/api/v1/brands/$brandId'
     | '/api/v1/competitors/$competitorId'
     | '/api/v1/prompts/$promptId'
@@ -1075,7 +1076,6 @@ export interface FileRouteTypes {
     | '/_authed/app/$brand/settings/members'
     | '/_authed/app/$brand/settings/prompts'
     | '/api/v1/prompts/$promptId/snapshot'
-    | '/api/v1/selena/control-room/thumbnails'
     | '/api/v1/selena/payments/test'
     | '/api/v1/selena/readiness/verify'
     | '/_authed/app/$brand/prompts/'
@@ -1110,6 +1110,7 @@ export interface RootRouteChildren {
   ApiManifestIndexRoute: typeof ApiManifestIndexRoute
   ApiOgIndexRoute: typeof ApiOgIndexRoute
   ApiSetupStatusIndexRoute: typeof ApiSetupStatusIndexRoute
+  ApiSelenaControlRoomThumbnailsRoute: typeof ApiSelenaControlRoomThumbnailsRoute
   ApiV1BrandsBrandIdRoute: typeof ApiV1BrandsBrandIdRoute
   ApiV1CompetitorsCompetitorIdRoute: typeof ApiV1CompetitorsCompetitorIdRoute
   ApiV1PromptsPromptIdRoute: typeof ApiV1PromptsPromptIdRouteWithChildren
@@ -1126,7 +1127,6 @@ export interface RootRouteChildren {
   ApiV1DocsIndexRoute: typeof ApiV1DocsIndexRoute
   ApiV1PromptsIndexRoute: typeof ApiV1PromptsIndexRoute
   ApiV1ReportsIndexRoute: typeof ApiV1ReportsIndexRoute
-  ApiV1SelenaControlRoomThumbnailsRoute: typeof ApiV1SelenaControlRoomThumbnailsRoute
   ApiV1SelenaPaymentsTestRoute: typeof ApiV1SelenaPaymentsTestRoute
   ApiV1SelenaReadinessVerifyRoute: typeof ApiV1SelenaReadinessVerifyRoute
   ApiPlausibleJsScriptIndexRoute: typeof ApiPlausibleJsScriptIndexRoute
@@ -1424,6 +1424,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPlausibleEventIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/selena/control-room/thumbnails': {
+      id: '/api/selena/control-room/thumbnails'
+      path: '/api/selena/control-room/thumbnails'
+      fullPath: '/api/selena/control-room/thumbnails'
+      preLoaderRoute: typeof ApiSelenaControlRoomThumbnailsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/v1/brands/': {
       id: '/api/v1/brands/'
       path: '/api/v1/brands'
@@ -1654,13 +1661,6 @@ declare module '@tanstack/react-router' {
       fullPath: '/api/v1/prompts/$promptId/snapshot'
       preLoaderRoute: typeof ApiV1PromptsPromptIdSnapshotRouteImport
       parentRoute: typeof ApiV1PromptsPromptIdRoute
-    }
-    '/api/v1/selena/control-room/thumbnails': {
-      id: '/api/v1/selena/control-room/thumbnails'
-      path: '/api/v1/selena/control-room/thumbnails'
-      fullPath: '/api/v1/selena/control-room/thumbnails'
-      preLoaderRoute: typeof ApiV1SelenaControlRoomThumbnailsRouteImport
-      parentRoute: typeof rootRouteImport
     }
     '/api/v1/selena/cycles/': {
       id: '/api/v1/selena/cycles/'
@@ -1945,6 +1945,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiManifestIndexRoute: ApiManifestIndexRoute,
   ApiOgIndexRoute: ApiOgIndexRoute,
   ApiSetupStatusIndexRoute: ApiSetupStatusIndexRoute,
+  ApiSelenaControlRoomThumbnailsRoute: ApiSelenaControlRoomThumbnailsRoute,
   ApiV1BrandsBrandIdRoute: ApiV1BrandsBrandIdRoute,
   ApiV1CompetitorsCompetitorIdRoute: ApiV1CompetitorsCompetitorIdRoute,
   ApiV1PromptsPromptIdRoute: ApiV1PromptsPromptIdRouteWithChildren,
@@ -1961,7 +1962,6 @@ const rootRouteChildren: RootRouteChildren = {
   ApiV1DocsIndexRoute: ApiV1DocsIndexRoute,
   ApiV1PromptsIndexRoute: ApiV1PromptsIndexRoute,
   ApiV1ReportsIndexRoute: ApiV1ReportsIndexRoute,
-  ApiV1SelenaControlRoomThumbnailsRoute: ApiV1SelenaControlRoomThumbnailsRoute,
   ApiV1SelenaPaymentsTestRoute: ApiV1SelenaPaymentsTestRoute,
   ApiV1SelenaReadinessVerifyRoute: ApiV1SelenaReadinessVerifyRoute,
   ApiPlausibleJsScriptIndexRoute: ApiPlausibleJsScriptIndexRoute,

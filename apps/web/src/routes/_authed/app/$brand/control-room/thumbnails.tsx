@@ -54,7 +54,7 @@ function ThumbnailsPage() {
 		body.set("contentVersionId", versionId);
 		startTransition(async () => {
 			try {
-				const response = await fetch("/api/v1/selena/control-room/thumbnails", { method: "POST", body });
+				const response = await fetch("/api/selena/control-room/thumbnails", { method: "POST", body });
 				const result = (await response.json()) as { code?: string; error?: string };
 				if (!response.ok) {
 					// BLOCKED_STORAGE is the one answer that means nothing was saved. The
