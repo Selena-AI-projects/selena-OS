@@ -6,6 +6,33 @@ transferred to a new owner, and a session cannot be re-pointed across owners.
 Everything below was verified before access was lost; nothing here is from
 memory alone.
 
+> **CORRECTION, 2026-09-07 ~02:50 UTC — the premise of §1 and §4a is wrong.**
+> `parkourcafe/selena-OS` was **not** transferred. With HTTP redirects disabled,
+> `git ls-remote https://github.com/parkourcafe/selena-OS` still answers with
+> `main` at `86a0a633…`, and `Selena-AI-projects/selena-OS` does not exist.
+> What the owner transferred is the **other** repository,
+> `parkourcafe/selena-ai-visibility` → `Selena-AI-projects/selena-ai-visibility`
+> (the visibility product; its PR #146 is Blacksmith's own migration, merged into
+> `release/selena-visibility-mvp`). That repository is unrelated to Content OS.
+>
+> What this session actually lost was the Claude GitHub App's grant on
+> `parkourcafe/selena-OS`: the owner reconnected the GitHub connector while
+> transferring the other repo, and the reconnection's repository selection
+> dropped `selena-OS`. REST API calls for it return 404 through the App; git
+> over the proxy works. **Fix:** claude.ai → Settings → Connectors → GitHub →
+> make sure `parkourcafe/selena-OS` is among the granted repositories. A new
+> session, if still needed, is opened on `parkourcafe/selena-OS` — same owner,
+> so `add_repo` works too.
+>
+> Consequences: PR #32, branch `feat/content-os-slice3-creation`, head
+> `3a6c9cd…` are all still at `parkourcafe/selena-OS`. The self-hosted runner's
+> registration on that repository is **intact** — do **not** run the
+> re-registration commands in §4a; they would detach it. The Hetzner box only
+> needs a Power cycle. The "There are no runners configured" page the owner saw
+> belonged to the org's visibility repo. Blacksmith serving the org changes
+> nothing for Content OS until/unless `selena-OS` is moved there — an owner
+> decision that has not been made.
+
 ## 1. What moved, and where things are now
 
 | | Before | Now |
