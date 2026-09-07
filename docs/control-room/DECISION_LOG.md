@@ -114,3 +114,22 @@
 - Authority: owner approved GitHub-hosted runners and available GitHub Actions
   minutes on 2026-09-06.
 - Affected requirements: S1-08.
+
+## 2026-09-07 — precondition for migration 0040 on databases that predate it
+
+- Decision: keep `0040_content_policy_lifecycle` as applied on staging and record
+  its precondition instead of rewriting it. The migration marks every existing
+  `selena_registry.content_policies` row `active` and then creates the partial
+  unique index `content_policies_one_active_per_brand`, so it aborts on any brand
+  that already holds two or more policy rows; because drizzle applies pending
+  migrations in one transaction, 0038–0040 then all roll back together.
+- Check before migrating any database still at 0037 or earlier:
+  `SELECT brand_id, count(*) FROM selena_registry.content_policies GROUP BY 1 HAVING count(*) > 1;`
+  must return no rows. If it does, withdraw every row but the newest per brand
+  first (`status = 'revoked'`, with `revoked_at`, `revoked_by` and a reason), or
+  ship a preceding migration that does so.
+- Evidence: staging had no brand with more than one row when 0040 ran and the
+  index was created; the failure mode was reproduced on a throwaway database
+  during the independent review of the integration branch.
+- Boundary: applied migration files and the ledger are never edited; the
+  precondition is enforced by the check above, not by 0040 itself.

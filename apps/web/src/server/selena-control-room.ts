@@ -88,8 +88,10 @@ function policyRequiresEvidence(policy: { requireEvidence: boolean } | undefined
 /**
  * A draft is reviewed against the policy in force for its brand, never against
  * a version the client names: a withdrawn or unknown version would carry no
- * evidence requirement at approval. A brand that has never set a policy keeps
- * the version the client sends, so nothing that worked before stops working.
+ * evidence requirement at approval. Only a brand that has never had a policy
+ * keeps the version the client sends, so nothing that worked before stops
+ * working; a brand whose policy was withdrawn has none until the owner sets
+ * one — the same rule the projection worker applies.
  */
 async function policyVersionInForce(
 	tx: ControlRoomDatabase,
@@ -97,19 +99,13 @@ async function policyVersionInForce(
 	brandId: string,
 	requested: string | undefined,
 ): Promise<string> {
-	const [active] = await tx
-		.select({ policyVersion: scrContentPolicies.policyVersion })
+	const rows = await tx
+		.select({ policyVersion: scrContentPolicies.policyVersion, status: scrContentPolicies.status })
 		.from(scrContentPolicies)
-		.where(
-			and(
-				eq(scrContentPolicies.organizationId, organizationId),
-				eq(scrContentPolicies.brandId, brandId),
-				eq(scrContentPolicies.status, "active"),
-			),
-		)
-		.limit(1);
+		.where(and(eq(scrContentPolicies.organizationId, organizationId), eq(scrContentPolicies.brandId, brandId)));
+	const active = rows.find((row) => row.status === "active");
 	if (active) return active.policyVersion;
-	if (requested) return requested;
+	if (rows.length === 0 && requested) return requested;
 	throw new Error("Set a content policy for this brand before creating drafts");
 }
 
