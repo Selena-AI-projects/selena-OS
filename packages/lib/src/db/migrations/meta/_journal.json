@@ -281,6 +281,13 @@
 			"when": 1788620580000,
 			"tag": "0041_structured_content_and_editorial_review",
 			"breakpoints": true
+		},
+		{
+			"idx": 40,
+			"version": "7",
+			"when": 1788620640000,
+			"tag": "0042_thumbnail_origin_and_editorial_binding",
+			"breakpoints": true
 		}
 	]
 }

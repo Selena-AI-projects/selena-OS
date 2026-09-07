@@ -504,7 +504,8 @@ SELECT lives_ok(
     content_hash, profile_hash, evidence_hash, asset_bundle_hash, decided_by
   ) VALUES (
     'creation-org', 'creation-brand-a', '40000000-0000-4000-8000-000000000602', 'APPROVED',
-    repeat('8', 64), repeat('a', 64), repeat('e', 64), repeat('f', 64), 'creation-owner'
+    repeat('8', 64), repeat('a', 64), selena_registry.editorial_evidence_hash('40000000-0000-4000-8000-000000000602'),
+    selena_registry.editorial_asset_bundle_hash('40000000-0000-4000-8000-000000000602'), 'creation-owner'
   )$$,
   'an owner can approve a version editorially'
 );
@@ -515,7 +516,8 @@ SELECT throws_ok(
     content_hash, profile_hash, evidence_hash, asset_bundle_hash, decided_by
   ) VALUES (
     'creation-org', 'creation-brand-a', '40000000-0000-4000-8000-000000000602', 'APPROVED',
-    repeat('0', 64), repeat('a', 64), repeat('e', 64), repeat('f', 64), 'creation-owner'
+    repeat('0', 64), repeat('a', 64), selena_registry.editorial_evidence_hash('40000000-0000-4000-8000-000000000602'),
+    selena_registry.editorial_asset_bundle_hash('40000000-0000-4000-8000-000000000602'), 'creation-owner'
   )$$,
   42501,
   'new row violates row-level security policy for table "editorial_approvals"',
@@ -528,7 +530,8 @@ SELECT throws_ok(
     content_hash, profile_hash, evidence_hash, asset_bundle_hash, decided_by
   ) VALUES (
     'creation-org', 'creation-brand-a', '40000000-0000-4000-8000-000000000602', 'REJECTED',
-    repeat('8', 64), repeat('a', 64), repeat('e', 64), repeat('f', 64), 'creation-owner'
+    repeat('8', 64), repeat('a', 64), selena_registry.editorial_evidence_hash('40000000-0000-4000-8000-000000000602'),
+    selena_registry.editorial_asset_bundle_hash('40000000-0000-4000-8000-000000000602'), 'creation-owner'
   )$$,
   '23514',
   NULL,
@@ -541,7 +544,8 @@ SELECT lives_ok(
     content_hash, profile_hash, evidence_hash, asset_bundle_hash, reason, decided_by
   ) VALUES (
     'creation-org', 'creation-brand-a', '40000000-0000-4000-8000-000000000602', 'CHANGES_REQUESTED',
-    repeat('8', 64), repeat('a', 64), repeat('e', 64), repeat('f', 64), 'The payoff is not supported.', 'creation-owner'
+    repeat('8', 64), repeat('a', 64), selena_registry.editorial_evidence_hash('40000000-0000-4000-8000-000000000602'),
+    selena_registry.editorial_asset_bundle_hash('40000000-0000-4000-8000-000000000602'), 'The payoff is not supported.', 'creation-owner'
   )$$,
   'changes can be requested with a reason'
 );
@@ -552,7 +556,8 @@ SELECT throws_ok(
     content_hash, profile_hash, evidence_hash, asset_bundle_hash, decided_by
   ) VALUES (
     'creation-org', 'creation-brand-a', '40000000-0000-4000-8000-000000000602', 'APPROVED',
-    repeat('8', 64), repeat('a', 64), repeat('e', 64), repeat('f', 64), 'creation-member'
+    repeat('8', 64), repeat('a', 64), selena_registry.editorial_evidence_hash('40000000-0000-4000-8000-000000000602'),
+    selena_registry.editorial_asset_bundle_hash('40000000-0000-4000-8000-000000000602'), 'creation-member'
   )$$,
   42501,
   'new row violates row-level security policy for table "editorial_approvals"',
