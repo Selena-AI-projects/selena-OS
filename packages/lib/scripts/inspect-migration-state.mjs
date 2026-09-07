@@ -49,11 +49,8 @@ const OBJECT_CHECKS = [
 		"to_regprocedure('selena_ingest_raw.record_aether_event(uuid,text,text,uuid,uuid,integer,timestamptz,uuid,jsonb,text)') IS NOT NULL",
 	],
 	["0036 gateway signing keys", "to_regclass('selena_release.gateway_signing_keys') IS NOT NULL"],
-	[
-		"0037 (foreign) brand content profiles",
-		"to_regclass('selena_registry.brand_content_profile_versions') IS NOT NULL",
-	],
-	["0037 (foreign) content channels", "to_regclass('selena_registry.content_channels') IS NOT NULL"],
+	["0037 brand content profiles", "to_regclass('selena_registry.brand_content_profile_versions') IS NOT NULL"],
+	["0037 content channels", "to_regclass('selena_registry.content_channels') IS NOT NULL"],
 	["0038 growth bindings", "to_regclass('selena_registry.growth_project_bindings') IS NOT NULL"],
 	[
 		"0038 confirm_growth_binding",

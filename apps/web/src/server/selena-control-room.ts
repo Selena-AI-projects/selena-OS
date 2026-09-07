@@ -85,6 +85,34 @@ function policyRequiresEvidence(policy: { requireEvidence: boolean } | undefined
 	return policy?.requireEvidence === true;
 }
 
+/**
+ * A draft is reviewed against the policy in force for its brand, never against
+ * a version the client names: a withdrawn or unknown version would carry no
+ * evidence requirement at approval. A brand that has never set a policy keeps
+ * the version the client sends, so nothing that worked before stops working.
+ */
+async function policyVersionInForce(
+	tx: ControlRoomDatabase,
+	organizationId: string,
+	brandId: string,
+	requested: string | undefined,
+): Promise<string> {
+	const [active] = await tx
+		.select({ policyVersion: scrContentPolicies.policyVersion })
+		.from(scrContentPolicies)
+		.where(
+			and(
+				eq(scrContentPolicies.organizationId, organizationId),
+				eq(scrContentPolicies.brandId, brandId),
+				eq(scrContentPolicies.status, "active"),
+			),
+		)
+		.limit(1);
+	if (active) return active.policyVersion;
+	if (requested) return requested;
+	throw new Error("Set a content policy for this brand before creating drafts");
+}
+
 function assertIanaTimeZone(value: string): string {
 	try {
 		Intl.DateTimeFormat(undefined, { timeZone: value });
@@ -654,7 +682,7 @@ export const createControlRoomContentFn = createServerFn({ method: "POST" })
 			ctaUrl: z.string().url().max(2048),
 			claims: claimsSchema.optional().default([]),
 			evidence: evidenceSchema.optional().default([]),
-			policyVersion: policyVersionSchema,
+			policyVersion: policyVersionSchema.optional(),
 			evidenceExpiresAt: z.coerce.date().optional(),
 		}),
 	)
@@ -663,15 +691,16 @@ export const createControlRoomContentFn = createServerFn({ method: "POST" })
 		assertWritable(context);
 		const evidenceExpiresAt = data.evidence.length > 0 ? validFutureDate(data.evidenceExpiresAt) : null;
 		if (data.evidence.length > 0 && !evidenceExpiresAt) throw new Error("Evidence requires an expiry");
-		const contentHash = contentVersionHash({
-			body: data.body,
-			ctaUrl: data.ctaUrl,
-			claims: data.claims,
-			evidence: data.evidence,
-			disclosure: {},
-			policyVersion: data.policyVersion,
-		});
 		return withControlRoomTransaction(context, data.brandId, async (tx) => {
+			const policyVersion = await policyVersionInForce(tx, context.tenantId, data.brandId, data.policyVersion);
+			const contentHash = contentVersionHash({
+				body: data.body,
+				ctaUrl: data.ctaUrl,
+				claims: data.claims,
+				evidence: data.evidence,
+				disclosure: {},
+				policyVersion,
+			});
 			const [content] = await tx
 				.insert(scrContentItems)
 				.values({
@@ -693,7 +722,7 @@ export const createControlRoomContentFn = createServerFn({ method: "POST" })
 					claims: data.claims,
 					evidence: data.evidence,
 					disclosure: {},
-					policyVersion: data.policyVersion,
+					policyVersion,
 					contentHash,
 					evidenceExpiresAt,
 					createdBy: context.actorId,
@@ -720,7 +749,7 @@ export const createContentVersionFn = createServerFn({ method: "POST" })
 			ctaUrl: z.string().url().max(2048),
 			claims: claimsSchema.optional().default([]),
 			evidence: evidenceSchema.optional().default([]),
-			policyVersion: policyVersionSchema,
+			policyVersion: policyVersionSchema.optional(),
 			evidenceExpiresAt: z.coerce.date().optional(),
 		}),
 	)
@@ -751,13 +780,14 @@ export const createContentVersionFn = createServerFn({ method: "POST" })
 				.orderBy(desc(scrContentVersions.version))
 				.limit(1);
 			const nextVersion = (latest?.version ?? 0) + 1;
+			const policyVersion = await policyVersionInForce(tx, context.tenantId, data.brandId, data.policyVersion);
 			const contentHash = contentVersionHash({
 				body: data.body,
 				ctaUrl: data.ctaUrl,
 				claims: data.claims,
 				evidence: data.evidence,
 				disclosure: {},
-				policyVersion: data.policyVersion,
+				policyVersion,
 			});
 			const [version] = await tx
 				.insert(scrContentVersions)
@@ -771,7 +801,7 @@ export const createContentVersionFn = createServerFn({ method: "POST" })
 					claims: data.claims,
 					evidence: data.evidence,
 					disclosure: {},
-					policyVersion: data.policyVersion,
+					policyVersion,
 					contentHash,
 					evidenceExpiresAt,
 					createdBy: context.actorId,

@@ -202,4 +202,24 @@ describe.skipIf(!disposableDatabaseUrl)("content policy lifecycle", () => {
 		);
 		expect(leaked.rows[0].n).toBe(0);
 	});
+
+	it("cannot be written directly by the web runtime, even as the owner", async () => {
+		// The lifecycle functions are the only door; the table itself is closed to
+		// the runtime so that no code path, present or future, can skip the audit.
+		await expect(
+			inContext(ownerId, "owner", brandId, organizationId, () =>
+				web.query("UPDATE selena_registry.content_policies SET require_evidence = false WHERE brand_id = $1", [
+					brandId,
+				]),
+			),
+		).rejects.toThrow(/permission denied/);
+		await expect(
+			inContext(ownerId, "owner", brandId, organizationId, () =>
+				web.query(
+					"INSERT INTO selena_registry.content_policies (organization_id, brand_id, policy_version, require_evidence, created_by) VALUES ($1, $2, 'direct', false, $3)",
+					[organizationId, brandId, ownerId],
+				),
+			),
+		).rejects.toThrow(/permission denied/);
+	});
 });

@@ -146,10 +146,7 @@ run("projecting materials as the registry worker", () => {
 		// The policy the projection stamps on every version is created the way the
 		// product creates it: by the owner, through the web runtime, under RLS.
 		await asOwner(BRAND_A, ORG_A, (client) =>
-			client.query(
-				"INSERT INTO selena_registry.content_policies (organization_id, brand_id, policy_version, require_evidence, created_by) VALUES ($1, $2, 'vitest-policy-1', false, $3)",
-				[ORG_A, BRAND_A, OWNER_A],
-			),
+			client.query("SELECT selena_registry.set_content_policy($1, 'vitest-policy-1', false)", [BRAND_A]),
 		);
 	});
 

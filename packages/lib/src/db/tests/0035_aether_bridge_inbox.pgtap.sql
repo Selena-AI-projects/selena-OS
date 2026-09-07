@@ -1,7 +1,7 @@
 -- Run only against a disposable database after migration 0035 is installed.
 -- This file must never be executed against staging or production.
 BEGIN;
-SELECT plan(13);
+SELECT plan(14);
 
 -- The receiver holds a credential and faces the public internet, so what it can
 -- do to the database is asserted rather than assumed.

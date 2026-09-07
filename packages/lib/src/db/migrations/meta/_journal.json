@@ -288,6 +288,13 @@
 			"when": 1788620520000,
 			"tag": "0040_content_policy_lifecycle",
 			"breakpoints": true
+		},
+		{
+			"idx": 41,
+			"version": "7",
+			"when": 1788620580000,
+			"tag": "0041_content_policy_web_writes_revoked",
+			"breakpoints": true
 		}
 	]
 }
