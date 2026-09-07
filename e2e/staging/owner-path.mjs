@@ -222,15 +222,34 @@ async function expectRow(page, testId, needles, what) {
 	}
 }
 
+/**
+ * The forms are controlled inputs: a value typed before the client has taken
+ * over the server-rendered page is thrown away on hydration, and the form then
+ * reports the field as empty. So every visit waits for the page to go quiet,
+ * and every fill is checked against what the input actually holds.
+ */
+async function open(page, path) {
+	await page.goto(path, { waitUntil: "networkidle" });
+}
+
+async function fillChecked(locator, value) {
+	await locator.fill(value);
+	if ((await locator.inputValue()) !== value) {
+		await locator.clear();
+		await locator.pressSequentially(value);
+	}
+	if ((await locator.inputValue()) !== value) throw new Error("the field did not keep the value typed into it");
+}
+
 /** The legacy first-brand path: the brand takes the organization's id. */
 async function createBrandThroughOnboarding(page) {
-	await page.goto(`/app/${ORGANIZATION_ID}`, { waitUntil: "domcontentloaded" });
+	await open(page, `/app/${ORGANIZATION_ID}`);
 	const website = page.locator("#website");
 	if ((await website.count()) === 0) {
 		log("brand: already exists, onboarding is not shown");
 		return;
 	}
-	await website.fill(BRAND_WEBSITE);
+	await fillChecked(website, BRAND_WEBSITE);
 	await page.getByRole("button", { name: "Complete Setup" }).click();
 	// The form goes away only once the brand exists and the route re-renders on it.
 	try {
@@ -242,7 +261,7 @@ async function createBrandThroughOnboarding(page) {
 }
 
 async function openSources(page) {
-	await page.goto(`/app/${ORGANIZATION_ID}/control-room#sources`, { waitUntil: "domcontentloaded" });
+	await open(page, `/app/${ORGANIZATION_ID}/control-room#sources`);
 	await page.getByText("Content policy", { exact: true }).first().waitFor({ timeout: 30_000 });
 	await page.getByText("Aether sources", { exact: true }).first().waitFor({ timeout: 30_000 });
 }
@@ -253,7 +272,7 @@ async function setPolicyThroughInterface(page) {
 		log(`policy: ${POLICY_VERSION} is already in force`);
 		return;
 	}
-	await page.getByPlaceholder("2026-09-a").fill(POLICY_VERSION);
+	await fillChecked(page.getByPlaceholder("2026-09-a"), POLICY_VERSION);
 	await page.getByRole("button", { name: "Set policy" }).click();
 	await expectRow(page, "content-policy-row", [POLICY_VERSION, "IN FORCE"], `policy ${POLICY_VERSION}`);
 	log(`policy: ${POLICY_VERSION} set and shown in force`);
@@ -269,8 +288,8 @@ async function confirmSourceThroughInterface(page) {
 	if ((await form.count()) === 0) {
 		throw new Error("the confirm-a-source card is not shown: growth sources are switched off or this is not an owner");
 	}
-	await page.getByPlaceholder("00000000-0000-0000-0000-000000000000").fill(PROJECT_ID);
-	await page.getByPlaceholder("selena").fill(BUSINESS_KEY);
+	await fillChecked(page.getByPlaceholder("00000000-0000-0000-0000-000000000000"), PROJECT_ID);
+	await fillChecked(page.getByPlaceholder("selena"), BUSINESS_KEY);
 	await page.locator("select").first().selectOption(SOURCE_ENVIRONMENT);
 	await page.getByRole("button", { name: "Confirm source" }).click();
 	await expectRow(page, "growth-binding-row", [PROJECT_ID, "CONFIRMED"], `source ${PROJECT_ID}`);
