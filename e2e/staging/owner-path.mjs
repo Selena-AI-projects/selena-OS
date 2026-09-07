@@ -205,6 +205,106 @@ async function describe(page, path) {
 	log(`links:    ${JSON.stringify(links)}`);
 }
 
+/** What the application told the person, so a refusal is quoted rather than guessed at. */
+async function visibleNotices(page) {
+	return page.$$eval('[data-sonner-toast], [role="status"], [role="alert"], .text-destructive', (nodes) =>
+		nodes.map((node) => (node.textContent ?? "").trim()).filter(Boolean).slice(0, 5),
+	);
+}
+
+async function expectRow(page, testId, needles, what) {
+	let row = page.locator(`[data-testid="${testId}"]`);
+	for (const needle of needles) row = row.filter({ hasText: needle });
+	try {
+		await row.first().waitFor({ timeout: 20_000 });
+	} catch {
+		throw new Error(`${what} did not appear; the page said: ${JSON.stringify(await visibleNotices(page))}`);
+	}
+}
+
+/** The legacy first-brand path: the brand takes the organization's id. */
+async function createBrandThroughOnboarding(page) {
+	await page.goto(`/app/${ORGANIZATION_ID}`, { waitUntil: "domcontentloaded" });
+	const website = page.locator("#website");
+	if ((await website.count()) === 0) {
+		log("brand: already exists, onboarding is not shown");
+		return;
+	}
+	await website.fill(BRAND_WEBSITE);
+	await page.getByRole("button", { name: "Complete Setup" }).click();
+	// The form goes away only once the brand exists and the route re-renders on it.
+	try {
+		await website.waitFor({ state: "detached", timeout: 30_000 });
+	} catch {
+		throw new Error(`brand was not created; the page said: ${JSON.stringify(await visibleNotices(page))}`);
+	}
+	log(`brand: created through onboarding for ${BRAND_WEBSITE}`);
+}
+
+async function openSources(page) {
+	await page.goto(`/app/${ORGANIZATION_ID}/control-room#sources`, { waitUntil: "domcontentloaded" });
+	await page.getByText("Content policy", { exact: true }).first().waitFor({ timeout: 30_000 });
+	await page.getByText("Aether sources", { exact: true }).first().waitFor({ timeout: 30_000 });
+}
+
+async function setPolicyThroughInterface(page) {
+	const inForce = page.locator('[data-testid="content-policy-row"]').filter({ hasText: POLICY_VERSION }).filter({ hasText: "IN FORCE" });
+	if ((await inForce.count()) > 0) {
+		log(`policy: ${POLICY_VERSION} is already in force`);
+		return;
+	}
+	await page.getByPlaceholder("2026-09-a").fill(POLICY_VERSION);
+	await page.getByRole("button", { name: "Set policy" }).click();
+	await expectRow(page, "content-policy-row", [POLICY_VERSION, "IN FORCE"], `policy ${POLICY_VERSION}`);
+	log(`policy: ${POLICY_VERSION} set and shown in force`);
+}
+
+async function confirmSourceThroughInterface(page) {
+	const confirmed = page.locator('[data-testid="growth-binding-row"]').filter({ hasText: PROJECT_ID }).filter({ hasText: "CONFIRMED" });
+	if ((await confirmed.count()) > 0) {
+		log(`source: ${PROJECT_ID} is already confirmed`);
+		return;
+	}
+	const form = page.getByText("Confirm a source", { exact: true });
+	if ((await form.count()) === 0) {
+		throw new Error("the confirm-a-source card is not shown: growth sources are switched off or this is not an owner");
+	}
+	await page.getByPlaceholder("00000000-0000-0000-0000-000000000000").fill(PROJECT_ID);
+	await page.getByPlaceholder("selena").fill(BUSINESS_KEY);
+	await page.locator("select").first().selectOption(SOURCE_ENVIRONMENT);
+	await page.getByRole("button", { name: "Confirm source" }).click();
+	await expectRow(page, "growth-binding-row", [PROJECT_ID, "CONFIRMED"], `source ${PROJECT_ID}`);
+	log(`source: ${PROJECT_ID} (${BUSINESS_KEY}, ${SOURCE_ENVIRONMENT}) confirmed and shown`);
+}
+
+/** The database's own account of what the interface just did, read as the same login the check seeds with. */
+async function reportOutcome() {
+	const client = new pg.Client({ connectionString: DATABASE_URL });
+	await client.connect();
+	try {
+		const brand = await client.query(`SELECT id, name, website, organization_id FROM brands WHERE id = $1`, [ORGANIZATION_ID]);
+		const policies = await client.query(
+			`SELECT policy_version, status, require_evidence FROM selena_registry.content_policies WHERE brand_id = $1 ORDER BY created_at`,
+			[ORGANIZATION_ID],
+		);
+		const bindings = await client.query(
+			`SELECT aether_project_id, aether_business_key, source_environment, revoked_at IS NOT NULL AS revoked
+			   FROM selena_registry.growth_project_bindings WHERE brand_id = $1 ORDER BY confirmed_at`,
+			[ORGANIZATION_ID],
+		);
+		const audit = await client.query(
+			`SELECT action, count(*)::int AS n FROM selena_audit.audit_events WHERE brand_id = $1 GROUP BY action ORDER BY action`,
+			[ORGANIZATION_ID],
+		);
+		log(`\noutcome: brand=${JSON.stringify(brand.rows[0] ?? null)}`);
+		log(`outcome: policies=${JSON.stringify(policies.rows)}`);
+		log(`outcome: bindings=${JSON.stringify(bindings.rows)}`);
+		log(`outcome: audit events for this brand=${JSON.stringify(audit.rows)}`);
+	} finally {
+		await client.end();
+	}
+}
+
 async function main() {
 	const browser = await chromium.launch();
 	const context = await browser.newContext({ baseURL: BASE_URL });
@@ -228,6 +328,16 @@ async function main() {
 				await describe(page, path);
 			}
 			log("\ndiscovery finished; nothing was changed through the interface");
+			return;
+		}
+
+		if (MODE === "scenario") {
+			await createBrandThroughOnboarding(page);
+			await openSources(page);
+			await setPolicyThroughInterface(page);
+			await confirmSourceThroughInterface(page);
+			await reportOutcome();
+			log("\nowner path finished: brand, policy and source were all done through the interface");
 			return;
 		}
 
