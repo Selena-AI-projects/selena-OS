@@ -7,10 +7,13 @@
  * is walked in a real browser against the real deployment, by an account that
  * belongs to nobody.
  *
- * The account is created through the application's own sign-up, and only its
- * organization and membership rows are written directly — the same technical
- * preparation the repository's own end-to-end setup does. Everything the run is
- * actually testing goes through the interface.
+ * The account is created through the application's own sign-up where that is
+ * possible. A single-user deployment refuses a second one, so there the account
+ * row is seeded instead — with the very library the application verifies
+ * passwords with, so the sign-in that follows is still the application's own.
+ * Only the account, its organization and its membership are written directly,
+ * the same technical preparation the repository's own end-to-end setup does.
+ * Everything the run is actually testing goes through the interface.
  *
  * REPORT=accounts only reads how many accounts the deployment already has, and
  * REPORT=discover walks in and prints what it finds instead of asserting, which
@@ -78,23 +81,67 @@ async function reportAuthState() {
 	}
 }
 
+/**
+ * Give the check an identity of its own on a deployment that will not sign a
+ * second one up. The hash comes from the same package better-auth verifies
+ * with, so nothing here decides whether the password is right — the sign-in
+ * that follows does.
+ */
+async function seedCredentialAccount() {
+	const { hashPassword } = await import("@better-auth/utils/password");
+	const password = await hashPassword(OWNER_PASSWORD);
+	const client = new pg.Client({ connectionString: DATABASE_URL });
+	await client.connect();
+	try {
+		await client.query("BEGIN");
+		await client.query(
+			`INSERT INTO "user" (id, name, email, email_verified, created_at, updated_at)
+			 VALUES (gen_random_uuid()::text, $1, $2, false, NOW(), NOW())
+			 ON CONFLICT (email) DO NOTHING`,
+			["Growth Check", OWNER_EMAIL],
+		);
+		const user = await client.query(`SELECT id FROM "user" WHERE email = $1`, [OWNER_EMAIL]);
+		const userId = user.rows[0].id;
+		const updated = await client.query(
+			`UPDATE account SET password = $2, updated_at = NOW()
+			  WHERE user_id = $1 AND provider_id = 'credential'`,
+			[userId, password],
+		);
+		if (updated.rowCount === 0) {
+			await client.query(
+				`INSERT INTO account (id, account_id, provider_id, user_id, password, created_at, updated_at)
+				 VALUES (gen_random_uuid()::text, $1, 'credential', $1, $2, NOW(), NOW())`,
+				[userId, password],
+			);
+		}
+		await client.query("COMMIT");
+		log(`seeded the check's own credential account (${userId})`);
+	} catch (error) {
+		await client.query("ROLLBACK");
+		throw error;
+	} finally {
+		await client.end();
+	}
+}
+
 async function ensureAccount(page) {
 	const signUp = await page.request.post("/api/auth/sign-up/email", {
 		data: { email: OWNER_EMAIL, password: OWNER_PASSWORD, name: "Growth Check" },
 		failOnStatusCode: false,
 	});
 	// The reason matters more than the code: a refusal here is a deployment
-	// policy — sign-up switched off, a rejected domain, a password rule — and
-	// each of those needs a different answer.
+	// policy — sign-up switched off, a rejected domain, a password rule, or a
+	// deployment that admits exactly one account — and they need different
+	// answers.
 	log(`sign-up: ${signUp.status()} ${(await signUp.text()).slice(0, 300)}`);
-	if (signUp.ok()) return;
+	if (!signUp.ok()) await seedCredentialAccount();
 
 	const signIn = await page.request.post("/api/auth/sign-in/email", {
 		data: { email: OWNER_EMAIL, password: OWNER_PASSWORD },
 		failOnStatusCode: false,
 	});
-	log(`sign-in: ${signIn.status()} ${(await signIn.text()).slice(0, 300)}`);
-	if (!signIn.ok()) throw new Error(`neither sign-up nor sign-in succeeded (${signIn.status()})`);
+	log(`sign-in: ${signIn.status()} ${signIn.ok() ? "" : (await signIn.text()).slice(0, 300)}`);
+	if (!signIn.ok()) throw new Error(`the synthetic owner could not sign in (${signIn.status()})`);
 }
 
 /**
@@ -116,11 +163,11 @@ async function ensureOrganization() {
 		);
 		await client.query(
 			`INSERT INTO member (id, organization_id, user_id, role, created_at)
-			 SELECT gen_random_uuid(), $1, $2, 'owner', NOW()
+			 SELECT gen_random_uuid()::text, $1, $2, 'admin', NOW()
 			  WHERE NOT EXISTS (SELECT 1 FROM member WHERE organization_id = $1 AND user_id = $2)`,
 			[ORGANIZATION_ID, userId],
 		);
-		log(`organization ${ORGANIZATION_ID} and an owner membership are in place for ${userId}`);
+		log(`organization ${ORGANIZATION_ID} and an admin membership are in place for ${userId}`);
 		return userId;
 	} finally {
 		await client.end();
