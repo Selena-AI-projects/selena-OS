@@ -187,9 +187,21 @@ async function describe(page, path) {
 	const headings = await page.$$eval("h1, h2, h3", (nodes) =>
 		nodes.map((node) => (node.textContent ?? "").trim()).filter(Boolean).slice(0, 20),
 	);
+	const fields = await page.$$eval("input, select, textarea", (nodes) =>
+		nodes
+			.map((node) => ({
+				tag: node.tagName.toLowerCase(),
+				type: node.getAttribute("type"),
+				name: node.getAttribute("name"),
+				id: node.getAttribute("id"),
+				placeholder: node.getAttribute("placeholder"),
+			}))
+			.slice(0, 30),
+	);
 	log(`\n--- ${path} -> ${status} (${page.url()})`);
 	log(`headings: ${JSON.stringify(headings)}`);
 	log(`buttons:  ${JSON.stringify(buttons)}`);
+	log(`fields:   ${JSON.stringify(fields)}`);
 	log(`links:    ${JSON.stringify(links)}`);
 }
 
