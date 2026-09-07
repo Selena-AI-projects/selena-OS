@@ -411,6 +411,23 @@ async function main() {
 			return;
 		}
 
+		// Withdraw the policy in force through the interface, so that what arrives
+		// next has to wait — the deferral and its backoff are then observable.
+		if (MODE === "withdraw") {
+			await openSources(page);
+			const inForce = page.locator('[data-testid="content-policy-row"]').filter({ hasText: "IN FORCE" });
+			if ((await inForce.count()) === 0) {
+				log("policy: nothing is in force, nothing to withdraw");
+			} else {
+				await fillChecked(page.getByPlaceholder("Why this policy should stop applying"), "staging lifecycle check");
+				await inForce.first().getByRole("button", { name: "Withdraw" }).click();
+				await expectRow(page, "content-policy-row", [POLICY_VERSION, "WITHDRAWN"], "the withdrawn policy");
+				log(`policy: ${POLICY_VERSION} withdrawn and shown as such`);
+			}
+			await reportOutcome();
+			return;
+		}
+
 		if (MODE === "scenario") {
 			await createBrandThroughOnboarding(page);
 			await openSources(page);
