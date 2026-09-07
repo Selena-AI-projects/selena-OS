@@ -364,6 +364,17 @@ async function reportMaterials() {
 			log(`  brief ${row.brief_ref} ${row.kind} "${row.title}" ${row.status} versions=${JSON.stringify(row.versions)}`);
 		}
 		log(`materials from external sources under any other brand: ${elsewhere.rows[0].n}`);
+		// The effects that must stay at zero for the whole acceptance run.
+		const effects = await client.query(`
+			SELECT (SELECT count(*) FROM selena_registry.approvals) AS approvals,
+			       (SELECT count(*) FROM selena_release.release_intents) AS release_intents,
+			       (SELECT count(*) FROM selena_release.release_manifests) AS release_manifests,
+			       (SELECT count(*) FROM selena_release.publication_attempts) AS publication_attempts,
+			       (SELECT count(*) FROM selena_release.workflow_dispatches) AS workflow_dispatches,
+			       (SELECT count(*) FROM selena_registry.content_versions WHERE version > 1) AS later_versions,
+			       (SELECT count(DISTINCT brief_ref) FROM selena_registry.content_items WHERE brand_id = $1) AS briefs
+		`, [ORGANIZATION_ID]);
+		log(`effects: ${JSON.stringify(effects.rows[0])}`);
 	} finally {
 		await client.end();
 	}
