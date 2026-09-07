@@ -344,6 +344,51 @@ run("projecting materials as the registry worker", () => {
 		expect(await projectOnce(worker, "local")).toEqual({ kind: "idle" });
 	});
 
+	it("waits while the brand's policy is withdrawn and stamps the one set afterwards", async () => {
+		const BRAND_D = `vitest-brand-d-${SUFFIX}`;
+		await admin.query(
+			"INSERT INTO public.brands (id, name, website, organization_id) VALUES ($1, $1, 'https://d.example.invalid', $2)",
+			[BRAND_D, ORG_A],
+		);
+		const draft = { ...article, event_id: randomUUID(), project_id: randomUUID(), version: 1 };
+		draft.aggregate_id = materialAggregateId(draft.project_id, draft.payload.brief_ref, "ARTICLE");
+		await asOwner(BRAND_D, ORG_A, async (client) => {
+			await client.query("SELECT selena_registry.confirm_growth_binding($1, $2::uuid, 'selena', 'local')", [
+				BRAND_D,
+				draft.project_id,
+			]);
+			const set = await client.query<{ id: string }>(
+				"SELECT selena_registry.set_content_policy($1, 'withdrawn-1', false) AS id",
+				[BRAND_D],
+			);
+			await client.query("SELECT selena_registry.revoke_content_policy($1::uuid, 'lifecycle test')", [set.rows[0].id]);
+		});
+		expect(await receive(draft)).toBe("recorded");
+		// A withdrawn policy is kept for what was approved under it, never applied to new drafts.
+		expect(await projectOnce(worker, "local")).toMatchObject({
+			kind: "deferred",
+			eventId: draft.event_id,
+			code: "NO_CONTENT_POLICY",
+		});
+		expect(
+			await countRows("SELECT count(*) AS n FROM selena_registry.content_versions WHERE brand_id = $1", [BRAND_D]),
+		).toBe(0);
+
+		await asOwner(BRAND_D, ORG_A, (client) =>
+			client.query("SELECT selena_registry.set_content_policy($1, 'in-force-2', false)", [BRAND_D]),
+		);
+		await admin.query(
+			"UPDATE selena_ingest_raw.aether_events SET projection_next_attempt_at = now() WHERE event_id = $1::uuid",
+			[draft.event_id],
+		);
+		expect(await projectOnce(worker, "local")).toMatchObject({ kind: "projected", eventId: draft.event_id });
+		const stamped = await admin.query<{ policy_version: string }>(
+			"SELECT policy_version FROM selena_registry.content_versions WHERE brand_id = $1",
+			[BRAND_D],
+		);
+		expect(stamped.rows.map((row) => row.policy_version)).toEqual(["in-force-2"]);
+	});
+
 	it("leaves the worker unable to read bindings, approvals or manifests directly", async () => {
 		await expect(worker.query("SELECT * FROM selena_registry.growth_project_bindings")).rejects.toMatchObject({
 			code: "42501",

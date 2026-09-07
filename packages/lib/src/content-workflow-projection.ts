@@ -99,11 +99,16 @@ export async function enterBrandContext(
 	]);
 }
 
+/**
+ * Only the policy in force may govern a new draft: a withdrawn version is kept
+ * for the approvals made under it, but it must not be applied to anything new,
+ * so a brand whose policy was withdrawn has no policy until the owner sets one.
+ */
 export async function currentPolicyVersion(client: PoolClient, binding: ResolvedBinding): Promise<string | null> {
 	const result = await client.query<{ policy_version: string }>(
 		`SELECT policy_version FROM selena_registry.content_policies
-		 WHERE organization_id = $1 AND brand_id = $2
-		 ORDER BY created_at DESC, policy_version DESC LIMIT 1`,
+		 WHERE organization_id = $1 AND brand_id = $2 AND status = 'active'
+		 ORDER BY activated_at DESC, policy_version DESC LIMIT 1`,
 		[binding.organizationId, binding.brandId],
 	);
 	return result.rows[0]?.policy_version ?? null;
