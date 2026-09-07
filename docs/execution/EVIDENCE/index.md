@@ -460,3 +460,25 @@ Incidents, Audit. Меню AI Visibility в этом пространстве о
 (`selena_control_room_load_failed`). Вывод для метода: при отказе, который
 видит пользователь, логи приложения идут первыми, а чтение кода — вторым.
 Обратный порядок стоил двух лишних кругов.
+
+## Growth Engine, локальный срез GE-1…GE-4 — 05.09, одноразовые базы
+
+Ветка `growth/ge1-4-local-slice` в обоих репозиториях (selena-OS от `05599f9`,
+Aether-Medium от `29d0e38`). Полный протокол, границы и NOT_VERIFIED — в
+`SELENA-AI-COMPANY/docs/growth-engine/GE4_LOCAL_RUN_2026-09-05.md`; здесь только
+что доказано и чем.
+
+| Что | Чем доказано |
+|---|---|
+| Одна синтетическая задача Aether → два материала (ARTICLE, SOCIAL_ADAPTATION) с разными стабильными `aggregate_id` и общим `brief_ref` | outbox `bridge_events`: 3 строки `sent` (v1 задачи + 2 материала); Inbox Control Room: 2 `content_items` / 2 `content_versions` v1; строка версии в браузере под ролью `owner`: `Aether · SYNTHETIC_FIXTURE`, бейджи Synthetic и Needs verification |
+| Повторная доставка и повторные проходы worker ничего не добавляют | outbox `attempts=2`, receiver 3× `duplicate`, счётчики карточек без изменений |
+| Отказы на проводе | неверная подпись → 401 `signature`; метка −20 мин → 401 `timestamp`; тот же агрегат/версия с другим содержимым → 409 `conflict`; проект вне allow-list → 0 строк outbox; `business_key=kora` для привязанного проекта → `BUSINESS_KEY_MISMATCH`, версия не создана; отозванный binding → событие отложено `NO_BINDING`, версий не прибавилось |
+| Роли | receiver под `selena_ingestion_login`, worker под `selena_worker_login`, web под `selena_web_login`; binding подтверждён владельцем в браузере через `confirm_growth_binding`; audit `growth.binding_confirmed`/`growth.binding_revoked` |
+| Ноль вызовов модели и публикаций | `agent_runs`: `growth-fixture` ×3, `tokens 0/0`, `cost 0`; ключей модели в окружении Aether нет; `approvals=0`, `release_intents=0`, `release_manifests=0`, `publication_attempts=0` |
+| Миграции воспроизводимы | `selena_ge4`: 39 миграций раннером, повторный прогон — no-op; `aether_ge4`: 23 файла через тот же путь, что `conftest.py`; реестр `migration_ledger.py` покрывает `0023` |
+| Тесты на финальных SHA | Aether `pytest -q` 396 passed, `ruff` чисто; selena-OS lib 762 passed, worker 29 + интеграционные 9 на одноразовой базе, pgTAP 17 наборов 225 ok / 0 not ok, `tsc` 0 ошибок в lib/worker/web |
+
+Засеяно напрямую (и названо засеянным): бренд `selena` (онбординг ходит наружу) и политика
+`selena-brand-pack/v1` (её не создаёт ни UI, ни миграция — вопрос O18). Секреты прогона
+одноразовые. Это доказательство локальной работоспособности среза; оно **не** доказывает
+staging, Railway и готовность Growth Engine.

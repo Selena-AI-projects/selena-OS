@@ -1,8 +1,9 @@
 SET ROLE selena_schema_owner;
 
--- Numbered 0041 rather than 0039, for the reason recorded in DECISION_LOG.md and
--- gated in OWNER_GATES.md: growth/ge1-4-local-slice already holds 0038 and 0039,
--- and Drizzle applies by journal `when` as a strict high-water mark.
+-- Numbered 0043 rather than 0039, for the reason recorded in DECISION_LOG.md and
+-- gated in OWNER_GATES.md: the growth line holds 0038 through 0041 and is
+-- already applied on staging, and Drizzle applies by journal `when` as a strict
+-- high-water mark.
 
 CREATE TYPE selena_registry.content_kind AS ENUM ('GENERIC_POST', 'YOUTUBE_VIDEO');
 CREATE TYPE selena_registry.content_workflow_stage AS ENUM (

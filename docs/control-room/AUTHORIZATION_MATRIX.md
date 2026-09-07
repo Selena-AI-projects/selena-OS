@@ -42,7 +42,7 @@ named here keeps the Stage 1 default, which is prohibited.
 
 Owner decisions recorded on 2026-09-06:
 
-- migrations for Slices 2 and 3 are numbered `0040` and `0041`;
+- migrations for Slices 2 and 3 are numbered `0042` and `0043` (renumbered on merge with the growth line, whose `0040` and `0041` were already applied on staging);
 - the Video Radar source transfer is authorized despite the absent license file;
 - blind review is performed by a separate read-only Claude Code session per slice;
 - the shared Railway staging environment is not touched by Slices 2-5.

@@ -46,6 +46,7 @@
 		"./selena-monitoring": "./src/selena-monitoring.ts",
 		"./selena-flow": "./src/selena-flow.ts",
 		"./content-workflow-repositories": "./src/content-workflow-repositories.ts",
+		"./content-workflow-projection": "./src/content-workflow-projection.ts",
 		"./content-creation-repositories": "./src/content-creation-repositories.ts",
 		"./content-research-repositories": "./src/content-research-repositories.ts",
 		"./selena-control-room": "./src/selena-control-room.ts",
@@ -64,7 +65,10 @@
 		"./recommendation-persistence": "./src/recommendation-persistence.ts",
 		"./selena-aether-bridge": "./src/selena-aether-bridge.ts",
 		"./contracts/control-room-event.v1.fixtures.json": "./src/contracts/control-room-event.v1.fixtures.json",
-		"./contracts/control-room-event.v1.schema.json": "./src/contracts/control-room-event.v1.schema.json"
+		"./contracts/control-room-event.v1.schema.json": "./src/contracts/control-room-event.v1.schema.json",
+		"./contracts/control-room-event.v1.1.fixtures.json": "./src/contracts/control-room-event.v1.1.fixtures.json",
+		"./contracts/control-room-event.v1.1.schema.json": "./src/contracts/control-room-event.v1.1.schema.json",
+		"./selena-aether-projection": "./src/selena-aether-projection.ts"
 	},
 	"dependencies": {
 		"@ai-sdk/anthropic": "^4.0.27",

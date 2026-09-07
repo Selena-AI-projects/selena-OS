@@ -18,15 +18,20 @@ import {
 	acceptEvent,
 	type EventEnvelope,
 	EventRejected,
+	MAX_EVENT_BODY_BYTES,
 	SIGNATURE_HEADER,
 	TIMESTAMP_HEADER,
 } from "@workspace/lib/selena-aether-bridge";
 import { Pool, type PoolClient } from "pg";
 
 const RECEIVE_PATH = "/v1/bridge/aether";
-// The envelope carries a title and a short summary, nothing else, so anything
-// approaching this size is not an event this receiver is meant to accept.
-const MAX_BODY_BYTES = 64 * 1024;
+// Since contract 1.1 an event may carry a whole material. The limit is the
+// contract's: it sits above the largest envelope the contract can describe, and
+// a body beyond it is not an event this receiver is meant to accept.
+const MAX_BODY_BYTES = MAX_EVENT_BODY_BYTES;
+// The recording function refuses a version redelivered with different content,
+// or an event id reused for different content, with this SQLSTATE.
+const CONFLICT_SQLSTATE = "SE409";
 
 function requiredEnv(name: string): string {
 	const value = process.env[name];
@@ -44,6 +49,76 @@ export function receiverSecrets(raw: string): string[] {
 	return secrets;
 }
 
+/**
+ * A credential proves who signed an event. It does not, by itself, say what
+ * that signer may speak for — which is the whole point of the restricted one.
+ */
+export interface ReceiverCredential {
+	label: string;
+	secrets: string[];
+	/** When present, this credential may only deliver for these Aether projects. */
+	projects?: ReadonlySet<string>;
+}
+
+/**
+ * A second credential for a test sender, kept apart from the live secret.
+ *
+ * Adding a test key to the rotation list would mean reading the live secret in
+ * order to write it back, and a key accepted there can speak for any project.
+ * This one is a separate variable, and it is accepted only for the projects
+ * named beside it — so it cannot impersonate the production sender.
+ *
+ * A secret without an allowlist is a configuration error, not a permissive
+ * default: the receiver refuses to start rather than accept anything signed.
+ */
+export function testCredential(secret?: string, projects?: string): ReceiverCredential | null {
+	const trimmed = secret?.trim();
+	if (!trimmed) return null;
+	const allowed = new Set(
+		(projects ?? "")
+			.split(",")
+			.map((entry) => entry.trim())
+			.filter((entry) => entry.length > 0),
+	);
+	if (allowed.size === 0) {
+		throw new Error("SELENA_AETHER_BRIDGE_TEST_PROJECTS must name the projects the test credential may deliver for");
+	}
+	return { label: "test", secrets: [trimmed], projects: allowed };
+}
+
+/**
+ * Verify against each credential in turn and apply whatever that credential is
+ * limited to. Only one can match a given signature, so the restriction that
+ * runs is the one belonging to the key that actually signed.
+ */
+export function acceptWithCredentials(
+	body: string,
+	headers: { signature?: string; timestamp?: string },
+	credentials: readonly ReceiverCredential[],
+	now?: Date,
+): { envelope: EventEnvelope; credential: ReceiverCredential } {
+	let firstRefusal: EventRejected | undefined;
+	for (const credential of credentials) {
+		let envelope: EventEnvelope;
+		try {
+			envelope = acceptEvent(body, headers, [...credential.secrets], now).envelope;
+		} catch (error) {
+			// Only a signature can differ between credentials; a bad timestamp or a
+			// malformed envelope is the same answer for all of them.
+			if (error instanceof EventRejected && error.reason === "signature") {
+				firstRefusal ??= error;
+				continue;
+			}
+			throw error;
+		}
+		if (credential.projects && !credential.projects.has(envelope.project_id)) {
+			throw new EventRejected("signature", "this credential may not deliver for that project");
+		}
+		return { envelope, credential };
+	}
+	throw firstRefusal ?? new EventRejected("signature", "no credential verified this event");
+}
+
 function createReceiverPool(connectionString: string): Pool {
 	const isStagingMvp = process.env.SELENA_STAGING_MVP === "true";
 	assertStagingDatabaseTls(connectionString, isStagingMvp);
@@ -59,6 +134,13 @@ function createReceiverPool(connectionString: string): Pool {
 }
 
 export type RecordOutcome = "recorded" | "duplicate" | "stale";
+
+export class RecordConflict extends Error {
+	constructor() {
+		super("event conflicts with what was already recorded");
+		this.name = "RecordConflict";
+	}
+}
 
 /**
  * The recording function decides the outcome, not this process: duplicate and
@@ -91,6 +173,7 @@ export async function recordEvent(client: PoolClient, envelope: EventEnvelope): 
 		return outcome;
 	} catch (error) {
 		await client.query("ROLLBACK");
+		if ((error as { code?: unknown })?.code === CONFLICT_SQLSTATE) throw new RecordConflict();
 		throw error;
 	}
 }
@@ -134,8 +217,11 @@ export interface ReceiverPool {
 	end(): Promise<void>;
 }
 
-export function createReceiverServer(options: { secrets: string[]; pool: ReceiverPool }): Server {
-	const { secrets, pool } = options;
+export function createReceiverServer(options: {
+	credentials: readonly ReceiverCredential[];
+	pool: ReceiverPool;
+}): Server {
+	const { credentials, pool } = options;
 	return createServer(async (request, response) => {
 		if (request.url === "/healthz" && request.method === "GET") return sendJson(response, 200, { status: "ok" });
 		if (request.url !== RECEIVE_PATH) return sendJson(response, 404, { error: "not_found" });
@@ -151,10 +237,10 @@ export function createReceiverServer(options: { secrets: string[]; pool: Receive
 
 		let envelope: EventEnvelope;
 		try {
-			envelope = acceptEvent(
+			envelope = acceptWithCredentials(
 				body,
 				{ signature: headerValue(request, SIGNATURE_HEADER), timestamp: headerValue(request, TIMESTAMP_HEADER) },
-				secrets,
+				credentials,
 			).envelope;
 		} catch (error) {
 			if (error instanceof EventRejected) {
@@ -177,6 +263,14 @@ export function createReceiverServer(options: { secrets: string[]; pool: Receive
 			// event circling until its attempts ran out.
 			return sendJson(response, 202, { outcome, event_id: envelope.event_id });
 		} catch (error) {
+			if (error instanceof RecordConflict) {
+				// Not a retry and not a server fault: the sender delivered a version
+				// that disagrees with what was recorded. Retrying cannot fix that.
+				console.warn(
+					`aether event conflict: event=${envelope.event_id} aggregate=${envelope.aggregate_id} version=${envelope.version} trace=${envelope.trace_id}`,
+				);
+				return sendJson(response, 409, { error: "rejected", reason: "conflict", event_id: envelope.event_id });
+			}
 			// The sender must retry, so this is a server error — but its text
 			// stays here rather than travelling back across the bridge.
 			console.error("Aether receiver could not record an event", error);
@@ -188,12 +282,20 @@ export function createReceiverServer(options: { secrets: string[]; pool: Receive
 }
 
 export async function startSelenaAetherReceiver(): Promise<void> {
-	const secrets = receiverSecrets(requiredEnv("SELENA_AETHER_BRIDGE_SECRET"));
+	const live: ReceiverCredential = {
+		label: "live",
+		secrets: receiverSecrets(requiredEnv("SELENA_AETHER_BRIDGE_SECRET")),
+	};
+	const test = testCredential(
+		process.env.SELENA_AETHER_BRIDGE_TEST_SECRET,
+		process.env.SELENA_AETHER_BRIDGE_TEST_PROJECTS,
+	);
+	const credentials = test ? [live, test] : [live];
 	const pool = createReceiverPool(requiredEnv("SELENA_INGESTION_DATABASE_URL"));
 	const port = Number.parseInt(process.env.SELENA_RECEIVER_PORT ?? "8083", 10);
 	if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error("SELENA_RECEIVER_PORT is invalid");
 
-	const server = createReceiverServer({ secrets, pool });
+	const server = createReceiverServer({ credentials, pool });
 	server.listen(port, "0.0.0.0");
 	const shutdown = async () => {
 		server.close();

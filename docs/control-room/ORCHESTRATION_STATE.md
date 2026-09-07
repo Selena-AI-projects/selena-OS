@@ -12,11 +12,12 @@
 
 ## Gates still open
 
-- **Shared-database migration order.** `growth/ge1-4-local-slice` holds `0038` and
-  `0039` at a lower journal `when` than Content OS `0040`/`0041`. Drizzle applies
-  by `when` as a strict high-water mark, so a database that receives `0040` first
-  skips both **silently and permanently**. Held by `OWNER_GATES.md` and a person,
-  not by code: the refusal guard lives on the growth branch.
+- **Shared-database migration order — resolved on merge.** The growth line
+  (`0038` through `0041`, applied on staging) comes first in the journal; the
+  research and structured-content migrations are `0042` and `0043` with later
+  `when` values. Drizzle applies by `when` as a strict high-water mark; the
+  migration runner on `main` now refuses a pending migration that would be
+  skipped, and the read-only inspector reports it before anything runs.
 - **No required CI check runs pgTAP or the integration harness.** The RLS these
   slices depend on is defended by suites somebody has to run by hand.
 - **No required CI check runs the formatter or the linter.** Adding one is not a

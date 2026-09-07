@@ -115,10 +115,28 @@
   minutes on 2026-09-06.
 - Affected requirements: S1-08.
 
+## 2026-09-07 — precondition for migration 0040 on databases that predate it
+
+- Decision: keep `0040_content_policy_lifecycle` as applied on staging and record
+  its precondition instead of rewriting it. The migration marks every existing
+  `selena_registry.content_policies` row `active` and then creates the partial
+  unique index `content_policies_one_active_per_brand`, so it aborts on any brand
+  that already holds two or more policy rows; because drizzle applies pending
+  migrations in one transaction, 0038–0040 then all roll back together.
+- Check before migrating any database still at 0037 or earlier:
+  `SELECT brand_id, count(*) FROM selena_registry.content_policies GROUP BY 1 HAVING count(*) > 1;`
+  must return no rows. If it does, withdraw every row but the newest per brand
+  first (`status = 'revoked'`, with `revoked_at`, `revoked_by` and a reason), or
+  ship a preceding migration that does so.
+- Evidence: staging had no brand with more than one row when 0040 ran and the
+  index was created; the failure mode was reproduced on a throwaway database
+  during the independent review of the integration branch.
+- Boundary: applied migration files and the ledger are never edited; the
+  precondition is enforced by the check above, not by 0040 itself.
 ## 2026-09-06 — number the research and structured-content migrations 0040 and 0041
 
-- Decision: Slice 2 adds `0040_content_research_registry` and Slice 3 adds
-  `0041_structured_content_and_editorial_review`.
+- Decision: Slice 2 adds `0042_content_research_registry` and Slice 3 adds
+  `0043_structured_content_and_editorial_review`.
 - Evidence: `growth/ge1-4-local-slice` already holds
   `0038_growth_project_bindings` (`when` 1788620400000) and
   `0039_aether_events_content_draft` (`when` 1788620460000); issue #29 records
@@ -232,3 +250,27 @@
 - Consequence: a failed script run also says which draft it failed on, which it
   previously did not record anywhere.
 - Affected requirements: Stage 1 plan 7.5.
+
+## 2026-09-07 — the research and structured-content migrations become 0042 and 0043
+
+- Decision: on merging the growth line (`integration/content-os-growth-ge5`)
+  into `main`, rename `0040_content_research_registry` to `0042` and
+  `0041_structured_content_and_editorial_review` to `0043`, with journal `when`
+  1788620640000 and 1788620700000; their content is unchanged.
+- Evidence: the growth line added `0040_content_policy_lifecycle` (`when`
+  1788620520000) and `0041_content_policy_web_writes_revoked` (1788620580000)
+  after the numbering decision above, and both are applied on the shared staging
+  database with those `when` values recorded. The Slice 2 and 3 migrations carried
+  the same two `when` values and are applied nowhere shared ("keep Slices 2-5
+  off the shared staging database"). Drizzle's high-water mark would have
+  skipped them silently on staging, and the migration runner refuses exactly
+  that case.
+- Alternatives rejected: renumbering the growth migrations, which would require
+  editing the staging ledger; keeping duplicate numbers, which the journal order
+  can express but every reader of the directory would misread.
+- Consequence: a database that already holds the growth line applies `0042` and
+  `0043` next; a clean database applies `0000` through `0043` in order. The
+  Stage 1 documents now name `0042`/`0043`; earlier decisions in this log keep
+  the numbers they were made under.
+- Authority: owner instruction on 2026-09-07 to merge the growth line into
+  `main`.

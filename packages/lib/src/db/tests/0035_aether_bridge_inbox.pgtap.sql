@@ -1,7 +1,7 @@
 -- Run only against a disposable database after migration 0035 is installed.
 -- This file must never be executed against staging or production.
 BEGIN;
-SELECT plan(12);
+SELECT plan(14);
 
 -- The receiver holds a credential and faces the public internet, so what it can
 -- do to the database is asserted rather than assumed.
@@ -87,15 +87,39 @@ SELECT is(
   'a newer version of the same aggregate is recorded'
 );
 
--- Delivery order is not guaranteed, so an older event arriving late must not
--- walk the aggregate backwards.
-SELECT is(
-  (SELECT outcome FROM selena_ingest_raw.record_aether_event(
+-- Since 0039 a redelivered version that carries different content is a
+-- conflict rather than a silently dropped stale event: changed content must
+-- never pass as a repeat of what was recorded.
+SELECT throws_ok(
+  $$SELECT outcome FROM selena_ingest_raw.record_aether_event(
     '66666666-6666-4666-8666-666666666666', 'task.result.ready', '1',
     '22222222-2222-4222-8222-222222222222', '33333333-3333-4333-8333-333333333333',
     1, now(), '44444444-4444-4444-8444-444444444444',
     '{"title":"late","status":"pending_approval","summary":""}'::jsonb,
-    repeat('c', 64))),
+    repeat('c', 64))$$,
+  'SE409', NULL,
+  'an older version redelivered with different content is a conflict'
+);
+
+-- Delivery order is still not guaranteed: a version that was never recorded
+-- but is older than the newest one is dropped, not applied backwards.
+SELECT is(
+  (SELECT outcome FROM selena_ingest_raw.record_aether_event(
+    '77777777-7777-4777-8777-777777777777', 'task.result.ready', '1',
+    '22222222-2222-4222-8222-222222222222', '33333333-3333-4333-8333-333333333333',
+    4, now(), '44444444-4444-4444-8444-444444444444',
+    '{"title":"fourth","status":"done","summary":""}'::jsonb,
+    repeat('e', 64))),
+  'recorded',
+  'a later version is recorded even when a middle one never arrived'
+);
+SELECT is(
+  (SELECT outcome FROM selena_ingest_raw.record_aether_event(
+    '88888888-8888-4888-8888-888888888888', 'task.result.ready', '1',
+    '22222222-2222-4222-8222-222222222222', '33333333-3333-4333-8333-333333333333',
+    3, now(), '44444444-4444-4444-8444-444444444444',
+    '{"title":"third","status":"approved","summary":""}'::jsonb,
+    repeat('f', 64))),
   'stale',
   'an event older than what was recorded is dropped, not applied'
 );

@@ -10,6 +10,7 @@ import {
 	scrContentItems,
 	scrContentPolicies,
 	scrContentVersions,
+	scrGrowthProjectBindings,
 	scrIncidents,
 	scrKillSwitches,
 	scrMetricSnapshots,
@@ -22,12 +23,15 @@ import {
 	approvalBindingHash,
 	assetBundleHash,
 	contentVersionHash,
+	describeOrigin,
+	disclosureBlocksApproval,
 	isInteractiveOwnerSession,
 	releaseIntentIdempotencyKey,
 	sha256,
 } from "@workspace/lib/selena-control-room";
 import { and, desc, eq, isNull, sql } from "drizzle-orm";
 import { z } from "zod";
+import { isGrowthEngineStage1Enabled } from "../lib/growth-engine-stage1.server";
 import { resolveSessionAuthContext } from "../lib/selena-auth-context.server";
 import { type AuthContext, canWrite } from "../lib/selena-authz";
 
@@ -79,6 +83,30 @@ function assertHumanReviewer(context: AuthContext): void {
 
 function policyRequiresEvidence(policy: { requireEvidence: boolean } | undefined): boolean {
 	return policy?.requireEvidence === true;
+}
+
+/**
+ * A draft is reviewed against the policy in force for its brand, never against
+ * a version the client names: a withdrawn or unknown version would carry no
+ * evidence requirement at approval. Only a brand that has never had a policy
+ * keeps the version the client sends, so nothing that worked before stops
+ * working; a brand whose policy was withdrawn has none until the owner sets
+ * one — the same rule the projection worker applies.
+ */
+async function policyVersionInForce(
+	tx: ControlRoomDatabase,
+	organizationId: string,
+	brandId: string,
+	requested: string | undefined,
+): Promise<string> {
+	const rows = await tx
+		.select({ policyVersion: scrContentPolicies.policyVersion, status: scrContentPolicies.status })
+		.from(scrContentPolicies)
+		.where(and(eq(scrContentPolicies.organizationId, organizationId), eq(scrContentPolicies.brandId, brandId)));
+	const active = rows.find((row) => row.status === "active");
+	if (active) return active.policyVersion;
+	if (rows.length === 0 && requested) return requested;
+	throw new Error("Set a content policy for this brand before creating drafts");
 }
 
 function assertIanaTimeZone(value: string): string {
@@ -207,6 +235,8 @@ export const getControlRoomWorkspaceFn = createServerFn({ method: "GET" })
 						audits,
 						metrics,
 						killSwitches,
+						growthBindings,
+						contentPolicies,
 					] = await Promise.all([
 						db.select().from(scrContentItems).where(scope).orderBy(desc(scrContentItems.updatedAt)).limit(40),
 						db
@@ -258,6 +288,7 @@ export const getControlRoomWorkspaceFn = createServerFn({ method: "GET" })
 								ctaUrl: scrContentVersions.ctaUrl,
 								claims: scrContentVersions.claims,
 								evidence: scrContentVersions.evidence,
+								disclosure: scrContentVersions.disclosure,
 								policyVersion: scrContentVersions.policyVersion,
 								contentHash: scrContentVersions.contentHash,
 								evidenceExpiresAt: scrContentVersions.evidenceExpiresAt,
@@ -416,6 +447,52 @@ export const getControlRoomWorkspaceFn = createServerFn({ method: "GET" })
 							.where(and(eq(scrKillSwitches.organizationId, context.tenantId), eq(scrKillSwitches.active, true)))
 							.orderBy(desc(scrKillSwitches.createdAt))
 							.limit(20),
+						// Which Aether projects may deliver drafts here; empty unless the growth stage is on.
+						isGrowthEngineStage1Enabled()
+							? db
+									.select({
+										id: scrGrowthProjectBindings.id,
+										aetherProjectId: scrGrowthProjectBindings.aetherProjectId,
+										aetherBusinessKey: scrGrowthProjectBindings.aetherBusinessKey,
+										sourceEnvironment: scrGrowthProjectBindings.sourceEnvironment,
+										confirmedAt: scrGrowthProjectBindings.confirmedAt,
+										revokedAt: scrGrowthProjectBindings.revokedAt,
+										revokeReason: scrGrowthProjectBindings.revokeReason,
+									})
+									.from(scrGrowthProjectBindings)
+									.where(
+										and(
+											eq(scrGrowthProjectBindings.organizationId, context.tenantId),
+											eq(scrGrowthProjectBindings.brandId, data.brandId),
+										),
+									)
+									.orderBy(desc(scrGrowthProjectBindings.confirmedAt))
+									.limit(40)
+							: Promise.resolve([]),
+						// Which policy governs this brand's drafts. Not gated by the growth
+						// stage: a policy is what the Control Room reviews against, whether or
+						// not anything is delivered from Aether. Every version is kept, so the
+						// question "under which policy was this approved" outlives the policy.
+						db
+							.select({
+								id: scrContentPolicies.id,
+								policyVersion: scrContentPolicies.policyVersion,
+								requireEvidence: scrContentPolicies.requireEvidence,
+								status: scrContentPolicies.status,
+								createdBy: scrContentPolicies.createdBy,
+								activatedAt: scrContentPolicies.activatedAt,
+								revokedAt: scrContentPolicies.revokedAt,
+								revokedReason: scrContentPolicies.revokedReason,
+							})
+							.from(scrContentPolicies)
+							.where(
+								and(
+									eq(scrContentPolicies.organizationId, context.tenantId),
+									eq(scrContentPolicies.brandId, data.brandId),
+								),
+							)
+							.orderBy(desc(scrContentPolicies.activatedAt))
+							.limit(40),
 					]);
 
 					const contentById = new Map(content.map((item) => [item.id, item]));
@@ -432,10 +509,12 @@ export const getControlRoomWorkspaceFn = createServerFn({ method: "GET" })
 							latestApprovalByVersion.set(approval.contentVersionId, approval);
 					}
 
-					const clientVersions = versions.map(({ evidence, claims, ...version }) => ({
+					// The disclosure itself stays on the server; the client gets what it shows.
+					const clientVersions = versions.map(({ evidence, claims, disclosure, ...version }) => ({
 						...version,
 						claims: getClaims(claims),
 						evidenceSource: getEvidenceSource(evidence),
+						...describeOrigin(disclosure),
 					}));
 
 					return {
@@ -454,14 +533,19 @@ export const getControlRoomWorkspaceFn = createServerFn({ method: "GET" })
 						audits,
 						metrics,
 						killSwitches,
+						growthBindings,
+						contentPolicies,
+						activeContentPolicy: contentPolicies.find((policy) => policy.status === "active") ?? null,
 						reviewQueue: versions.map((version) => ({
 							id: version.id,
 							title: contentById.get(version.contentId)?.title ?? "Archived content",
+							kind: contentById.get(version.contentId)?.kind ?? null,
 							version: version.version,
 							contentHash: version.contentHash,
 							assetCount: assetsByVersion.get(version.id)?.length ?? 0,
 							latestDecision: latestApprovalByVersion.get(version.id)?.decision ?? null,
 							createdAt: version.createdAt,
+							...describeOrigin(version.disclosure),
 						})),
 					};
 				},
@@ -594,7 +678,7 @@ export const createControlRoomContentFn = createServerFn({ method: "POST" })
 			ctaUrl: z.string().url().max(2048),
 			claims: claimsSchema.optional().default([]),
 			evidence: evidenceSchema.optional().default([]),
-			policyVersion: policyVersionSchema,
+			policyVersion: policyVersionSchema.optional(),
 			evidenceExpiresAt: z.coerce.date().optional(),
 		}),
 	)
@@ -603,15 +687,16 @@ export const createControlRoomContentFn = createServerFn({ method: "POST" })
 		assertWritable(context);
 		const evidenceExpiresAt = data.evidence.length > 0 ? validFutureDate(data.evidenceExpiresAt) : null;
 		if (data.evidence.length > 0 && !evidenceExpiresAt) throw new Error("Evidence requires an expiry");
-		const contentHash = contentVersionHash({
-			body: data.body,
-			ctaUrl: data.ctaUrl,
-			claims: data.claims,
-			evidence: data.evidence,
-			disclosure: {},
-			policyVersion: data.policyVersion,
-		});
 		return withControlRoomTransaction(context, data.brandId, async (tx) => {
+			const policyVersion = await policyVersionInForce(tx, context.tenantId, data.brandId, data.policyVersion);
+			const contentHash = contentVersionHash({
+				body: data.body,
+				ctaUrl: data.ctaUrl,
+				claims: data.claims,
+				evidence: data.evidence,
+				disclosure: {},
+				policyVersion,
+			});
 			const [content] = await tx
 				.insert(scrContentItems)
 				.values({
@@ -633,7 +718,7 @@ export const createControlRoomContentFn = createServerFn({ method: "POST" })
 					claims: data.claims,
 					evidence: data.evidence,
 					disclosure: {},
-					policyVersion: data.policyVersion,
+					policyVersion,
 					contentHash,
 					evidenceExpiresAt,
 					createdBy: context.actorId,
@@ -660,7 +745,7 @@ export const createContentVersionFn = createServerFn({ method: "POST" })
 			ctaUrl: z.string().url().max(2048),
 			claims: claimsSchema.optional().default([]),
 			evidence: evidenceSchema.optional().default([]),
-			policyVersion: policyVersionSchema,
+			policyVersion: policyVersionSchema.optional(),
 			evidenceExpiresAt: z.coerce.date().optional(),
 		}),
 	)
@@ -691,13 +776,14 @@ export const createContentVersionFn = createServerFn({ method: "POST" })
 				.orderBy(desc(scrContentVersions.version))
 				.limit(1);
 			const nextVersion = (latest?.version ?? 0) + 1;
+			const policyVersion = await policyVersionInForce(tx, context.tenantId, data.brandId, data.policyVersion);
 			const contentHash = contentVersionHash({
 				body: data.body,
 				ctaUrl: data.ctaUrl,
 				claims: data.claims,
 				evidence: data.evidence,
 				disclosure: {},
-				policyVersion: data.policyVersion,
+				policyVersion,
 			});
 			const [version] = await tx
 				.insert(scrContentVersions)
@@ -711,7 +797,7 @@ export const createContentVersionFn = createServerFn({ method: "POST" })
 					claims: data.claims,
 					evidence: data.evidence,
 					disclosure: {},
-					policyVersion: data.policyVersion,
+					policyVersion,
 					contentHash,
 					evidenceExpiresAt,
 					createdBy: context.actorId,
@@ -871,6 +957,9 @@ export const approveContentVersionFn = createServerFn({ method: "POST" })
 					),
 			]);
 			if (!version || !account) throw new Error("Version or target account was not found");
+			const blocked = disclosureBlocksApproval(version.disclosure);
+			if (blocked.qaFailed) throw new Error("A version whose QA failed cannot be approved");
+			if (blocked.needsVerification) throw new Error("A version with unverified claims or checks cannot be approved");
 			const [policy] = await db
 				.select({ requireEvidence: scrContentPolicies.requireEvidence })
 				.from(scrContentPolicies)
@@ -1118,6 +1207,12 @@ export const queueReleaseIntentFn = createServerFn({ method: "POST" })
 			]);
 			if (!version || !account || latestDecision?.id !== approval.id || latestDecision.decision !== "APPROVED") {
 				throw new Error("Approval is no longer the current exact release decision");
+			}
+			// A version whose own checks failed or were never done cannot be released, even
+			// with an approval on record: the gate and the approval both say so.
+			const ownChecks = disclosureBlocksApproval(version.disclosure);
+			if (ownChecks.qaFailed || ownChecks.needsVerification) {
+				throw new Error("This version's own checks still block release");
 			}
 			const [policy] = await tx
 				.select({ requireEvidence: scrContentPolicies.requireEvidence })

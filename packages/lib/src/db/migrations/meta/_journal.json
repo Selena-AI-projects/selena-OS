@@ -271,15 +271,43 @@
 		{
 			"idx": 38,
 			"version": "7",
-			"when": 1788620520000,
-			"tag": "0040_content_research_registry",
+			"when": 1788620400000,
+			"tag": "0038_growth_project_bindings",
 			"breakpoints": true
 		},
 		{
 			"idx": 39,
 			"version": "7",
+			"when": 1788620460000,
+			"tag": "0039_aether_events_content_draft",
+			"breakpoints": true
+		},
+		{
+			"idx": 40,
+			"version": "7",
+			"when": 1788620520000,
+			"tag": "0040_content_policy_lifecycle",
+			"breakpoints": true
+		},
+		{
+			"idx": 41,
+			"version": "7",
 			"when": 1788620580000,
-			"tag": "0041_structured_content_and_editorial_review",
+			"tag": "0041_content_policy_web_writes_revoked",
+			"breakpoints": true
+		},
+		{
+			"idx": 42,
+			"version": "7",
+			"when": 1788620640000,
+			"tag": "0042_content_research_registry",
+			"breakpoints": true
+		},
+		{
+			"idx": 43,
+			"version": "7",
+			"when": 1788620700000,
+			"tag": "0043_structured_content_and_editorial_review",
 			"breakpoints": true
 		}
 	]

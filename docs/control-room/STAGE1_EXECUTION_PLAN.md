@@ -448,7 +448,7 @@ tenant identity.
 
 #### B. Migration 0040 and persistence
 
-- [x] Add `0040_content_research_registry.sql`.
+- [x] Add `0042_content_research_registry.sql`.
 - [x] Register migration `0040` in
   `packages/lib/src/db/migrations/meta/_journal.json`; inspect the current
   Drizzle convention and record whether a matching snapshot JSON is required.
@@ -460,7 +460,7 @@ tenant identity.
 - [x] Preserve transcript permission, language, retrieval and failure state;
   store `UNAVAILABLE` instead of invented text.
 - [x] Enable and force RLS and add least-privilege grants.
-- [x] Add `0040_content_research_registry.pgtap.sql` covering cross-brand
+- [x] Add `0042_content_research_registry.pgtap.sql` covering cross-brand
   read/write/link denial and append-only behavior.
 
 #### C. Adapters and server operations
@@ -590,7 +590,7 @@ server-side; there is no global key configuration.
 
 #### B. Migration 0041 and V2 content
 
-- [x] Add `0041_structured_content_and_editorial_review.sql`.
+- [x] Add `0043_structured_content_and_editorial_review.sql`.
 - [x] Register migration `0041` in
   `packages/lib/src/db/migrations/meta/_journal.json`; inspect the current
   Drizzle convention and record whether a matching snapshot JSON is required.

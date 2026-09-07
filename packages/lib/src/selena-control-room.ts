@@ -15,7 +15,9 @@ export type ReleaseBlockReason =
 	| "RIGHTS_MISSING"
 	| "RIGHTS_EXPIRED"
 	| "CONSENT_MISSING"
-	| "CONSENT_EXPIRED";
+	| "CONSENT_EXPIRED"
+	| "QA_FAILED"
+	| "NEEDS_VERIFICATION";
 
 export type ReleaseGateInput = {
 	killSwitchActive: boolean;
@@ -33,6 +35,9 @@ export type ReleaseGateInput = {
 	rightsValid: boolean;
 	consentPresent: boolean;
 	consentValid: boolean;
+	/** From the version's disclosure: a projected material whose QA failed or was never checked. */
+	qaFailed?: boolean;
+	needsVerification?: boolean;
 };
 
 export type ReleaseGateResult = { allowed: true } | { allowed: false; reason: ReleaseBlockReason };
@@ -223,6 +228,10 @@ export function createOpaqueWorkflowPayload(input: {
 
 export function evaluateReleaseGate(input: ReleaseGateInput): ReleaseGateResult {
 	if (input.killSwitchActive) return { allowed: false, reason: "KILL_SWITCH_ACTIVE" };
+	// A failed or unchecked QA verdict is decided before any approval is even
+	// looked at: no approval can make a draft that failed its checks releasable.
+	if (input.qaFailed) return { allowed: false, reason: "QA_FAILED" };
+	if (input.needsVerification) return { allowed: false, reason: "NEEDS_VERIFICATION" };
 	if (!input.accountAllowlisted) return { allowed: false, reason: "ACCOUNT_NOT_ALLOWLISTED" };
 	if (!input.humanApproval) return { allowed: false, reason: "APPROVAL_MISSING" };
 	if (input.approvalExpired) return { allowed: false, reason: "APPROVAL_EXPIRED" };
@@ -238,6 +247,44 @@ export function evaluateReleaseGate(input: ReleaseGateInput): ReleaseGateResult 
 	if (!input.consentPresent) return { allowed: false, reason: "CONSENT_MISSING" };
 	if (!input.consentValid) return { allowed: false, reason: "CONSENT_EXPIRED" };
 	return { allowed: true };
+}
+
+/**
+ * What a projected material's disclosure says about its checks. Anything not
+ * shaped like a disclosure counts as unchecked, so an unfamiliar version cannot
+ * slip through by carrying no flags at all.
+ */
+export function disclosureBlocksApproval(disclosure: unknown): { qaFailed: boolean; needsVerification: boolean } {
+	if (disclosure === null || typeof disclosure !== "object" || Array.isArray(disclosure)) {
+		return { qaFailed: false, needsVerification: false };
+	}
+	const record = disclosure as Record<string, unknown>;
+	if (!("qa_results" in record)) return { qaFailed: false, needsVerification: false };
+	return { qaFailed: record.qa_failed === true, needsVerification: record.needs_verification === true };
+}
+
+/**
+ * Where a version came from and whether its own checks keep it away from approval,
+ * read from the disclosure the writer stamped on it. A version written in Control
+ * Room carries no origin; one projected from Aether names the system and the kind
+ * of source, and a synthetic fixture is said to be one wherever it is shown.
+ */
+export function describeOrigin(disclosure: unknown): {
+	source: string;
+	synthetic: boolean;
+	qaFailed: boolean;
+	needsVerification: boolean;
+} {
+	const record = disclosure && typeof disclosure === "object" ? (disclosure as Record<string, unknown>) : {};
+	const origin = record.origin && typeof record.origin === "object" ? (record.origin as Record<string, unknown>) : {};
+	const source = record.source && typeof record.source === "object" ? (record.source as Record<string, unknown>) : {};
+	const system = typeof origin.system === "string" ? origin.system : null;
+	const sourceKind = typeof source.kind === "string" ? source.kind : null;
+	return {
+		source: system ? `${system === "aether" ? "Aether" : system} · ${sourceKind ?? "unknown source"}` : "Control Room",
+		synthetic: record.synthetic === true || sourceKind === "SYNTHETIC_FIXTURE",
+		...disclosureBlocksApproval(disclosure),
+	};
 }
 
 /** Human approval is deliberately unavailable to API and service identities. */

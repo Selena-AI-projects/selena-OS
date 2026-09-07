@@ -1298,8 +1298,13 @@ export const scrContentPolicies = selenaRegistrySchema
 				.references(() => brands.id),
 			policyVersion: text("policy_version").notNull(),
 			requireEvidence: boolean("require_evidence").notNull().default(false),
+			status: text("status").notNull().default("active"),
 			createdBy: text("created_by").notNull(),
 			createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+			activatedAt: timestamp("activated_at", { withTimezone: true }).defaultNow().notNull(),
+			revokedAt: timestamp("revoked_at", { withTimezone: true }),
+			revokedBy: text("revoked_by"),
+			revokedReason: text("revoked_reason"),
 			updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 		},
 		(table) => ({
@@ -1340,6 +1345,36 @@ export const scrChannelAccounts = selenaRegistrySchema
 				table.platform,
 				table.providerAccountRef,
 			),
+		}),
+	)
+	.enableRLS();
+
+export const scrGrowthProjectBindings = selenaRegistrySchema
+	.table(
+		"growth_project_bindings",
+		{
+			id: uuid("id").defaultRandom().primaryKey().notNull(),
+			organizationId: text("organization_id")
+				.notNull()
+				.references(() => organization.id),
+			brandId: text("brand_id")
+				.notNull()
+				.references(() => brands.id),
+			aetherProjectId: uuid("aether_project_id").notNull(),
+			aetherBusinessKey: text("aether_business_key").notNull(),
+			sourceEnvironment: text("source_environment").notNull(),
+			confirmedBy: text("confirmed_by").notNull(),
+			confirmedAt: timestamp("confirmed_at", { withTimezone: true }).defaultNow().notNull(),
+			revokedAt: timestamp("revoked_at", { withTimezone: true }),
+			revokedBy: text("revoked_by"),
+			revokeReason: text("revoke_reason"),
+		},
+		(table) => ({
+			activeUnique: uniqueIndex("scr_growth_project_bindings_active_unique")
+				.on(table.aetherProjectId, table.sourceEnvironment)
+				.where(sql`revoked_at is null`),
+			brandIdx: index("scr_growth_project_bindings_brand_idx").on(table.brandId),
+			orgIdx: index("scr_growth_project_bindings_org_idx").on(table.organizationId),
 		}),
 	)
 	.enableRLS();
@@ -1479,6 +1514,10 @@ export const scrContentItems = selenaRegistrySchema
 				.references(() => brands.id),
 			title: text("title").notNull(),
 			status: scrContentStatusEnum().notNull().default("DRAFT"),
+			kind: text("kind"),
+			externalSource: text("external_source"),
+			externalRef: uuid("external_ref"),
+			briefRef: uuid("brief_ref"),
 			contentKind: scrContentKindEnum("content_kind").notNull().default("GENERIC_POST"),
 			contentChannelId: uuid("content_channel_id").references(() => scrContentChannels.id),
 			workflowStage: scrContentWorkflowStageEnum("workflow_stage").notNull().default("DRAFT"),
