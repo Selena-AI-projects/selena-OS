@@ -7,6 +7,7 @@ type AssetUpload = {
 	filename: string;
 	mimeType: string;
 	organizationId: string;
+	origin?: "UPLOADED" | "GENERATED";
 	rightsExpiresAt: string;
 };
 
@@ -41,6 +42,7 @@ export async function uploadSelenaPrivateAsset(input: AssetUpload): Promise<{ id
 			"x-selena-content-version-id": input.contentVersionId,
 			"x-selena-consent-expires-at": input.consentExpiresAt,
 			"x-selena-filename": input.filename,
+			...(input.origin ? { "x-selena-origin": input.origin } : {}),
 			"x-selena-rights-expires-at": input.rightsExpiresAt,
 		},
 		body: Buffer.from(input.bytes),

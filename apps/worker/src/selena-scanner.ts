@@ -22,8 +22,12 @@ type AssetScope = {
 	consentExpiresAt: Date;
 	filename: string;
 	organizationId: string;
+	origin: AssetOrigin;
 	rightsExpiresAt: Date;
 };
+
+const ASSET_ORIGINS = ["UPLOADED", "GENERATED"] as const;
+type AssetOrigin = (typeof ASSET_ORIGINS)[number];
 
 type ClaimedAsset = {
 	id: string;
@@ -71,6 +75,20 @@ function parseFutureIso(value: string, name: string): Date {
 	return parsed;
 }
 
+/**
+ * Absent means uploaded. Every caller that predates the column supplied a file a
+ * person chose, and reading a missing header as "generated" would relabel that
+ * history rather than describe it.
+ */
+function parseOrigin(request: IncomingMessage): AssetOrigin {
+	const value = request.headers["x-selena-origin"];
+	if (value === undefined) return "UPLOADED";
+	if (typeof value !== "string" || !(ASSET_ORIGINS as readonly string[]).includes(value)) {
+		throw new Error("Asset origin is invalid");
+	}
+	return value as AssetOrigin;
+}
+
 function hasControlCharacter(value: string): boolean {
 	for (const character of value) {
 		if (character.charCodeAt(0) <= 31) return true;
@@ -90,6 +108,7 @@ export function parseAssetScope(request: IncomingMessage): AssetScope {
 		consentExpiresAt: parseFutureIso(readHeader(request, "x-selena-consent-expires-at"), "Consent expiry"),
 		filename,
 		organizationId: readHeader(request, "x-selena-organization-id"),
+		origin: parseOrigin(request),
 		rightsExpiresAt: parseFutureIso(readHeader(request, "x-selena-rights-expires-at"), "Rights expiry"),
 	};
 }
@@ -329,9 +348,9 @@ async function createAsset(
 				`INSERT INTO selena_registry.content_assets (
 					id, organization_id, brand_id, content_version_id, storage_bucket, storage_key,
 					original_filename, sha256, mime_type, detected_mime_type, size_bytes,
-					scan_status, rights_expires_at, consent_expires_at, immutable, created_by
+					scan_status, origin, rights_expires_at, consent_expires_at, immutable, created_by
 				) VALUES ($1, $2, $3, $4, 'selena-quarantine', $5, $6, $7, $8, $9, $10,
-					'QUARANTINED', $11, $12, true, $13)`,
+					'QUARANTINED', $11, $12, $13, true, $14)`,
 				[
 					id,
 					scope.organizationId,
@@ -343,6 +362,7 @@ async function createAsset(
 					asset.mimeType,
 					asset.detectedMimeType,
 					asset.sizeBytes,
+					scope.origin,
 					scope.rightsExpiresAt,
 					scope.consentExpiresAt,
 					scope.actorId,

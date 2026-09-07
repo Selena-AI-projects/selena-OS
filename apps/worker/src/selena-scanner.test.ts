@@ -1,6 +1,7 @@
+import type { IncomingMessage } from "node:http";
 import { createServer } from "node:net";
 import { afterEach, describe, expect, it } from "vitest";
-import { scanRetrySeconds, scanWithClamAv } from "./selena-scanner";
+import { parseAssetScope, scanRetrySeconds, scanWithClamAv } from "./selena-scanner";
 
 const servers: ReturnType<typeof createServer>[] = [];
 
@@ -50,5 +51,40 @@ describe("Selena scanner runtime", () => {
 		expect(scanRetrySeconds(1)).toBe(30);
 		expect(scanRetrySeconds(2)).toBe(60);
 		expect(scanRetrySeconds(99)).toBe(900);
+	});
+});
+
+function requestWith(headers: Record<string, string>): IncomingMessage {
+	return { headers } as unknown as IncomingMessage;
+}
+
+function assetHeaders(extra: Record<string, string> = {}): Record<string, string> {
+	const future = new Date(Date.now() + 86_400_000).toISOString();
+	return {
+		"x-selena-actor-id": "actor",
+		"x-selena-brand-id": "brand",
+		"x-selena-content-version-id": "11111111-1111-4111-8111-111111111111",
+		"x-selena-consent-expires-at": future,
+		"x-selena-filename": "thumb.png",
+		"x-selena-organization-id": "org",
+		"x-selena-rights-expires-at": future,
+		...extra,
+	};
+}
+
+describe("asset origin", () => {
+	it("records imagery a generator produced separately from imagery a person supplied", () => {
+		expect(parseAssetScope(requestWith(assetHeaders({ "x-selena-origin": "GENERATED" }))).origin).toBe("GENERATED");
+		expect(parseAssetScope(requestWith(assetHeaders({ "x-selena-origin": "UPLOADED" }))).origin).toBe("UPLOADED");
+	});
+
+	it("reads a caller that states no origin as an upload rather than relabelling its history", () => {
+		expect(parseAssetScope(requestWith(assetHeaders())).origin).toBe("UPLOADED");
+	});
+
+	it("refuses an origin outside the two the column admits", () => {
+		expect(() => parseAssetScope(requestWith(assetHeaders({ "x-selena-origin": "SCRAPED" })))).toThrow(
+			"Asset origin is invalid",
+		);
 	});
 });

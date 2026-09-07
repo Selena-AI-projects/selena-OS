@@ -12,6 +12,7 @@ import {
 	IconKey,
 	IconLink,
 	IconListDetails,
+	IconPhoto,
 	IconReport,
 	IconSearch,
 	IconShieldCheck,
@@ -178,6 +179,16 @@ export function AppSidebar({
 					{ title: "Research", url: "/control-room/research", icon: IconSearch },
 					{ title: "Ideas", url: "/control-room/ideas", icon: IconBulb },
 					{ title: "Scripts", url: "/control-room/scripts", icon: IconFileText },
+					{ title: "Thumbnails", url: "/control-room/thumbnails", icon: IconPhoto },
+				],
+			});
+			groups.push({
+				label: "Govern",
+				items: [
+					// Named for what it decides. The Review entry above it is the
+					// publishing queue, and two links reading "Review" would be a
+					// question the sidebar cannot answer.
+					{ title: "Editorial review", url: "/control-room/review", icon: IconShieldCheck },
 				],
 			});
 		}
