@@ -48,6 +48,18 @@ describe("project profile domain", () => {
 		}
 	});
 
+	it("accepts prose voice traits in any language", () => {
+		const profile = normalizeProfile({
+			...input,
+			voice: {
+				traits: ["тёплый и честный", "clear and concise, not salesy"],
+				examples: [],
+				exclusions: [],
+			},
+		});
+		expect(profile.voice.traits).toHaveLength(2);
+	});
+
 	it("keeps prohibited facts out of factual claim context", () => {
 		const facts = input.facts ?? [];
 		const profile = normalizeProfile({
