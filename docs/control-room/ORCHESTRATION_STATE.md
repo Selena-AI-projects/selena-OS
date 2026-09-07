@@ -1,46 +1,68 @@
-# Content OS Stage 1 orchestration state
+# Orchestration state
 
-- Project: `selena-OS`
-- Canonical ref: `main` (Slice 0 remains in the existing feature history)
-- Working branch: `feat/content-os-slice1`
-- Last verified commit before this slice: `14959a65d5516ce707b9f13f710efa861c1cc053`
-- Context mode: `repository_only` for this local implementation; no Central Memory write was attempted.
-- Current slice: Slice 1 — project profile and draft-only YouTube target
-- State: `IN_PROGRESS` — the owner authorized disposable PostgreSQL, GitHub delivery, Railway staging migration/deploy and the canary flag on 2026-09-06; YouTube publication remains prohibited
+## Where the programme is
 
-## Verified checks
+| Slice | State | Head | Merge |
+|---|---|---|---|
+| 1 — profile and draft YouTube target | MERGED | `45dd3b96` | `313daa0c` |
+| 2 — research | MERGED | `52741ae` | `86a0a633` |
+| 3 — ideas and scripts | MERGED | `3a6c9cd` | `58daa20f` |
+| 4 — thumbnails and editorial approval | NOT STARTED | — | — |
+| 5 — local vertical acceptance | NOT STARTED | — | — |
 
-- `pnpm --filter @workspace/content-workflow test` — PASS (4 tests)
-- `pnpm --filter @workspace/content-workflow check-types` — PASS
-- `pnpm --filter @workspace/lib check-types` — PASS
-- `pnpm --filter @workspace/web check-types` — PASS
-- targeted `pnpm exec biome check ...` — PASS
-- `pnpm --filter @workspace/web build` — PASS (Node 22.23.0; repository requests Node 24.x, so the engine warning remains)
-- root `pnpm test` — PASS (1,142 tests; one guarded database integration test skipped without an explicit disposable URL)
-- clean disposable PostgreSQL 16 migration chain — PASS (38 migrations through `0037`)
-- disposable pgTAP — PASS (all 15 suites, 215/215 assertions; Slice 1 is 44/44)
-- real PostgreSQL repository adapter test — PASS (1 integration test; ordinary suites skip it unless an explicit disposable URL is supplied)
-- `npx impeccable detect` on the changed profile UI — PASS (no findings)
-- Railway-compatible Node 24 web compilation inside Docker — PASS; final local image export remains unproven because the isolated Docker VM exhausted its disk while packaging the image
-- secret-pattern diff scan and `git diff --check` — PASS
-- Claude Code Max blind review of `594cc3b6` — COMPLETE (Sonnet, read-only, no tool denials); it confirmed the Slice 1 module/RLS/draft-only architecture and identified the stale migration-numbering prose corrected in the next commit
-- Claude Code Max blind review of `9a61082d` — CHANGES_REQUESTED (Sonnet, read-only, no tool denials); it confirmed the Slice 1 architecture and found stale execution-plan numbering/status plus the missing UI path for per-fact evidence states and source URLs
-- per-fact evidence-state/source authoring correction — PASS (web typecheck, profile-domain tests, targeted Biome, web build and Impeccable detector)
-- Claude Code Max blind review of `c2074af4` — REVIEW_PASSED for Slice 1 (Sonnet, read-only, no tool denials); later-slice work remains explicitly outside the Slice 1 gate
-- Blacksmith CI diagnosis — VERIFIED: repository owner `parkourcafe` is a personal account, unsupported by Blacksmith; owner authorized the required PR checks to use GitHub-hosted `ubuntu-24.04` runners
+## Gates still open
 
-## Pending execution evidence
+- **Shared-database migration order — resolved on merge.** The growth line
+  (`0038` through `0041`, applied on staging) comes first in the journal; the
+  research and structured-content migrations are `0042` and `0043` with later
+  `when` values. Drizzle applies by `when` as a strict high-water mark; the
+  migration runner on `main` now refuses a pending migration that would be
+  skipped, and the read-only inspector reports it before anything runs.
+- **No required CI check runs pgTAP or the integration harness.** The RLS these
+  slices depend on is defended by suites somebody has to run by hand.
+- **No required CI check runs the formatter or the linter.** Adding one is not a
+  wiring change: `biome check .` reports 323 errors and 358 warnings across the
+  repository as it stands, so a lint gate would have to be preceded by a
+  repository-wide cleanup that is not this programme's to make. Recorded here
+  rather than fixed, because a reformatting of the migration journal already
+  reached a pushed commit once and nothing in CI saw it.
 
-- exact-head GitHub CI and an infrastructure-only exact-head review after the runner correction;
-- verified Railway staging migration, deployment and canary response;
-- browser acceptance where the staging authentication path permits it.
+## Carried from Slice 3's round-three review
 
-YouTube OAuth, live-provider calls and publication are outside the granted scope
-and must remain disabled.
+- **`run-pgtap.sh` cannot see a plan mismatch.** It counts failures with
+  `grep -cE '^ not ok|ERROR'`. A pgTAP plan mismatch is reported as a `#`
+  diagnostic, which neither pattern matches, so a suite that stopped short of
+  its plan would still report `failures=0`. Recorded rather than fixed: pgTAP is
+  not installed in the session that found it, so the diagnostic's exact form was
+  never observed, and a harness change nobody can run is worse than a known gap.
+  The plan is correct today — 70 assertions declared, 70 counted statically.
+- **The vendored-licence digest is self-referential.** `vendored/sources.ts`
+  compares `LICENSE` against a digest declared in the same manifest. That catches
+  drift and replacement, both demonstrated by falsification, but it cannot
+  establish that the digest is the one at the upstream commit. Establishing that
+  needs a check against `parkourcafe/youtube-pro`, which is outside the
+  repository scope the reviewing sessions run under.
 
-## Next autonomous action
+## Owner decisions waiting
 
-Commit and push the GitHub-hosted runner correction, obtain CI and an
-infrastructure-only exact-head review, then migrate and deploy the exact merged
-candidate to the dedicated Railway staging project. Stop before any production
-or YouTube publication action.
+- **Revoking a confirmed profile does not stop work.** Research and creation fall
+  back to the previous still-confirmed version, and the surface presents that
+  older version as confirmed. Inherited from Slice 1's `profiles.getCurrent`.
+  Recorded in `DECISION_LOG.md`; the behaviour is pinned by tests either way, so
+  it can be changed without guesswork once decided.
+
+## Carried into Slice 4
+
+The shared app shell's sidebar trigger is 28 px square, below the 44 px the
+mobile matrix asks of a tap target. It is a `packages/ui` component every route
+inherits, so fixing it in a content slice would change every surface in the
+product on a content branch. The Slice 3 browser run records it at 390 px on
+both new surfaces rather than excluding it.
+
+Two findings from Slice 2's round-six review, both symmetric in cost across the
+merge that closed it:
+
+- an empty or whitespace-only `sourceUrl` is still reported as
+  `MISSING_PROVENANCE` rather than as an unrenderable url;
+- the `[:space:]` character class the drop-early property relies on is resolved
+  through the database's ctype, and no test pins the direction of that asymmetry.

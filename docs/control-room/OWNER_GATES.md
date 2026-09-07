@@ -8,3 +8,17 @@
 | Staging deploy and migration | APPROVED | Deploy to the verified Railway staging target and apply the migration there | production environment remains prohibited |
 | Canary flag | APPROVED | Set `CONTENT_OS_STAGE1_ENABLED=true` in the verified Railway staging target after deployment and migration | unset restores fail-closed behavior |
 | YouTube publication | PROHIBITED | Do not enable OAuth, a live provider adapter, scheduling or publication | remains draft-only |
+
+# Slices 2-5 owner gates
+
+| Gate | Status | Exact action | Scope / rollback |
+|---|---|---|---|
+| Video Radar source transfer | APPROVED | Transfer research contracts and pure domain rules from the exact source SHA | contracts only; no UI, auth, storage adapter or environment loading |
+| Migration numbering | APPROVED | Number the research and structured-content migrations `0040` and `0041` | keeps one migration behind each journal tag in the shared ledger |
+| Shared-database migration order | REQUIRED BEFORE ANY SHARED MIGRATION | Apply `growth/ge1-4-local-slice`'s `0038` and `0039` before Content OS `0040`, or re-stamp their `when` above it | Drizzle applies by `when` as a high-water mark, so a database that receives `0040` first skips both silently and permanently; the refusal guard for this reaches `main` only when the growth branch merges |
+| Disposable DB | APPROVED | Run the full chain through `0043` plus paired pgTAP on a container-local cluster | disposable only; the cluster is discarded with the container |
+| Hosted CI / push / merge | APPROVED | One branch and PR per slice, merged only on green required checks and a passed separate review | limited to Stage 1 fixture scope |
+| Blind review | APPROVED | Obtain a separate read-only Claude Code review of each exact base/head SHA pair | the reviewing session cannot mutate the branch |
+| Staging migration or deploy | PROHIBITED | Do not migrate or deploy the shared Railway staging environment | the owner runs staging migrations by hand during GE-5 |
+| Live provider call | PROHIBITED | Do not dispatch Video Radar, Gemini or YouTube calls | fixture adapters only |
+| YouTube publication | PROHIBITED | Do not enable OAuth, a channel account, release intent, scheduling or publication | remains draft-only |

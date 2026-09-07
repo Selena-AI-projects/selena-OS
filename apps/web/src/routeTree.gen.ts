@@ -64,7 +64,10 @@ import { Route as ApiV1SelenaProfilesRouteImport } from './routes/api/v1/selena/
 import { Route as ApiV1SelenaPublicScanRouteImport } from './routes/api/v1/selena/public-scan'
 import { Route as ApiV1SelenaWebsiteCollectorRouteImport } from './routes/api/v1/selena/website-collector'
 import { Route as ApiV1ToolsAnalyzeRouteImport } from './routes/api/v1/tools/analyze'
+import { Route as AuthedAppBrandControlRoomIdeasRouteImport } from './routes/_authed/app/$brand/control-room/ideas'
 import { Route as AuthedAppBrandControlRoomProfileRouteImport } from './routes/_authed/app/$brand/control-room/profile'
+import { Route as AuthedAppBrandControlRoomResearchRouteImport } from './routes/_authed/app/$brand/control-room/research'
+import { Route as AuthedAppBrandControlRoomScriptsRouteImport } from './routes/_authed/app/$brand/control-room/scripts'
 import { Route as AuthedAppBrandPromptsIndexRouteImport } from './routes/_authed/app/$brand/prompts/index'
 import { Route as AuthedAppBrandPromptsPromptIdRouteImport } from './routes/_authed/app/$brand/prompts/$promptId'
 import { Route as AuthedAppBrandPromptsEditRouteImport } from './routes/_authed/app/$brand/prompts/edit'
@@ -374,10 +377,28 @@ const ApiV1ToolsAnalyzeRoute = ApiV1ToolsAnalyzeRouteImport.update({
   path: '/api/v1/tools/analyze',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AuthedAppBrandControlRoomIdeasRoute =
+  AuthedAppBrandControlRoomIdeasRouteImport.update({
+    id: '/ideas',
+    path: '/ideas',
+    getParentRoute: () => AuthedAppBrandControlRoomRoute,
+  } as any)
 const AuthedAppBrandControlRoomProfileRoute =
   AuthedAppBrandControlRoomProfileRouteImport.update({
     id: '/profile',
     path: '/profile',
+    getParentRoute: () => AuthedAppBrandControlRoomRoute,
+  } as any)
+const AuthedAppBrandControlRoomResearchRoute =
+  AuthedAppBrandControlRoomResearchRouteImport.update({
+    id: '/research',
+    path: '/research',
+    getParentRoute: () => AuthedAppBrandControlRoomRoute,
+  } as any)
+const AuthedAppBrandControlRoomScriptsRoute =
+  AuthedAppBrandControlRoomScriptsRouteImport.update({
+    id: '/scripts',
+    path: '/scripts',
     getParentRoute: () => AuthedAppBrandControlRoomRoute,
   } as any)
 const AuthedAppBrandPromptsIndexRoute =
@@ -581,7 +602,10 @@ export interface FileRoutesByFullPath {
   '/api/v1/docs/': typeof ApiV1DocsIndexRoute
   '/api/v1/prompts/': typeof ApiV1PromptsIndexRoute
   '/api/v1/reports/': typeof ApiV1ReportsIndexRoute
+  '/app/$brand/control-room/ideas': typeof AuthedAppBrandControlRoomIdeasRoute
   '/app/$brand/control-room/profile': typeof AuthedAppBrandControlRoomProfileRoute
+  '/app/$brand/control-room/research': typeof AuthedAppBrandControlRoomResearchRoute
+  '/app/$brand/control-room/scripts': typeof AuthedAppBrandControlRoomScriptsRoute
   '/app/$brand/prompts/$promptId': typeof AuthedAppBrandPromptsPromptIdRoute
   '/app/$brand/prompts/edit': typeof AuthedAppBrandPromptsEditRoute
   '/app/$brand/settings/billing': typeof AuthedAppBrandSettingsBillingRoute
@@ -659,7 +683,10 @@ export interface FileRoutesByTo {
   '/api/v1/docs': typeof ApiV1DocsIndexRoute
   '/api/v1/prompts': typeof ApiV1PromptsIndexRoute
   '/api/v1/reports': typeof ApiV1ReportsIndexRoute
+  '/app/$brand/control-room/ideas': typeof AuthedAppBrandControlRoomIdeasRoute
   '/app/$brand/control-room/profile': typeof AuthedAppBrandControlRoomProfileRoute
+  '/app/$brand/control-room/research': typeof AuthedAppBrandControlRoomResearchRoute
+  '/app/$brand/control-room/scripts': typeof AuthedAppBrandControlRoomScriptsRoute
   '/app/$brand/prompts/$promptId': typeof AuthedAppBrandPromptsPromptIdRoute
   '/app/$brand/prompts/edit': typeof AuthedAppBrandPromptsEditRoute
   '/app/$brand/settings/billing': typeof AuthedAppBrandSettingsBillingRoute
@@ -743,7 +770,10 @@ export interface FileRoutesById {
   '/api/v1/docs/': typeof ApiV1DocsIndexRoute
   '/api/v1/prompts/': typeof ApiV1PromptsIndexRoute
   '/api/v1/reports/': typeof ApiV1ReportsIndexRoute
+  '/_authed/app/$brand/control-room/ideas': typeof AuthedAppBrandControlRoomIdeasRoute
   '/_authed/app/$brand/control-room/profile': typeof AuthedAppBrandControlRoomProfileRoute
+  '/_authed/app/$brand/control-room/research': typeof AuthedAppBrandControlRoomResearchRoute
+  '/_authed/app/$brand/control-room/scripts': typeof AuthedAppBrandControlRoomScriptsRoute
   '/_authed/app/$brand/prompts/$promptId': typeof AuthedAppBrandPromptsPromptIdRoute
   '/_authed/app/$brand/prompts/edit': typeof AuthedAppBrandPromptsEditRoute
   '/_authed/app/$brand/settings/billing': typeof AuthedAppBrandSettingsBillingRoute
@@ -827,7 +857,10 @@ export interface FileRouteTypes {
     | '/api/v1/docs/'
     | '/api/v1/prompts/'
     | '/api/v1/reports/'
+    | '/app/$brand/control-room/ideas'
     | '/app/$brand/control-room/profile'
+    | '/app/$brand/control-room/research'
+    | '/app/$brand/control-room/scripts'
     | '/app/$brand/prompts/$promptId'
     | '/app/$brand/prompts/edit'
     | '/app/$brand/settings/billing'
@@ -905,7 +938,10 @@ export interface FileRouteTypes {
     | '/api/v1/docs'
     | '/api/v1/prompts'
     | '/api/v1/reports'
+    | '/app/$brand/control-room/ideas'
     | '/app/$brand/control-room/profile'
+    | '/app/$brand/control-room/research'
+    | '/app/$brand/control-room/scripts'
     | '/app/$brand/prompts/$promptId'
     | '/app/$brand/prompts/edit'
     | '/app/$brand/settings/billing'
@@ -988,7 +1024,10 @@ export interface FileRouteTypes {
     | '/api/v1/docs/'
     | '/api/v1/prompts/'
     | '/api/v1/reports/'
+    | '/_authed/app/$brand/control-room/ideas'
     | '/_authed/app/$brand/control-room/profile'
+    | '/_authed/app/$brand/control-room/research'
+    | '/_authed/app/$brand/control-room/scripts'
     | '/_authed/app/$brand/prompts/$promptId'
     | '/_authed/app/$brand/prompts/edit'
     | '/_authed/app/$brand/settings/billing'
@@ -1450,11 +1489,32 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiV1ToolsAnalyzeRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/_authed/app/$brand/control-room/ideas': {
+      id: '/_authed/app/$brand/control-room/ideas'
+      path: '/ideas'
+      fullPath: '/app/$brand/control-room/ideas'
+      preLoaderRoute: typeof AuthedAppBrandControlRoomIdeasRouteImport
+      parentRoute: typeof AuthedAppBrandControlRoomRoute
+    }
     '/_authed/app/$brand/control-room/profile': {
       id: '/_authed/app/$brand/control-room/profile'
       path: '/profile'
       fullPath: '/app/$brand/control-room/profile'
       preLoaderRoute: typeof AuthedAppBrandControlRoomProfileRouteImport
+      parentRoute: typeof AuthedAppBrandControlRoomRoute
+    }
+    '/_authed/app/$brand/control-room/research': {
+      id: '/_authed/app/$brand/control-room/research'
+      path: '/research'
+      fullPath: '/app/$brand/control-room/research'
+      preLoaderRoute: typeof AuthedAppBrandControlRoomResearchRouteImport
+      parentRoute: typeof AuthedAppBrandControlRoomRoute
+    }
+    '/_authed/app/$brand/control-room/scripts': {
+      id: '/_authed/app/$brand/control-room/scripts'
+      path: '/scripts'
+      fullPath: '/app/$brand/control-room/scripts'
+      preLoaderRoute: typeof AuthedAppBrandControlRoomScriptsRouteImport
       parentRoute: typeof AuthedAppBrandControlRoomRoute
     }
     '/_authed/app/$brand/prompts/': {
@@ -1654,13 +1714,21 @@ const AuthedAdminRouteWithChildren = AuthedAdminRoute._addFileChildren(
 )
 
 interface AuthedAppBrandControlRoomRouteChildren {
+  AuthedAppBrandControlRoomIdeasRoute: typeof AuthedAppBrandControlRoomIdeasRoute
   AuthedAppBrandControlRoomProfileRoute: typeof AuthedAppBrandControlRoomProfileRoute
+  AuthedAppBrandControlRoomResearchRoute: typeof AuthedAppBrandControlRoomResearchRoute
+  AuthedAppBrandControlRoomScriptsRoute: typeof AuthedAppBrandControlRoomScriptsRoute
 }
 
 const AuthedAppBrandControlRoomRouteChildren: AuthedAppBrandControlRoomRouteChildren =
   {
+    AuthedAppBrandControlRoomIdeasRoute: AuthedAppBrandControlRoomIdeasRoute,
     AuthedAppBrandControlRoomProfileRoute:
       AuthedAppBrandControlRoomProfileRoute,
+    AuthedAppBrandControlRoomResearchRoute:
+      AuthedAppBrandControlRoomResearchRoute,
+    AuthedAppBrandControlRoomScriptsRoute:
+      AuthedAppBrandControlRoomScriptsRoute,
   }
 
 const AuthedAppBrandControlRoomRouteWithChildren =

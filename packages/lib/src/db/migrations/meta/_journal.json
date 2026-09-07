@@ -295,6 +295,20 @@
 			"when": 1788620580000,
 			"tag": "0041_content_policy_web_writes_revoked",
 			"breakpoints": true
+		},
+		{
+			"idx": 42,
+			"version": "7",
+			"when": 1788620640000,
+			"tag": "0042_content_research_registry",
+			"breakpoints": true
+		},
+		{
+			"idx": 43,
+			"version": "7",
+			"when": 1788620700000,
+			"tag": "0043_structured_content_and_editorial_review",
+			"breakpoints": true
 		}
 	]
 }

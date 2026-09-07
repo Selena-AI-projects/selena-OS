@@ -255,13 +255,19 @@ Add `selena_registry.content_channels`:
 | `publication_mode` | always `DRAFT_ONLY` |
 | `provider_account_id` | absent in Stage 1 |
 This table is not `channel_accounts`. Creating it grants no release authority and stores no OAuth credential.
-### 9.2 Migration 0038: research registry
+### 9.2 Migration 0042: research registry
+Numbered `0042` and `0043` rather than `0038` and `0039`, because the growth line
+holds `0038` through `0041` and those are applied on staging. See the migration-numbering
+decision in `DECISION_LOG.md` and the ordering gate in `OWNER_GATES.md`: Drizzle
+applies by journal `when` as a strict high-water mark, so the growth entries must be
+applied before these or re-stamped above them.
+
 Add the following brand-scoped RLS tables:
-- `selena_registry.research_runs`;
-- `selena_registry.research_sources`;
-- `selena_registry.research_metric_snapshots`;
-- `selena_registry.research_opportunities`;
-- `selena_registry.research_opportunity_decisions`.
+- `selena_registry.content_research_runs`;
+- `selena_registry.content_research_sources`;
+- `selena_registry.content_research_metric_snapshots`;
+- `selena_registry.content_research_opportunities`;
+- `selena_registry.content_research_opportunity_decisions`.
 Required invariants:
 - a run references an immutable confirmed profile version;
 - the idempotency key is unique within organization and brand;
@@ -272,7 +278,7 @@ Required invariants:
 - a source from another brand cannot be linked, selected or read;
 - raw provider responses are not returned directly to the browser.
 Transcripts are private research data. Persist transcript text only when the source/provider permits it and attach provider, language, retrieval time and failure state. Otherwise persist `UNAVAILABLE` or a source reference, not invented text.
-### 9.3 Migration 0039: structured content, generation lineage and editorial review
+### 9.3 Migration 0043: structured content, generation lineage and editorial review
 Alter `selena_registry.content_items` with nullable/backward-compatible fields:
 - `content_kind`, default `GENERIC_POST` for existing rows;
 - `content_channel_id`;
@@ -329,7 +335,7 @@ type YouTubeVideoDocumentV1 = {
     honestPromise: string;
     format: "SHORT" | "LONG_FORM" | "TUTORIAL" | "REVIEW" | "VLOG";
     audience: string;
-    discoverySurface: "search" | "browse" | "suggested" | "shorts_feed" | "mixed";
+    discoverySurface: "SEARCH" | "BROWSE" | "SUGGESTED" | "SHORTS_FEED" | "MIXED";
   };
   titles: string[];
   script?: {
@@ -352,7 +358,9 @@ type YouTubeVideoDocumentV1 = {
   evidenceClaimIds: string[];
 };
 ```
+Persisted vocabularies are uppercase throughout, matching the registry enums; an earlier revision of this section wrote `discoverySurface` in lower case, which was the transferred upstream spelling rather than a decision.
 The existing `body` column remains populated with a deterministic readable rendering for compatibility and search. `structured_body` is canonical for V2 edits and hashing.
+The document carries evidence claim IDs. The claims themselves stay in `content_versions.evidence`, which the release gate already reads, so a claim has one home rather than two that can disagree. The evidence snapshot the V2 hash covers is the cited claims only, deduplicated by ID and ordered by ID.
 Generation produces exactly six validated idea packages, matching the existing YouTubePro contract. Selecting an idea creates the `content_item` and its first `content_version`; the five unselected ideas remain in the immutable generation-run output.
 ## 11. Provider-call safety
 All external research and generation adapters are disabled by default.
@@ -459,14 +467,14 @@ Audit metadata contains IDs, hashes, versions, status and normalized error codes
 - draft-only YouTube channel card;
 - no provider calls.
 ### Slice 2: research
-- migration `0038` and pgTAP;
+- migration `0042` and pgTAP;
 - port Video Radar core with provenance;
 - brand-scoped Postgres store adapter;
 - fixture/import mode first;
 - research and opportunity UI;
 - optional live adapter remains disabled until an explicit provider budget gate exists.
 ### Slice 3: ideas and scripts
-- migration `0039` and pgTAP;
+- migration `0043` and pgTAP;
 - V2 content hash with V1 compatibility tests;
 - port YouTubePro evidence, idea and script contracts;
 - fixture creation path;
@@ -495,7 +503,7 @@ Audit metadata contains IDs, hashes, versions, status and normalized error codes
 - V2 hashes change when profile, research, content, evidence or asset identity changes;
 - invalid provider output cannot become a content version.
 ### Disposable PostgreSQL and pgTAP
-- migrations `0000..0039` apply on a clean disposable database;
+- migrations `0000..0043` apply on a clean disposable database;
 - new tables have `ENABLE` and `FORCE ROW LEVEL SECURITY`;
 - cross-brand SELECT/INSERT/UPDATE/DELETE is denied;
 - profile and editorial decisions require an interactive owner;

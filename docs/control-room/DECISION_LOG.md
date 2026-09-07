@@ -133,3 +133,144 @@
   during the independent review of the integration branch.
 - Boundary: applied migration files and the ledger are never edited; the
   precondition is enforced by the check above, not by 0040 itself.
+## 2026-09-06 — number the research and structured-content migrations 0040 and 0041
+
+- Decision: Slice 2 adds `0042_content_research_registry` and Slice 3 adds
+  `0043_structured_content_and_editorial_review`.
+- Evidence: `growth/ge1-4-local-slice` already holds
+  `0038_growth_project_bindings` (`when` 1788620400000) and
+  `0039_aether_events_content_draft` (`when` 1788620460000); issue #29 records
+  that `0037` landed first and that the next migration on either branch is
+  `0040`.
+- Consequence: keeping the planned `0038`/`0039` names would put two different
+  migrations behind each tag in one shared journal, which is the silent-skip
+  failure issue #29 exists to prevent.
+- Alternatives rejected: renumber the growth entries again (they are already
+  raised above `0037` and agreed), or accept duplicate tags.
+- Authority: owner decision on 2026-09-06 confirming `0040`/`0041`.
+- Affected requirements: Stage 1 plan 7.3B, 8.3B, 10.2 and 10.4.
+
+## 2026-09-06 — authorize the Video Radar source transfer
+
+- Decision: transfer research contracts, scoring, baseline, outlier, relevance,
+  velocity and anti-copy enforcement from
+  `parkourcafe/video-radar-marketing-tool` at
+  `b589a811a4e1f205a784e5128283f9d227143f32` into
+  `@workspace/content-workflow`.
+- Evidence: the source commit carries no `LICENSE` file and no `license` field
+  in its manifest, so the transfer needed an explicit holder decision rather
+  than an inferred one.
+- Boundary: contracts and pure domain rules only. UI, routes, auth, the
+  Supabase adapter, the JSON project registry and environment loading are not
+  transferred, and the derived `VideoRadarAdapter` stays fail-closed.
+- Authority: owner authorization on 2026-09-06 confirming they hold the source
+  and permit the transfer.
+- Affected requirements: Stage 1 plan 7.3A.
+
+## 2026-09-06 — keep Slices 2-5 off the shared staging database
+
+- Decision: run every Slice 2-5 migration and pgTAP suite against a disposable
+  local PostgreSQL cluster only; record `Staging evidence: NOT RUN` in each PR.
+- Evidence: issue #29 records that the `migrate` service autodeploy trigger was
+  removed and that, for the duration of GE-5, migrations against the shared
+  staging database are run by the owner by hand at a verified commit SHA.
+- Consequence: Stage 1 plan section 10 acceptance stays local fixture
+  acceptance, which is what it already claims to be.
+- Authority: owner decision on 2026-09-06.
+- Affected requirements: Stage 1 plan 3.4, 10.2 and 10.4.
+
+## 2026-09-06 — record the migration ordering constraint where it outlives the PR
+
+- Decision: state the `when` high-water-mark rule and the required apply order in
+  `STAGE1_EXECUTION_PLAN.md` §3.4 and as an owner gate, not only in a pull
+  request body.
+- Evidence: Drizzle applies a migration only when its journal `when` exceeds the
+  newest recorded `created_at`, so a distinct tag prevents a collision but not a
+  skip. Content OS `0040` (`when` 1788620520000) sits above
+  `growth/ge1-4-local-slice`'s `0038` (1788620400000) and `0039` (1788620460000),
+  and a database that receives `0040` first loses both silently.
+- Consequence: the growth entries are applied first or re-stamped above `0040`
+  when that branch merges. The runner guard that would refuse instead of
+  succeeding lives on the growth branch and reaches `main` with it.
+- Alternatives rejected: lowering `0040` below the growth entries, which only
+  moves the same hazard onto the other branch; relying on a note in a pull
+  request, which does not survive the merge.
+- Authority: safe implementation step within the recorded migration-numbering
+  decision.
+- Affected requirements: Stage 1 plan 3.4 and 7.3B.
+
+## 2026-09-06 — profile revocation falls back to the previous confirmed version
+
+- Open decision for the owner. Recorded rather than silently settled.
+- Behavior today: research selects the newest profile version whose own newest
+  decision is `CONFIRMED`. Revoking the version a brand is using therefore does
+  not stop research; it continues against the last still-confirmed version, and
+  the surface presents that older version as the confirmed profile.
+- Why it is not simply a bug: an undecided draft must not block research against
+  the confirmed version beneath it, so "use only the newest version" is wrong.
+  The question is whether a revoked newest version should stop research outright
+  or fall through, and that is a product judgement about what revocation means.
+- Inherited from Slice 1's `profiles.getCurrent`; Slice 2 is the first consumer
+  that acts on it.
+- Safe default until the owner decides: leave the fallback, state it plainly in
+  the plan's acceptance wording, and keep the integration coverage that pins the
+  behavior either way.
+- Affected requirements: Stage 1 plan 7.4.
+
+## 2026-09-06 — a release gate reads what a version is, not a column that can be edited
+
+- Decision: `selena_release.reject_unsupported_youtube_release` keys on
+  `content_versions.format_version`, and `content_items.content_kind` becomes
+  immutable through a trigger.
+- Evidence: `content_items_web_update` is a bare `can_write_brand` and 0021
+  grants UPDATE on every column, so an ordinary web session could flip
+  `content_kind` to `GENERIC_POST`, create a release intent for a
+  `content.youtube-video/v1` version, and flip it back. No operator, no gateway
+  and no new provider value were involved. `content_versions` admits no UPDATE
+  and no DELETE from any runtime role, so its own statement of what it is cannot
+  be edited the same way.
+- Consequence: the kind stays in the condition — a YouTube draft whose newest
+  version is still legacy text is gated too — but it is no longer the only
+  thing consulted, and it can no longer be changed at all.
+- Alternatives rejected: the trigger alone, which would leave the guard reading
+  a column whose immutability is enforced somewhere else; `format_version`
+  alone, which would stop gating a YouTube draft before its first structured
+  version.
+- Affected requirements: Stage 1 plan 9.4.
+
+## 2026-09-06 — an idempotency key is checked against the request it was used for
+
+- Decision: `generation_runs` records the content item a script run was for, and
+  a key already spent on a different request is refused with
+  `IDEMPOTENCY_KEY_CONFLICT` rather than answered with the earlier request's
+  result.
+- Evidence: the key is unique per brand. A key reused across drafts returned the
+  other draft's script as this one's; a key reused from an idea run reported that
+  run's success as this draft's failure.
+- Consequence: a failed script run also says which draft it failed on, which it
+  previously did not record anywhere.
+- Affected requirements: Stage 1 plan 7.5.
+
+## 2026-09-07 — the research and structured-content migrations become 0042 and 0043
+
+- Decision: on merging the growth line (`integration/content-os-growth-ge5`)
+  into `main`, rename `0040_content_research_registry` to `0042` and
+  `0041_structured_content_and_editorial_review` to `0043`, with journal `when`
+  1788620640000 and 1788620700000; their content is unchanged.
+- Evidence: the growth line added `0040_content_policy_lifecycle` (`when`
+  1788620520000) and `0041_content_policy_web_writes_revoked` (1788620580000)
+  after the numbering decision above, and both are applied on the shared staging
+  database with those `when` values recorded. The Slice 2 and 3 migrations carried
+  the same two `when` values and are applied nowhere shared ("keep Slices 2-5
+  off the shared staging database"). Drizzle's high-water mark would have
+  skipped them silently on staging, and the migration runner refuses exactly
+  that case.
+- Alternatives rejected: renumbering the growth migrations, which would require
+  editing the staging ledger; keeping duplicate numbers, which the journal order
+  can express but every reader of the directory would misread.
+- Consequence: a database that already holds the growth line applies `0042` and
+  `0043` next; a clean database applies `0000` through `0043` in order. The
+  Stage 1 documents now name `0042`/`0043`; earlier decisions in this log keep
+  the numbers they were made under.
+- Authority: owner instruction on 2026-09-07 to merge the growth line into
+  `main`.

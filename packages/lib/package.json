@@ -47,6 +47,8 @@
 		"./selena-flow": "./src/selena-flow.ts",
 		"./content-workflow-repositories": "./src/content-workflow-repositories.ts",
 		"./content-workflow-projection": "./src/content-workflow-projection.ts",
+		"./content-creation-repositories": "./src/content-creation-repositories.ts",
+		"./content-research-repositories": "./src/content-research-repositories.ts",
 		"./selena-control-room": "./src/selena-control-room.ts",
 		"./selena-private-storage": "./src/selena-private-storage.ts",
 		"./selena-clamav": "./src/selena-clamav.ts",

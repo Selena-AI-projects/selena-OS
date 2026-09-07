@@ -2,6 +2,7 @@ import {
 	IconAlertTriangle,
 	IconBuilding,
 	IconBuildings,
+	IconBulb,
 	IconChartBar,
 	IconChevronDown,
 	IconCpu,
@@ -13,6 +14,7 @@ import {
 	IconListDetails,
 	IconPlugConnected,
 	IconReport,
+	IconSearch,
 	IconShieldCheck,
 	IconSitemap,
 	IconSpeakerphone,
@@ -173,6 +175,16 @@ export function AppSidebar({
 					: []),
 			],
 		});
+		if (stage1Enabled) {
+			groups.push({
+				label: "Create",
+				items: [
+					{ title: "Research", url: "/control-room/research", icon: IconSearch },
+					{ title: "Ideas", url: "/control-room/ideas", icon: IconBulb },
+					{ title: "Scripts", url: "/control-room/scripts", icon: IconFileText },
+				],
+			});
+		}
 	} else if (scope === "brand") {
 		const dashboardItems = [
 			{

@@ -22,3 +22,27 @@ Owner authorization quote:
 Review and CI-access authorization quote:
 
 > Разрешаю передать приватный код selena-OS и спецификацию в Claude.ai Max для read-only review и войти в Blacksmith через GitHub.
+
+# Slices 2-5 authorization matrix
+
+Recorded on 2026-09-06 for the autonomous Slices 2-5 delivery. Everything not
+named here keeps the Stage 1 default, which is prohibited.
+
+| Action | Target | Authority | Scope | Automatic side effects |
+|---|---|---|---|---|
+| Transfer Video Radar source | `parkourcafe/video-radar-marketing-tool` @ `b589a811a4e1f205a784e5128283f9d227143f32` | ALLOWED by owner on 2026-09-06 | contracts, scoring, baseline, outlier, relevance, velocity and anti-copy rules only | none; the source repository is read-only to this work |
+| Transfer YouTubePro source | `parkourcafe/youtube-pro` @ `63cd9b9c2ad19b9941a763be3d5cfcbd9bc13b25` | ALLOWED under Apache-2.0 | approved contracts only, with vendored license and provenance | license obligations are preserved in the delivered tree |
+| Apply migrations / run pgTAP | disposable local PostgreSQL | ALLOWED by owner on 2026-09-06 | container-local cluster created and discarded for evidence | none outside the container |
+| Apply migrations | shared Railway staging database | PROHIBITED for Slices 2-5 | none | the owner runs staging migrations by hand for the duration of GE-5 |
+| Deploy | Railway staging or production | PROHIBITED for Slices 2-5 | none | no runtime is changed |
+| Commit, push, open PR and merge | GitHub `selena-OS` | ALLOWED by owner on 2026-09-06 | one branch and PR per slice, merged only on green required checks and a passed separate review | PR/main CI runs; no provider or release workflow is triggered |
+| Independent blind review | a separate read-only Claude Code session per slice | ALLOWED by owner on 2026-09-06 | repository, governing documents and the exact base/head SHA pair | the reviewing session cannot push, merge or mutate the branch |
+| Live research/generation provider call | Video Radar, Gemini, YouTube | PROHIBITED | none | fixture adapters only; adapters fail closed |
+| YouTube OAuth, `channel_account`, release intent, publication | external platform | PROHIBITED | none | no account or publication authority |
+
+Owner decisions recorded on 2026-09-06:
+
+- migrations for Slices 2 and 3 are numbered `0042` and `0043` (renumbered on merge with the growth line, whose `0040` and `0041` were already applied on staging);
+- the Video Radar source transfer is authorized despite the absent license file;
+- blind review is performed by a separate read-only Claude Code session per slice;
+- the shared Railway staging environment is not touched by Slices 2-5.

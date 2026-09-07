@@ -25,7 +25,7 @@
     "test:e2e": "pnpm --filter e2e test:e2e",
     "test:e2e-local": "bash e2e/run-local.sh",
     "test:api": "pnpm --filter e2e test:api",
-    "license-check": "node scripts/check-licenses.mjs"
+    "license-check": "node scripts/check-licenses.mjs && tsx scripts/check-vendored-licenses.ts"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.6",
