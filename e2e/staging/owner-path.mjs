@@ -12,6 +12,7 @@
  * preparation the repository's own end-to-end setup does. Everything the run is
  * actually testing goes through the interface.
  *
+ * REPORT=accounts only reads how many accounts the deployment already has, and
  * REPORT=discover walks in and prints what it finds instead of asserting, which
  * is how the scenario below was written against the deployment rather than
  * against an assumption about it.
@@ -43,6 +44,38 @@ function required(name) {
 
 function log(...parts) {
 	console.log(...parts);
+}
+
+/**
+ * Why the deployment refused the account, answered from the database rather
+ * than from a status code. Nothing identifying is printed: an address belongs
+ * to whoever owns it, and the question here is only how many accounts exist and
+ * whether any of them is this check's own.
+ */
+async function reportAuthState() {
+	const client = new pg.Client({ connectionString: DATABASE_URL });
+	await client.connect();
+	try {
+		const users = await client.query(
+			`SELECT count(*)::int AS total,
+			        count(*) FILTER (WHERE email = $1)::int AS synthetic,
+			        min(created_at) AS first_created
+			   FROM "user"`,
+			[OWNER_EMAIL],
+		);
+		const credentials = await client.query(
+			`SELECT provider_id, count(*)::int AS n FROM account GROUP BY provider_id ORDER BY provider_id`,
+		);
+		const organizations = await client.query(`SELECT count(*)::int AS n FROM organization`);
+		log(
+			`accounts: ${users.rows[0].total} user(s), of which ${users.rows[0].synthetic} is this check's;` +
+				` first created ${users.rows[0].first_created?.toISOString?.() ?? "n/a"}`,
+		);
+		log(`credentials by provider: ${JSON.stringify(credentials.rows)}`);
+		log(`organizations: ${organizations.rows[0].n}`);
+	} finally {
+		await client.end();
+	}
 }
 
 async function ensureAccount(page) {
@@ -121,6 +154,12 @@ async function main() {
 		if (message.type() === "error") log(`browser error: ${message.text().slice(0, 200)}`);
 	});
 	try {
+		await reportAuthState();
+		if (MODE === "accounts") {
+			log("nothing was created; this run only read the deployment's account state");
+			return;
+		}
+
 		await ensureAccount(page);
 		const userId = await ensureOrganization();
 		log(`synthetic owner ${OWNER_EMAIL} (${userId})`);
