@@ -33,6 +33,14 @@ drop_test_roles() {
 drop_test_roles
 "${PSQL[@]}" "psql -q -d postgres -c 'create database ${DATABASE}'"
 
+# Supabase creates these; a bare cluster does not. Suites 0021 and 0023 assert
+# grants against them, and without them those assertions do not fail — they
+# abort the transaction, which reports as an error that reads like a broken
+# schema and is nothing of the kind.
+for role in anon authenticated service_role; do
+  "${PSQL[@]}" "psql -q -d postgres -c 'create role ${role} nologin'" >/dev/null 2>&1 || true
+done
+
 # The migration runner resolves its migrations folder from the working
 # directory, so it is run from the package rather than from wherever this
 # script was invoked.
@@ -57,8 +65,14 @@ for suite in "${suites[@]}"; do
   # A suite that dies on the first statement reports zero of both, so errors
   # are counted as well as explicit "not ok" lines.
   failed="$(grep -cE '^ not ok|ERROR' <<<"${output}" || true)"
+  # A suite that stops short of its plan emits neither "not ok" nor ERROR — it
+  # emits a diagnostic. Without this, a suite that quietly ran half its
+  # assertions reports failures=0.
+  failed=$((failed + $(grep -cE '^ *# Looks like you planned' <<<"${output}" || true)))
   printf '%-56s ok=%-4s failed=%s\n' "$(basename "${suite}")" "${passed}" "${failed}"
-  if [ "${failed}" -gt 0 ]; then printf '%s\n' "${output}" | grep -E '^ not ok|ERROR' | head -5; fi
+  if [ "${failed}" -gt 0 ]; then
+    printf '%s\n' "${output}" | grep -E '^ not ok|ERROR|^ *# Looks like you planned' | head -5
+  fi
   total=$((total + passed))
   failures=$((failures + failed))
 done

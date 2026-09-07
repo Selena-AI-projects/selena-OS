@@ -250,8 +250,8 @@ Each slice has one status:
 | Plan | Detailed Stage 1 execution control | `MERGED` | Delivered inside Slice 1 PR #28 and merged as `313daa0c`; PR #27 is superseded |
 | 1 | Profile and draft YouTube target | `MERGED` | PR #28, head `45dd3b96`, merge `313daa0c`; required checks green on the head, blind review passed, staging migration `0037` applied and the canary flag enabled |
 | 2 | Research | `MERGED` | PR #31, head `52741ae`, merge `86a0a633`; six blind reviews, the last three approved; required checks green on the head; migration `0040` |
-| 3 | Ideas and scripts | `IN_PROGRESS` | Branch `feat/content-os-slice3-creation` from `86a0a633`; migration `0041`; YouTube Pro transfer under Apache-2.0 |
-| 4 | Thumbnails and editorial approval | `NOT_STARTED` | Accepted Slice 3 merge SHA and private-storage acceptance path |
+| 3 | Ideas and scripts | `MERGED` | PR #32, head `3a6c9cd`, merge `58daa20f`; three blind reviews, the third approved; required checks green on the head; migration `0041`; YouTube Pro transfer under Apache-2.0 |
+| 4 | Thumbnails and editorial approval | `IN_PROGRESS` | Accepted Slice 3 merge SHA and private-storage acceptance path |
 | 5 | Local vertical acceptance | `NOT_STARTED` | Accepted Slice 4 merge SHA and disposable environment |
 
 The plan and Slice 1 were delivered together in PR #28 and merged as
