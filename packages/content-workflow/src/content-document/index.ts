@@ -172,6 +172,15 @@ export function renderReadableBody(
 	return lines.join("\n");
 }
 
+/**
+ * Codepoint order rather than `localeCompare`. This ordering is an input to the
+ * V2 digest, so it has to be a property of the strings themselves and not of
+ * whichever ICU data the running Node happens to carry.
+ */
+function byCodepoint(left: string, right: string): number {
+	return left < right ? -1 : left > right ? 1 : 0;
+}
+
 function normalizedClaim(claim: z.infer<typeof evidenceClaimSchema>) {
 	return {
 		claim: claim.claim,
@@ -180,7 +189,7 @@ function normalizedClaim(claim: z.infer<typeof evidenceClaimSchema>) {
 		id: claim.id,
 		limitations: [...claim.limitations],
 		researchRunId: claim.researchRunId,
-		sourceExternalIds: [...claim.sourceExternalIds].sort((left, right) => left.localeCompare(right, "en")),
+		sourceExternalIds: [...claim.sourceExternalIds].sort(byCodepoint),
 	};
 }
 
@@ -217,5 +226,5 @@ export function evidenceSnapshot(
 		}
 		byId.set(claim.id, normalized);
 	}
-	return [...byId.values()].sort((left, right) => left.id.localeCompare(right.id, "en"));
+	return [...byId.values()].sort((left, right) => byCodepoint(left.id, right.id));
 }
