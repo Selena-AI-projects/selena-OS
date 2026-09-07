@@ -7,16 +7,18 @@
  * provisioning path — the public demo box is just a read-only view over
  * that already-bootstrapped data.
  *
- * Everything here is one-shot: the better-auth `user.create.before` hook
- * rejects any signup when a user already exists, so these inserts only
- * ever run once against a given database. The SQL is plain INSERTs (no
+ * `provisionLocalOrg` is one-shot: it runs for the account that
+ * bootstraps an install and for no other. Everyone who joins afterwards
+ * arrives through an invitation, and better-auth writes their membership
+ * with the invited role when they accept it. The SQL is plain INSERTs (no
  * upsert, no existence checks) to make that intent obvious — a second
  * call is a bug and should fail at the database layer rather than
- * silently rewriting rows.
+ * silently rewriting rows, or hand a colleague admin rights nobody
+ * granted them.
  */
-import { count, eq } from "drizzle-orm";
+import { and, count, eq, gt, sql } from "drizzle-orm";
 import { db } from "./db";
-import { brands, member, organization, user } from "./schema";
+import { brands, invitation, member, organization, user } from "./schema";
 
 /**
  * The db handle or an open transaction — lets a provisioning step join a
@@ -34,6 +36,44 @@ export type DbConnection = typeof db | Parameters<Parameters<typeof db.transacti
 export async function countUsers(): Promise<number> {
 	const [row] = await db.select({ count: count() }).from(user);
 	return row?.count ?? 0;
+}
+
+/**
+ * Whether an owner has already invited this address to an organization.
+ *
+ * This is what widens local mode from one account to a team without
+ * opening registration: an address nobody invited still cannot create an
+ * account. The comparison is case-insensitive because better-auth accepts
+ * an invitation by matching the session email that way, so a stricter
+ * check here would admit signups that could never accept anything.
+ */
+export async function hasPendingInvitation(email: string): Promise<boolean> {
+	const [row] = await db
+		.select({ id: invitation.id })
+		.from(invitation)
+		.where(
+			and(
+				sql`lower(${invitation.email}) = lower(${email})`,
+				eq(invitation.status, "pending"),
+				gt(invitation.expiresAt, new Date()),
+			),
+		)
+		.limit(1);
+	return row !== undefined;
+}
+
+/**
+ * Whether this install has been bootstrapped yet.
+ *
+ * Sharper than counting users for deciding who owns an install: the
+ * bootstrapping account is the one that arrives before any organization
+ * exists. An invited colleague joins an install that already has one, and
+ * an install left holding accounts but no organization would have no
+ * workspace to show any of them.
+ */
+export async function hasOrganization(): Promise<boolean> {
+	const [row] = await db.select({ id: organization.id }).from(organization).limit(1);
+	return row !== undefined;
 }
 
 /**

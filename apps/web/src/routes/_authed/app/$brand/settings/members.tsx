@@ -1,5 +1,5 @@
 /**
- * /app/$brand/settings/members - Team settings page (cloud only)
+ * /app/$brand/settings/members - Team settings page
  *
  * Invite teammates by email, list current members, and manage pending
  * invitations. The redirect in the loader is UX only — the security
@@ -14,14 +14,14 @@ import { Label } from "@workspace/ui/components/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@workspace/ui/components/select";
 import { useState } from "react";
 import { trackEvent } from "@/lib/posthog";
-import { getAppName, getBrandName, buildTitle } from "@/lib/route-head";
+import { buildTitle, getAppName, getBrandName } from "@/lib/route-head";
 import {
 	cancelInvitationFn,
 	inviteTeamMemberFn,
 	listTeamFn,
 	removeTeamMemberFn,
-	updateOrganizationFn,
 	type TeamData,
+	updateOrganizationFn,
 } from "@/server/team";
 
 export const Route = createFileRoute("/_authed/app/$brand/settings/members")({
@@ -53,7 +53,21 @@ function TeamSettingsPage() {
 	const [inviting, setInviting] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 	const [workspaceName, setWorkspaceName] = useState(organization.name);
+	const [copiedInvitationId, setCopiedInvitationId] = useState<string | null>(null);
 	const [savingWorkspace, setSavingWorkspace] = useState(false);
+
+	// A local install sends no mail, so the link is the whole delivery
+	// mechanism: without it an invitation is a row nobody can reach.
+	async function handleCopyInviteLink(invitationId: string) {
+		const link = `${window.location.origin}/accept-invitation/${invitationId}`;
+		try {
+			await navigator.clipboard.writeText(link);
+			setCopiedInvitationId(invitationId);
+			window.setTimeout(() => setCopiedInvitationId(null), 2000);
+		} catch {
+			setError(`Copy this link and send it yourself: ${link}`);
+		}
+	}
 
 	async function handleSaveWorkspace(e: React.FormEvent) {
 		e.preventDefault();
@@ -204,6 +218,9 @@ function TeamSettingsPage() {
 								</div>
 								<div className="flex shrink-0 items-center gap-3">
 									<Badge variant="secondary">{inv.role ?? "member"}</Badge>
+									<Button type="button" variant="outline" size="sm" onClick={() => handleCopyInviteLink(inv.id)}>
+										{copiedInvitationId === inv.id ? "Copied" : "Copy link"}
+									</Button>
 									<Button type="button" variant="outline" size="sm" onClick={() => handleCancel(inv.id)}>
 										Cancel
 									</Button>

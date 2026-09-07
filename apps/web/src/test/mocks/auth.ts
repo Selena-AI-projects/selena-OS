@@ -20,7 +20,7 @@ export const LOCAL_FEATURES: FeaturesConfig = {
 	selfServeSignup: false,
 	billing: false,
 	reportGeneration: true,
-	teamInvites: false,
+	teamInvites: true,
 };
 
 export const DEMO_FEATURES: FeaturesConfig = {
