@@ -8,6 +8,7 @@
  * that one is present — so there is no secret in it to leak.
  */
 
+import { ProviderCallLedger } from "../provider-ledger";
 import type {
 	ChannelHistoryEntry,
 	MetricSnapshot,
@@ -17,6 +18,8 @@ import type {
 	SourceProvenance,
 } from "./contracts";
 import { ContentResearchError } from "./contracts";
+
+export { ProviderCallLedger };
 
 export interface ResearchFetchRequest {
 	project: ResearchProject;
@@ -33,27 +36,6 @@ export interface ResearchFetchResult {
 export interface ResearchAdapter {
 	readonly id: ResearchAdapterId;
 	fetch(request: ResearchFetchRequest): Promise<ResearchFetchResult>;
-}
-
-/**
- * Durable count of provider dispatches. Acceptance asserts this stays at zero,
- * so it is a first-class object rather than a number a caller can forget to
- * thread through.
- */
-export class ProviderCallLedger {
-	#entries: { adapterId: ResearchAdapterId; at: string }[] = [];
-
-	record(adapterId: ResearchAdapterId, at: Date): void {
-		this.#entries.push({ adapterId, at: at.toISOString() });
-	}
-
-	get count(): number {
-		return this.#entries.length;
-	}
-
-	entries(): readonly { adapterId: ResearchAdapterId; at: string }[] {
-		return [...this.#entries];
-	}
 }
 
 /** FNV-1a. Deterministic and dependency-free; used only to shape fixture data. */
@@ -231,7 +213,11 @@ export class VideoRadarAdapter implements ResearchAdapter {
 	readonly #ledger: ProviderCallLedger;
 	readonly #dispatch: VideoRadarDispatch | null;
 
-	constructor(options: { gates: VideoRadarAdapterGates; ledger: ProviderCallLedger; dispatch?: VideoRadarDispatch }) {
+	constructor(options: {
+		gates: VideoRadarAdapterGates;
+		ledger: ProviderCallLedger;
+		dispatch?: VideoRadarDispatch;
+	}) {
 		this.#gates = options.gates;
 		this.#ledger = options.ledger;
 		this.#dispatch = options.dispatch ?? null;

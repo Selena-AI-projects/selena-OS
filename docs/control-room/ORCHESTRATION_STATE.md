@@ -1,52 +1,51 @@
-# Content OS Stage 1 orchestration state
+# Orchestration state
 
-- Project: `selena-OS`
-- Canonical ref: `main`
-- Working branch: `feat/content-os-slice2-research`
-- Base SHA for this slice: `313daa0c5812d34f8ab7b977f6cc500fde751869`
-- Context mode: `repository_only`; no Central Memory write was attempted.
-- Current slice: Slice 2 — research
-- State: `IN_PROGRESS`
+## Where the programme is
 
-## Accepted history
+| Slice | State | Head | Merge |
+|---|---|---|---|
+| 1 — profile and draft YouTube target | MERGED | `45dd3b96` | `313daa0c` |
+| 2 — research | MERGED | `52741ae` | `86a0a633` |
+| 3 — ideas and scripts | IN REVIEW | `feat/content-os-slice3-creation` | — |
+| 4 — thumbnails and editorial approval | NOT STARTED | — | — |
+| 5 — local vertical acceptance | NOT STARTED | — | — |
 
-Slice 1 merged as `313daa0c5812d34f8ab7b977f6cc500fde751869` (PR #28, head
-`45dd3b96c8579eb68b953ff1d353383bada5c2e5`). Required checks were green on that
-head, a separate blind review passed, migration `0037` was applied to the
-dedicated Railway staging database and the canary flag was enabled there. The
-execution plan was delivered in the same PR, so PR #27 is superseded.
+## Gates still open
 
-## Slice 2 boundaries
+- **Shared-database migration order.** `growth/ge1-4-local-slice` holds `0038` and
+  `0039` at a lower journal `when` than Content OS `0040`/`0041`. Drizzle applies
+  by `when` as a strict high-water mark, so a database that receives `0040` first
+  skips both **silently and permanently**. Held by `OWNER_GATES.md` and a person,
+  not by code: the refusal guard lives on the growth branch.
+- **No required CI check runs pgTAP or the integration harness.** The RLS these
+  slices depend on is defended by suites somebody has to run by hand.
+- **No required CI check runs the formatter or the linter.** Adding one is not a
+  wiring change: `biome check .` reports 326 errors and 358 warnings across the
+  repository as it stands, so a lint gate would have to be preceded by a
+  repository-wide cleanup that is not this programme's to make. Recorded here
+  rather than fixed, because a reformatting of the migration journal already
+  reached a pushed commit once and nothing in CI saw it.
 
-- Migrations are numbered `0040` and `0041`; `0038` and `0039` belong to
-  `growth/ge1-4-local-slice`.
-- Every migration and pgTAP run targets a disposable container-local PostgreSQL
-  cluster. The shared Railway staging database and every Railway service are
-  outside this slice.
-- Fixture adapters only. `VideoRadarAdapter` exists but fails closed and
-  dispatches nothing.
-- No YouTube account, release intent, outbox event or publication.
+## Owner decisions waiting
 
-## Disposable environment
+- **Revoking a confirmed profile does not stop work.** Research and creation fall
+  back to the previous still-confirmed version, and the surface presents that
+  older version as confirmed. Inherited from Slice 1's `profiles.getCurrent`.
+  Recorded in `DECISION_LOG.md`; the behaviour is pinned by tests either way, so
+  it can be changed without guesswork once decided.
 
-- PostgreSQL 16.13, container-local cluster, loopback trust so no password value
-  is handled.
-- `pgtap` 1.3.2 installed from the distribution package.
-- `anon` and `authenticated` exist as no-login roles. Migration `0021` only
-  revokes privileges from them when they already exist, and two pgTAP suites
-  assert those revocations, so a cluster without them reports four errors that
-  are an environment gap rather than a schema defect.
-- Baseline before this slice: full chain through `0037` applied, all 15 pgTAP
-  suites pass, 215/215 assertions, 0 failures.
+## Carried into Slice 4
 
-## Known deviations
+The shared app shell's sidebar trigger is 28 px square, below the 44 px the
+mobile matrix asks of a tap target. It is a `packages/ui` component every route
+inherits, so fixing it in a content slice would change every surface in the
+product on a content branch. The Slice 3 browser run records it at 390 px on
+both new surfaces rather than excluding it.
 
-- Node.js 22 rather than the 24.x named in the execution plan preflight; the
-  engine warning is unchanged from Slice 1.
-- Docker is unavailable in this environment, so the disposable database is a
-  local cluster rather than a container.
+Two findings from Slice 2's round-six review, both symmetric in cost across the
+merge that closed it:
 
-## Next autonomous action
-
-Complete Slice 2 against the checklist in execution plan section 7, then take it
-through gates, CI, a separate blind review and merge before starting Slice 3.
+- an empty or whitespace-only `sourceUrl` is still reported as
+  `MISSING_PROVENANCE` rather than as an unrenderable url;
+- the `[:space:]` character class the drop-early property relies on is resolved
+  through the database's ctype, and no test pins the direction of that asymmetry.

@@ -39,9 +39,18 @@ drop_test_roles
 (cd "${HERE}/.." && DATABASE_URL="postgresql://postgres@127.0.0.1:5432/${DATABASE}" node scripts/run-migrations.mjs)
 run_sql "${DATABASE}" "create extension if not exists pgtap" >/dev/null
 
+# A harness that passes when it runs nothing is not a harness. An unmatched glob
+# would otherwise report assertions=0 failures=0 and exit 0.
+shopt -s nullglob
+suites=("${SUITES}"/*.pgtap.sql)
+if [ ${#suites[@]} -eq 0 ]; then
+  echo "no pgTAP suites found under ${SUITES}" >&2
+  exit 1
+fi
+
 total=0
 failures=0
-for suite in "${SUITES}"/*.pgtap.sql; do
+for suite in "${suites[@]}"; do
   drop_test_roles
   output="$("${PSQL[@]}" "psql -d ${DATABASE} -f ${suite}" 2>&1 || true)"
   passed="$(grep -c '^ ok' <<<"${output}" || true)"

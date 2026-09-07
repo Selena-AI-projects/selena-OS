@@ -10,6 +10,8 @@
 		"includes": [
 			"apps/**",
 			"packages/**",
+			"scripts/**",
+			"!scripts/*.mjs",
 			"!**/node_modules/**",
 			"!packages/ui/src/components/**",
 			"!**/routeTree.gen.ts"

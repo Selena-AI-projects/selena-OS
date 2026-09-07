@@ -334,7 +334,7 @@ type YouTubeVideoDocumentV1 = {
     honestPromise: string;
     format: "SHORT" | "LONG_FORM" | "TUTORIAL" | "REVIEW" | "VLOG";
     audience: string;
-    discoverySurface: "search" | "browse" | "suggested" | "shorts_feed" | "mixed";
+    discoverySurface: "SEARCH" | "BROWSE" | "SUGGESTED" | "SHORTS_FEED" | "MIXED";
   };
   titles: string[];
   script?: {
@@ -357,7 +357,9 @@ type YouTubeVideoDocumentV1 = {
   evidenceClaimIds: string[];
 };
 ```
+Persisted vocabularies are uppercase throughout, matching the registry enums; an earlier revision of this section wrote `discoverySurface` in lower case, which was the transferred upstream spelling rather than a decision.
 The existing `body` column remains populated with a deterministic readable rendering for compatibility and search. `structured_body` is canonical for V2 edits and hashing.
+The document carries evidence claim IDs. The claims themselves stay in `content_versions.evidence`, which the release gate already reads, so a claim has one home rather than two that can disagree. The evidence snapshot the V2 hash covers is the cited claims only, deduplicated by ID and ordered by ID.
 Generation produces exactly six validated idea packages, matching the existing YouTubePro contract. Selecting an idea creates the `content_item` and its first `content_version`; the five unselected ideas remain in the immutable generation-run output.
 ## 11. Provider-call safety
 All external research and generation adapters are disabled by default.

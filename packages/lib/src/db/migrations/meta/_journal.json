@@ -274,6 +274,13 @@
 			"when": 1788620520000,
 			"tag": "0040_content_research_registry",
 			"breakpoints": true
+		},
+		{
+			"idx": 39,
+			"version": "7",
+			"when": 1788620580000,
+			"tag": "0041_structured_content_and_editorial_review",
+			"breakpoints": true
 		}
 	]
 }

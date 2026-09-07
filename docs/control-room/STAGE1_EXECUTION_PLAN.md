@@ -249,8 +249,8 @@ Each slice has one status:
 | 0 | Product contract and neutral shell | `MERGED` | Content delta `ab50d742..ef1ea56f`, PR #25; PR #26 / `39ec0ea3` reconciled the already-merged branch with an empty delta; retrospective review remains incomplete |
 | Plan | Detailed Stage 1 execution control | `MERGED` | Delivered inside Slice 1 PR #28 and merged as `313daa0c`; PR #27 is superseded |
 | 1 | Profile and draft YouTube target | `MERGED` | PR #28, head `45dd3b96`, merge `313daa0c`; required checks green on the head, blind review passed, staging migration `0037` applied and the canary flag enabled |
-| 2 | Research | `IN_PROGRESS` | Branch `feat/content-os-slice2-research` from `313daa0c`; migration `0040` |
-| 3 | Ideas and scripts | `NOT_STARTED` | Accepted Slice 2 merge SHA and source-transfer authorization |
+| 2 | Research | `MERGED` | PR #31, head `52741ae`, merge `86a0a633`; six blind reviews, the last three approved; required checks green on the head; migration `0040` |
+| 3 | Ideas and scripts | `IN_PROGRESS` | Branch `feat/content-os-slice3-creation` from `86a0a633`; migration `0041`; YouTube Pro transfer under Apache-2.0 |
 | 4 | Thumbnails and editorial approval | `NOT_STARTED` | Accepted Slice 3 merge SHA and private-storage acceptance path |
 | 5 | Local vertical acceptance | `NOT_STARTED` | Accepted Slice 4 merge SHA and disposable environment |
 
@@ -566,107 +566,107 @@ server-side; there is no global key configuration.
 
 #### A. YouTubePro contracts and attribution
 
-- [ ] Port approved contracts from `parkourcafe/youtube-pro` at
+- [x] Port approved contracts from `parkourcafe/youtube-pro` at
   `63cd9b9c2ad19b9941a763be3d5cfcbd9bc13b25`.
-- [ ] Place the Apache-2.0 license text at
+- [x] Place the Apache-2.0 license text at
   `packages/content-workflow/THIRD_PARTY_LICENSES/youtube-pro/LICENSE`; reproduce
   the upstream `NOTICE` at the same location if that exact source commit contains
   one. This creates an explicit vendored-source convention; none exists today.
-- [ ] Retain upstream copyright and attribution notices, record every ported
+- [x] Retain upstream copyright and attribution notices, record every ported
   source path and exact commit `63cd9b9c2ad19b9941a763be3d5cfcbd9bc13b25`,
   and state the modifications made to each transferred file.
 - [ ] If relicensing is proposed, stop until the owner records an explicit
   decision and evidence that the owner is the sole relevant copyright holder;
   otherwise preserve Apache-2.0 obligations.
-- [ ] Extend the repository license check so CI fails when the required
+- [x] Extend the repository license check so CI fails when the required
   YouTubePro vendored license, conditional `NOTICE` or provenance/modification
   record is missing; do not treat the dependency-only audit as sufficient.
-- [ ] Port evidence, idea, script, regeneration, thumbnail validation and
+- [x] Port evidence, idea, script, regeneration, thumbnail validation and
   provider-error contracts needed by the module.
-- [ ] Do not port Express routes, Wouter pages, settings/key persistence,
+- [x] Do not port Express routes, Wouter pages, settings/key persistence,
   localStorage workflow state, retired auth/database code or React 18 UI.
-- [ ] Keep teleprompter functionality outside Stage 1 unless the owner adds it
+- [x] Keep teleprompter functionality outside Stage 1 unless the owner adds it
   to the master specification before this slice starts.
 
 #### B. Migration 0041 and V2 content
 
-- [ ] Add `0041_structured_content_and_editorial_review.sql`.
-- [ ] Register migration `0041` in
+- [x] Add `0041_structured_content_and_editorial_review.sql`.
+- [x] Register migration `0041` in
   `packages/lib/src/db/migrations/meta/_journal.json`; inspect the current
   Drizzle convention and record whether a matching snapshot JSON is required.
-- [ ] Add backward-compatible content kind, channel and workflow-stage fields.
-- [ ] Add structured body and profile/research/generation lineage fields, with
+- [x] Add backward-compatible content kind, channel and workflow-stage fields.
+- [x] Add structured body and profile/research/generation lineage fields, with
   `format_version` defaulting to `legacy.text/v1` and `hash_version` defaulting
   to `selena.content/v1` for existing rows.
-- [ ] Preserve all existing V1 hashes without recalculation.
-- [ ] Implement `content.workflow/v2` hashing over the complete specified
+- [x] Preserve all existing V1 hashes without recalculation.
+- [x] Implement `content.workflow/v2` hashing over the complete specified
   identity and evidence snapshot.
-- [ ] Add generation runs with input/output hashes, call/cost accounting and
+- [x] Add generation runs with input/output hashes, call/cost accounting and
   sanitized errors.
-- [ ] Add editorial approvals bound to content, profile, evidence and asset
+- [x] Add editorial approvals bound to content, profile, evidence and asset
   bundle hashes, without `channel_account_id`.
-- [ ] Add release fail-closed constraints for `YOUTUBE_VIDEO`.
-- [ ] Enable and force RLS and add paired `0041` pgTAP coverage.
+- [x] Add release fail-closed constraints for `YOUTUBE_VIDEO`.
+- [x] Enable and force RLS and add paired `0041` pgTAP coverage.
 
 #### C. Creation implementation
 
-- [ ] Implement and test `YouTubeVideoDocumentV1` validation and deterministic
+- [x] Implement and test `YouTubeVideoDocumentV1` validation and deterministic
   readable rendering into the legacy body column.
-- [ ] Implement `FixtureCreationAdapter` first.
-- [ ] Require exactly six valid idea packages.
-- [ ] Validate that every evidence source belongs to the active research run.
-- [ ] Selecting an idea creates one content item and first immutable version;
+- [x] Implement `FixtureCreationAdapter` first.
+- [x] Require exactly six valid idea packages.
+- [x] Validate that every evidence source belongs to the active research run.
+- [x] Selecting an idea creates one content item and first immutable version;
   unselected ideas stay in generation-run output.
-- [ ] Create script and script-revision operations as new immutable versions.
-- [ ] Reject invalid provider output before content-version creation.
-- [ ] Emit `content.generation_started`, `content.generation_completed`,
+- [x] Create script and script-revision operations as new immutable versions.
+- [x] Reject invalid provider output before content-version creation.
+- [x] Emit `content.generation_started`, `content.generation_completed`,
   `content.generation_failed` and `content.version_created` through the existing
   hash-chained audit path.
-- [ ] Add the Gemini adapter code only behind its independent disabled flag;
+- [x] Add the Gemini adapter code only behind its independent disabled flag;
   do not execute it without a later explicit call authorization and budget.
-- [ ] Add handlers in `apps/web/src/server/content-creation.ts`.
+- [x] Add handlers in `apps/web/src/server/content-creation.ts`.
 
 #### D. UI
 
-- [ ] Gate the ideas/scripts routes, navigation entries, handlers and all new
+- [x] Gate the ideas/scripts routes, navigation entries, handlers and all new
   Slice 3 surfaces behind the fail-closed `CONTENT_OS_STAGE1_ENABLED` flag.
-- [ ] Add `/app/$brand/control-room/ideas`.
-- [ ] Add `/app/$brand/control-room/scripts`.
-- [ ] Add Ideas and Scripts under the **Create** navigation group.
-- [ ] Show six ideas, evidence lineage and selection state.
-- [ ] Show structured script sections and referenced evidence claims.
-- [ ] Save every accepted edit as a new version; never mutate history.
-- [ ] Show version lineage and distinguish fixture output from human revisions.
-- [ ] Add a short patch changeset for the user-facing ideas/scripts surface,
+- [x] Add `/app/$brand/control-room/ideas`.
+- [x] Add `/app/$brand/control-room/scripts`.
+- [x] Add Ideas and Scripts under the **Create** navigation group.
+- [x] Show six ideas, evidence lineage and selection state.
+- [x] Show structured script sections and referenced evidence claims.
+- [x] Save every accepted edit as a new version; never mutate history.
+- [x] Show version lineage and distinguish fixture output from human revisions.
+- [x] Add a short patch changeset for the user-facing ideas/scripts surface,
   scoped to the packages that actually change.
 
 ### 8.4 Slice 3 targeted evidence
 
-- [ ] Exactly-six, evidence-membership and anti-copy tests pass.
-- [ ] V1 hashes remain byte-for-byte stable.
-- [ ] V2 hashes change when any specified identity or evidence input changes.
-- [ ] Invalid output cannot become a content version.
-- [ ] An unconfirmed or revoked profile blocks idea and script generation.
-- [ ] Migration chain through `0041` and paired pgTAP pass on a clean disposable
+- [x] Exactly-six, evidence-membership and anti-copy tests pass.
+- [x] V1 hashes remain byte-for-byte stable.
+- [x] V2 hashes change when any specified identity or evidence input changes.
+- [x] Invalid output cannot become a content version.
+- [x] An unconfirmed or revoked profile blocks idea and script generation.
+- [x] Migration chain through `0041` and paired pgTAP pass on a clean disposable
   database; the migration receipt reports the new `0041` journal tag as applied.
-- [ ] Duplicate generation delivery resumes the same run.
-- [ ] Browser flow covers six ideas, selection, script and immutable revision.
-- [ ] With `CONTENT_OS_STAGE1_ENABLED` unset, the ideas/scripts routes and
+- [x] Duplicate generation delivery resumes the same run.
+- [x] Browser flow covers six ideas, selection, script and immutable revision.
+- [x] With `CONTENT_OS_STAGE1_ENABLED` unset, the ideas/scripts routes and
   handlers are inaccessible and their navigation entries are absent; the exact
   value `true` enables only the authorized disposable flow.
-- [ ] All four Slice 3 events are present in `selena_audit.audit_events`; event
+- [x] All four Slice 3 events are present in `selena_audit.audit_events`; event
   metadata is limited to IDs, hashes, versions, status and normalized error
   codes and excludes secrets, transcripts, prompts, provider bodies and image
   bytes.
-- [ ] License evidence contains the Apache-2.0 text, any required upstream
+- [x] License evidence contains the Apache-2.0 text, any required upstream
   `NOTICE`, retained notices, source-path/commit provenance and modification
   record; missing evidence blocks source acceptance.
-- [ ] The extended repository license check passes and demonstrably fails when a
+- [x] The extended repository license check passes and demonstrably fails when a
   required YouTubePro vendored license, conditional `NOTICE` or provenance file
   is removed in a fixture test.
-- [ ] No live provider call, YouTube account, release intent or publication
+- [x] No live provider call, YouTube account, release intent or publication
   attempt exists.
-- [ ] Server integration tests prove the Gemini adapter fails closed, with zero
+- [x] Server integration tests prove the Gemini adapter fails closed, with zero
   dispatch and zero call-ledger entry, when its live-provider flag, cost ceiling
   or credential is absent in separate test cases.
 - [ ] CI and blind review pass the exact head SHA; owner decides merge.

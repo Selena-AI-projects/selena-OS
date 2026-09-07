@@ -36,4 +36,4 @@ cd "${PACKAGE}"
 DATABASE_URL="${WEB_URL}" \
 SELENA_WEB_DATABASE_URL="${WEB_URL}" \
 SELENA_DISPOSABLE_DATABASE_URL="${ADMIN_URL}" \
-  pnpm exec vitest run src/content-workflow-repositories.integration.test.ts src/content-research-repositories.integration.test.ts
+  pnpm exec vitest run src/*.integration.test.ts
