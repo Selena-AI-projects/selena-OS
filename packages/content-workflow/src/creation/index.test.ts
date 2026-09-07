@@ -286,6 +286,21 @@ describe("the structured document", () => {
 		expect(snapshot.map((entry) => entry.id)).toEqual([...document.evidenceClaimIds].sort());
 	});
 
+	// The V2 digest is built from this ordering, and ICU collation disagrees with
+	// codepoint order on `-` versus `_` — it sorts `claim_b` before `claim-a`. A
+	// digest whose bytes depend on the running Node's ICU data is not a digest of
+	// the content, so the order is pinned on a pair the two rules disagree about.
+	it("orders the snapshot by codepoint rather than by collation", async () => {
+		const { document, evidence } = await scripted();
+		const [claim] = [...evidence.evidenceClaims, ...evidence.ideaPackage.evidenceClaims];
+		const ids = ["claim_b", "claim-a"];
+		const snapshot = evidenceSnapshot(
+			{ ...document, evidenceClaimIds: ids },
+			ids.map((id) => ({ ...claim, id })),
+		) as { id: string }[];
+		expect(snapshot.map((entry) => entry.id)).toEqual(["claim-a", "claim_b"]);
+	});
+
 	it("refuses two different claims that share an id", async () => {
 		const { document, evidence } = await scripted();
 		const claims = [...evidence.evidenceClaims, ...evidence.ideaPackage.evidenceClaims];

@@ -3,7 +3,8 @@ import { createFileRoute, useRouter } from "@tanstack/react-router";
 import { Badge } from "@workspace/ui/components/badge";
 import { Button } from "@workspace/ui/components/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@workspace/ui/components/card";
-import { useRef, useState, useTransition } from "react";
+import { useState, useTransition } from "react";
+import { useIdempotencyKeys } from "@/hooks/use-idempotency-keys";
 import { CONTENT_PRODUCT_NAME } from "@/lib/content-product";
 import { generateContentScriptFn, getContentCreationFn } from "@/server/content-creation";
 
@@ -32,7 +33,7 @@ function ScriptsPage() {
 	const router = useRouter();
 	const [pending, startTransition] = useTransition();
 	const [notice, setNotice] = useState<{ kind: "success" | "error"; message: string } | null>(null);
-	const scriptKey = useRef(crypto.randomUUID());
+	const scriptKeys = useIdempotencyKeys();
 
 	/**
 	 * A refused generation resolves with a FAILED result rather than throwing, so
@@ -40,12 +41,16 @@ function ScriptsPage() {
 	 * read: treating "it resolved" as success would report a script that was never
 	 * written.
 	 */
-	function act(action: () => Promise<{ status: string; errorCode?: string | null }>, success: string) {
+	function act(
+		contentId: string,
+		action: () => Promise<{ status: string; errorCode?: string | null }>,
+		success: string,
+	) {
 		startTransition(async () => {
 			try {
 				const result = await action();
 				await router.invalidate();
-				scriptKey.current = crypto.randomUUID();
+				scriptKeys.rotate(contentId);
 				if (result.status === "FAILED") {
 					setNotice({
 						kind: "error",
@@ -157,12 +162,13 @@ function ScriptsPage() {
 											disabled={pending}
 											onClick={() =>
 												act(
+													item.id,
 													() =>
 														generateContentScriptFn({
 															data: {
 																brandId,
 																contentId: item.id,
-																idempotencyKey: scriptKey.current,
+																idempotencyKey: scriptKeys.keyFor(item.id),
 																revision: Boolean(document?.script),
 															},
 														}),

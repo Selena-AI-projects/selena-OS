@@ -1,5 +1,5 @@
 /**
- * Durable count of provider dispatches.
+ * Process-scoped count of provider dispatches.
  *
  * Acceptance asserts this stays at zero, so it is a first-class object rather
  * than a number a caller can forget to thread through. Research and creation

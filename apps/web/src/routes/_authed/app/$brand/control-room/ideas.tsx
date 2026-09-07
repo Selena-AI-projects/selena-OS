@@ -3,7 +3,8 @@ import { createFileRoute, useRouter } from "@tanstack/react-router";
 import { Badge } from "@workspace/ui/components/badge";
 import { Button } from "@workspace/ui/components/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@workspace/ui/components/card";
-import { useRef, useState, useTransition } from "react";
+import { useState, useTransition } from "react";
+import { useIdempotencyKeys } from "@/hooks/use-idempotency-keys";
 import { CONTENT_PRODUCT_NAME } from "@/lib/content-product";
 import { generateContentIdeasFn, getContentCreationFn, selectContentIdeaFn } from "@/server/content-creation";
 import { getContentResearchFn } from "@/server/content-research";
@@ -45,9 +46,7 @@ function IdeasPage() {
 	const router = useRouter();
 	const [pending, startTransition] = useTransition();
 	const [notice, setNotice] = useState<{ kind: "success" | "error"; message: string } | null>(null);
-	// Held across renders so a double-submitted generation returns the run that
-	// already exists instead of forking a second one.
-	const generationKey = useRef(crypto.randomUUID());
+	const generationKeys = useIdempotencyKeys();
 
 	const savedOpportunities = research.opportunities.filter(
 		(opportunity) => opportunity.state === "SAVED" || opportunity.state === "SENT_TO_CREATION",
@@ -170,12 +169,12 @@ function IdeasPage() {
 														data: {
 															brandId,
 															opportunityId: opportunity.id,
-															idempotencyKey: generationKey.current,
+															idempotencyKey: generationKeys.keyFor(opportunity.id),
 														},
 													}),
 												"Ideas generated",
 												() => {
-													generationKey.current = crypto.randomUUID();
+													generationKeys.rotate(opportunity.id);
 												},
 											)
 										}

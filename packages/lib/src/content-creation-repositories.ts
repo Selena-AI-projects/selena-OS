@@ -898,6 +898,10 @@ export function createContentCreationRepositories(database: typeof db = db) {
 									eq(scrContentVersions.generationRunId, existingRun.id),
 								),
 							)
+							// Nothing in the schema stops a run from carrying more than one
+							// version, so the row this returns should be a property of the query
+							// rather than of the order the rows happen to come back in.
+							.orderBy(desc(scrContentVersions.version))
 							.limit(1);
 						if (latestForKey) {
 							return {

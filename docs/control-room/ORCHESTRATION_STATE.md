@@ -6,7 +6,7 @@
 |---|---|---|---|
 | 1 — profile and draft YouTube target | MERGED | `45dd3b96` | `313daa0c` |
 | 2 — research | MERGED | `52741ae` | `86a0a633` |
-| 3 — ideas and scripts | IN REVIEW | `feat/content-os-slice3-creation` | — |
+| 3 — ideas and scripts | MERGED | `3a6c9cd` | `58daa20f` |
 | 4 — thumbnails and editorial approval | NOT STARTED | — | — |
 | 5 — local vertical acceptance | NOT STARTED | — | — |
 
@@ -20,11 +20,27 @@
 - **No required CI check runs pgTAP or the integration harness.** The RLS these
   slices depend on is defended by suites somebody has to run by hand.
 - **No required CI check runs the formatter or the linter.** Adding one is not a
-  wiring change: `biome check .` reports 326 errors and 358 warnings across the
+  wiring change: `biome check .` reports 323 errors and 358 warnings across the
   repository as it stands, so a lint gate would have to be preceded by a
   repository-wide cleanup that is not this programme's to make. Recorded here
   rather than fixed, because a reformatting of the migration journal already
   reached a pushed commit once and nothing in CI saw it.
+
+## Carried from Slice 3's round-three review
+
+- **`run-pgtap.sh` cannot see a plan mismatch.** It counts failures with
+  `grep -cE '^ not ok|ERROR'`. A pgTAP plan mismatch is reported as a `#`
+  diagnostic, which neither pattern matches, so a suite that stopped short of
+  its plan would still report `failures=0`. Recorded rather than fixed: pgTAP is
+  not installed in the session that found it, so the diagnostic's exact form was
+  never observed, and a harness change nobody can run is worse than a known gap.
+  The plan is correct today — 70 assertions declared, 70 counted statically.
+- **The vendored-licence digest is self-referential.** `vendored/sources.ts`
+  compares `LICENSE` against a digest declared in the same manifest. That catches
+  drift and replacement, both demonstrated by falsification, but it cannot
+  establish that the digest is the one at the upstream commit. Establishing that
+  needs a check against `parkourcafe/youtube-pro`, which is outside the
+  repository scope the reviewing sessions run under.
 
 ## Owner decisions waiting
 
