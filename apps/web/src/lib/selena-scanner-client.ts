@@ -32,9 +32,24 @@ function scannerError(action: string, response: Response): Error {
 	return new Error(`Private asset scanner ${action} failed with status ${response.status}`);
 }
 
+/**
+ * A scanner that cannot be reached is a scanner that did not store anything.
+ * `fetch` reports that as a bare TypeError, which says nothing about which
+ * boundary failed; naming it here is what lets a caller tell "not saved" apart
+ * from "refused".
+ */
+async function reachScanner(action: string, input: string, init: RequestInit): Promise<Response> {
+	try {
+		return await fetch(input, init);
+	} catch (error) {
+		const detail = error instanceof Error && error.cause instanceof Error ? error.cause.message : "";
+		throw new Error(`Private asset scanner ${action} is unreachable${detail ? `: ${detail}` : ""}`);
+	}
+}
+
 export async function uploadSelenaPrivateAsset(input: AssetUpload): Promise<{ id: string; scanStatus: "QUARANTINED" }> {
 	const { url } = getScannerConfig();
-	const response = await fetch(`${url}/v1/assets`, {
+	const response = await reachScanner("upload", `${url}/v1/assets`, {
 		method: "POST",
 		headers: {
 			...scannerHeaders(input),
@@ -61,7 +76,7 @@ export async function createSelenaPrivateAssetDownloadUrl(input: {
 	organizationId: string;
 }): Promise<{ expiresInSeconds: number; signedUrl: string }> {
 	const { url } = getScannerConfig();
-	const response = await fetch(`${url}/v1/assets/${input.assetId}/signed-url`, {
+	const response = await reachScanner("signed download", `${url}/v1/assets/${input.assetId}/signed-url`, {
 		method: "POST",
 		headers: scannerHeaders(input),
 	});

@@ -6,6 +6,8 @@ describe("attaching a thumbnail", () => {
 		for (const message of [
 			"Private asset scanning is not configured for this environment",
 			"Private asset scanner upload failed with status 502",
+			// A refused connection: the scanner never answered at all.
+			"Private asset scanner upload is unreachable: connect ECONNREFUSED 127.0.0.1:8081",
 		]) {
 			const failure = describeThumbnailAttachFailure(new Error(message));
 			expect(failure.code).toBe("BLOCKED_STORAGE");
