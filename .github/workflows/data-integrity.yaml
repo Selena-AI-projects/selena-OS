@@ -8,10 +8,18 @@
 # SELENA_DISPOSABLE_DATABASE_URL is set — so without this workflow, CI never
 # runs them.
 #
-# The job creates its own disposable PostgreSQL 17 container on a random port,
-# applies the full migration chain, runs everything, and destroys the
-# container. It never touches staging or production, never reads a provider
-# credential, never calls a provider, and never publishes content.
+# This job mirrors packages/lib/scripts/run-pgtap.sh and run-integration.sh,
+# which document the three non-obvious requirements: the Supabase-compat roles
+# (anon/authenticated/service_role) must exist before the suites, suite-created
+# selena_pgtap% roles must be dropped between suites, and the integration tests
+# must connect as the provisioned selena_web_login — running them as a
+# superuser would pass while proving nothing. Those scripts assume a local
+# `su postgres`; here the same steps run against a disposable postgres:17
+# container via docker exec, with suites piped over stdin.
+#
+# Nothing here touches staging or production, reads a provider credential,
+# calls a provider, or publishes content. The container is destroyed at the
+# end of the job.
 
 name: Data Integrity
 
@@ -59,7 +67,9 @@ jobs:
 
       # A random published port keeps concurrent runs on this shared
       # self-hosted runner from colliding; the container name is already
-      # unique per run and attempt.
+      # unique per run and attempt. The generated web-login password exists
+      # only for provisioning (TCP auth needs one); it is masked and dies
+      # with the container.
       - name: Start disposable PostgreSQL 17
         run: |
           set -euo pipefail
@@ -84,42 +94,86 @@ jobs:
             echo "::error::Could not resolve the published PostgreSQL port"
             exit 1
           fi
-          url="postgres://postgres:disposable@127.0.0.1:${port}/postgres"
+          web_password="$(openssl rand -hex 24)"
+          echo "::add-mask::$web_password"
           {
-            echo "SELENA_DISPOSABLE_DATABASE_URL=${url}"
-            echo "DATABASE_URL=${url}"
+            echo "SELENA_DISPOSABLE_DATABASE_URL=postgres://postgres:disposable@127.0.0.1:${port}/postgres"
+            echo "DATABASE_URL=postgres://postgres:disposable@127.0.0.1:${port}/postgres"
+            echo "SELENA_WEB_DB_PASSWORD=${web_password}"
+            echo "SELENA_WEB_DATABASE_URL=postgres://selena_web_login:${web_password}@127.0.0.1:${port}/postgres"
           } >> "$GITHUB_ENV"
 
       # The official postgres image ships the PGDG apt repository, so the
       # matching pgTAP package installs directly into the running container.
-      - name: Install the pgTAP extension
+      # The Supabase-compat roles must exist before migrations and suites —
+      # run-pgtap.sh documents that suites 0021/0023 abort without them.
+      - name: Install pgTAP and the harness roles
         run: |
+          set -euo pipefail
           docker exec "$PGTAP_CONTAINER" bash -ceu \
             'apt-get update -qq >/dev/null && apt-get install -y -qq postgresql-17-pgtap >/dev/null'
-          docker exec "$PGTAP_CONTAINER" psql -U postgres -c 'CREATE EXTENSION IF NOT EXISTS pgtap;'
+          for role in anon authenticated service_role; do
+            docker exec "$PGTAP_CONTAINER" psql -U postgres -q -c "create role ${role} nologin" 2>/dev/null || true
+          done
 
+      # SELENA_WEB_DB_PASSWORD is in the environment, so the migration runner
+      # also provisions the selena_web_login the integration tests connect as.
       - name: Apply the full migration chain
         run: pnpm -C packages/lib exec node scripts/run-migrations.mjs
 
+      - name: Create the pgTAP extension
+        run: docker exec "$PGTAP_CONTAINER" psql -U postgres -q -c 'create extension if not exists pgtap'
+
+      # Mirrors run-pgtap.sh: pipe each suite through psql, count " ok"/" not
+      # ok"/ERROR and plan shortfalls, and drop suite-created selena_pgtap%
+      # roles between suites (they live in the cluster, not the database).
       - name: Run every pgTAP suite
         run: |
           set -euo pipefail
           shopt -s nullglob
+
+          drop_test_roles() {
+            local role
+            for role in $(docker exec "$PGTAP_CONTAINER" psql -U postgres -tAc "select rolname from pg_roles where rolname like 'selena_pgtap%'"); do
+              docker exec "$PGTAP_CONTAINER" psql -U postgres -q -d postgres -c "drop owned by ${role} cascade" >/dev/null 2>&1 || true
+              docker exec "$PGTAP_CONTAINER" psql -U postgres -q -d postgres -c "drop role if exists ${role}" >/dev/null 2>&1 || true
+            done
+          }
+
           suites=(packages/lib/src/db/tests/*.pgtap.sql)
           if [ "${#suites[@]}" -eq 0 ]; then
             echo "::error::No pgTAP suites found — the glob is broken, not the database"
             exit 1
           fi
           echo "Running ${#suites[@]} pgTAP suites"
+          total=0
+          failures=0
           for suite in "${suites[@]}"; do
-            echo "== ${suite}"
-            pnpm --filter @workspace/lib test:pgtap "${suite#packages/lib/}"
+            drop_test_roles
+            output="$(docker exec -i "$PGTAP_CONTAINER" psql -U postgres -d postgres < "$suite" 2>&1 || true)"
+            passed="$(grep -c '^ ok' <<<"$output" || true)"
+            failed="$(grep -cE '^ not ok|ERROR' <<<"$output" || true)"
+            failed=$((failed + $(grep -cE '^ *# Looks like you planned' <<<"$output" || true)))
+            printf '%-56s ok=%-4s failed=%s\n' "$(basename "$suite")" "$passed" "$failed"
+            if [ "$failed" -gt 0 ]; then
+              printf '%s\n' "$output" | grep -E '^ not ok|ERROR|^ *# Looks like you planned' | head -5
+            fi
+            total=$((total + passed))
+            failures=$((failures + failed))
           done
+          drop_test_roles
+          echo "assertions=${total} failures=${failures}"
+          [ "$failures" -eq 0 ]
 
-      # With SELENA_DISPOSABLE_DATABASE_URL exported, the describe.skipIf
-      # integration suites in @workspace/lib stop skipping and run for real.
-      - name: Run database integration tests
-        run: pnpm --filter @workspace/lib test
+      # Mirrors run-integration.sh: the guarded suites connect as the
+      # provisioned selena_web_login (RLS must refuse what it should), with
+      # the superuser URL available only as the explicitly disposable one.
+      - name: Run guarded integration tests as the web login
+        run: |
+          set -euo pipefail
+          cd packages/lib
+          DATABASE_URL="$SELENA_WEB_DATABASE_URL" \
+            pnpm exec vitest run src/*.integration.test.ts
 
       - name: Remove the disposable database
         if: ${{ always() }}
