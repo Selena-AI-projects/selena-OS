@@ -8,6 +8,14 @@
 - Authority: owner's autonomous-execution mandate of 2026-09-08.
 - Affected requirements: spec §14, §15, §16 Slice 4.
 
+## 2026-09-08 — move CI to GitHub-hosted runners while the Hetzner runner is down
+
+- Decision: every workflow's `runs-on` moves from `[self-hosted, Linux, X64, selena-ci]` to `ubuntu-latest`. The Hetzner server `selena-remote-runner` stays untouched and running — it hosts other owner data and is explicitly out of scope; only its GitHub-runner service is dead (offline after a reboot 22h prior, root password unavailable to the owner at the time). GitHub-hosted minutes are included in the organization's new Team plan.
+- Evidence: runner Offline in repository settings; E2E run canceled mid-build; five required checks queued indefinitely on PR #44.
+- Alternatives rejected: Blacksmith runners (separate billing, owner not ready to decide); repairing the runner service first (requires an interactive root login only the owner can perform — recorded as an open follow-up, not a prerequisite).
+- Follow-up: restore `svc.sh`/systemd autostart for the runner on the Hetzner box, then optionally move heavy jobs back to it for speed.
+- Authority: owner's autonomous-execution mandate; owner explicitly forbade touching the Hetzner server.
+
 ## 2026-09-08 — supersede the stalled Slice 4 handoff branch
 
 - Decision: `feat/content-os-slice4` (built on current main) is the Slice 4 candidate; the stalled `claude/handoff-slice4-continuation-1s7cha` branch (8 ahead / 8 behind, ends with an explicit handoff commit) is kept unmerged as review input, not deleted. Two of its ideas are noted for follow-up: a dedicated thumbnail-attach route outside the public API prefix, and recording an image's origin (generated vs uploaded) on the asset row — Stage 1 only has uploads, so §14's origin distinction is vacuously satisfied and deferred.
