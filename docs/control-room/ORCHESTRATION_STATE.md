@@ -28,13 +28,13 @@
 
 ## Carried from Slice 3's round-three review
 
-- **`run-pgtap.sh` cannot see a plan mismatch.** It counts failures with
-  `grep -cE '^ not ok|ERROR'`. A pgTAP plan mismatch is reported as a `#`
-  diagnostic, which neither pattern matches, so a suite that stopped short of
-  its plan would still report `failures=0`. Recorded rather than fixed: pgTAP is
-  not installed in the session that found it, so the diagnostic's exact form was
-  never observed, and a harness change nobody can run is worse than a known gap.
-  The plan is correct today — 70 assertions declared, 70 counted statically.
+- ~~**`run-pgtap.sh` cannot see a plan mismatch.**~~ Fixed. The diagnostic is
+  ` # Looks like you planned N tests but ran M`, observed by deliberately
+  mis-declaring a plan, and the harness now counts it. The same run established
+  that the harness did not provision `anon`, `authenticated` or `service_role`,
+  so suites `0021` and `0023` aborted on a bare cluster with errors that read
+  like schema breakage; it provisions them now. Full chain `0000..0041` on a
+  disposable cluster: `assertions=353 failures=0`.
 - **The vendored-licence digest is self-referential.** `vendored/sources.ts`
   compares `LICENSE` against a digest declared in the same manifest. That catches
   drift and replacement, both demonstrated by falsification, but it cannot
