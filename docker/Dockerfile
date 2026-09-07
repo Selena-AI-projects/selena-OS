@@ -212,5 +212,16 @@ USER projection
 
 CMD ["node_modules/.bin/tsx", "src/selena-aether-projection-worker.ts"]
 
-# The service name selects the final runtime stage: web, worker, migrate, scanner, gateway, receiver, or projection.
+# A browser that can reach the deployment, for the one thing no log can prove:
+# whether a person who signs in can get from an empty account to a material in
+# the Inbox. Its own base image, because Playwright ships the browser matched to
+# the library and the runtime stages above are Alpine. Temporary — it exists for
+# the staging acceptance run and goes when that run is signed off.
+FROM mcr.microsoft.com/playwright:v1.62.1-noble AS owner-path-check-temp
+WORKDIR /app
+COPY e2e/staging ./staging
+RUN npm install --no-save playwright@1.62.1 pg@8.16.3
+CMD ["node", "staging/owner-path.mjs"]
+
+# The service name selects the final runtime stage: web, worker, migrate, scanner, gateway, receiver, projection, or owner-path-check-temp.
 FROM ${RAILWAY_SERVICE_NAME} AS final
