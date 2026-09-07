@@ -50,15 +50,18 @@ async function ensureAccount(page) {
 		data: { email: OWNER_EMAIL, password: OWNER_PASSWORD, name: "Growth Check" },
 		failOnStatusCode: false,
 	});
-	log(`sign-up: ${signUp.status()}`);
-	if (!signUp.ok()) {
-		const signIn = await page.request.post("/api/auth/sign-in/email", {
-			data: { email: OWNER_EMAIL, password: OWNER_PASSWORD },
-			failOnStatusCode: false,
-		});
-		log(`sign-in: ${signIn.status()}`);
-		if (!signIn.ok()) throw new Error(`neither sign-up nor sign-in succeeded (${signIn.status()})`);
-	}
+	// The reason matters more than the code: a refusal here is a deployment
+	// policy — sign-up switched off, a rejected domain, a password rule — and
+	// each of those needs a different answer.
+	log(`sign-up: ${signUp.status()} ${(await signUp.text()).slice(0, 300)}`);
+	if (signUp.ok()) return;
+
+	const signIn = await page.request.post("/api/auth/sign-in/email", {
+		data: { email: OWNER_EMAIL, password: OWNER_PASSWORD },
+		failOnStatusCode: false,
+	});
+	log(`sign-in: ${signIn.status()} ${(await signIn.text()).slice(0, 300)}`);
+	if (!signIn.ok()) throw new Error(`neither sign-up nor sign-in succeeded (${signIn.status()})`);
 }
 
 /**
