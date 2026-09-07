@@ -10,6 +10,7 @@
 		"./profile": "./src/profile/index.ts",
 		"./research": "./src/research/index.ts",
 		"./creation": "./src/creation/index.ts",
+		"./review": "./src/review/index.ts",
 		"./content-document": "./src/content-document/index.ts"
 	},
 	"scripts": {

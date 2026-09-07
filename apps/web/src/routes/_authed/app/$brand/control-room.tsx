@@ -186,6 +186,9 @@ function displayAuditAction(action: string): string {
 		"staging.demo_content_created": "Test material created",
 		"staging.linkedin_dry_run_prepared": "LinkedIn test prepared",
 		"content.version_created": "Material updated",
+		"content.editorial_approved": "Editorially approved",
+		"content.editorial_changes_requested": "Editorial changes requested",
+		"content.editorial_rejected": "Editorially rejected",
 		"release.intent_queued": "Release queued",
 		"release.kill_switch_enabled": "Publishing stopped",
 	};
