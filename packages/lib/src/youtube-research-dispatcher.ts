@@ -244,7 +244,7 @@ export function createYouTubeResearchDispatcher(
 				sourceUrl,
 				publishedAt,
 				durationSeconds: parseIsoDurationSeconds(details?.contentDetails?.duration),
-				language: primaryLanguage(snippet.defaultAudioLanguage ?? snippet.defaultLanguage),
+				language: primaryLanguage(details?.snippet?.defaultAudioLanguage ?? details?.snippet?.defaultLanguage),
 				views,
 				likes: statNumber(details?.statistics?.likeCount),
 				comments: statNumber(details?.statistics?.commentCount),
