@@ -7,6 +7,7 @@ import {
 	IconChevronDown,
 	IconCpu,
 	IconCreditCard,
+	IconCoins,
 	IconDashboard,
 	IconFileText,
 	IconKey,
@@ -183,6 +184,7 @@ export function AppSidebar({
 					{ title: "Ideas", url: "/control-room/ideas", icon: IconBulb },
 					{ title: "Scripts", url: "/control-room/scripts", icon: IconFileText },
 					{ title: "Editorial review", url: "/control-room/editorial", icon: IconShieldCheck },
+					{ title: "Budgets", url: "/control-room/budgets", icon: IconCoins },
 				],
 			});
 		}

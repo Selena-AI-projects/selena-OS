@@ -64,6 +64,7 @@ import { Route as ApiV1SelenaProfilesRouteImport } from './routes/api/v1/selena/
 import { Route as ApiV1SelenaPublicScanRouteImport } from './routes/api/v1/selena/public-scan'
 import { Route as ApiV1SelenaWebsiteCollectorRouteImport } from './routes/api/v1/selena/website-collector'
 import { Route as ApiV1ToolsAnalyzeRouteImport } from './routes/api/v1/tools/analyze'
+import { Route as AuthedAppBrandControlRoomBudgetsRouteImport } from './routes/_authed/app/$brand/control-room/budgets'
 import { Route as AuthedAppBrandControlRoomEditorialRouteImport } from './routes/_authed/app/$brand/control-room/editorial'
 import { Route as AuthedAppBrandControlRoomIdeasRouteImport } from './routes/_authed/app/$brand/control-room/ideas'
 import { Route as AuthedAppBrandControlRoomProfileRouteImport } from './routes/_authed/app/$brand/control-room/profile'
@@ -378,6 +379,12 @@ const ApiV1ToolsAnalyzeRoute = ApiV1ToolsAnalyzeRouteImport.update({
   path: '/api/v1/tools/analyze',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AuthedAppBrandControlRoomBudgetsRoute =
+  AuthedAppBrandControlRoomBudgetsRouteImport.update({
+    id: '/budgets',
+    path: '/budgets',
+    getParentRoute: () => AuthedAppBrandControlRoomRoute,
+  } as any)
 const AuthedAppBrandControlRoomEditorialRoute =
   AuthedAppBrandControlRoomEditorialRouteImport.update({
     id: '/editorial',
@@ -609,6 +616,7 @@ export interface FileRoutesByFullPath {
   '/api/v1/docs/': typeof ApiV1DocsIndexRoute
   '/api/v1/prompts/': typeof ApiV1PromptsIndexRoute
   '/api/v1/reports/': typeof ApiV1ReportsIndexRoute
+  '/app/$brand/control-room/budgets': typeof AuthedAppBrandControlRoomBudgetsRoute
   '/app/$brand/control-room/editorial': typeof AuthedAppBrandControlRoomEditorialRoute
   '/app/$brand/control-room/ideas': typeof AuthedAppBrandControlRoomIdeasRoute
   '/app/$brand/control-room/profile': typeof AuthedAppBrandControlRoomProfileRoute
@@ -691,6 +699,7 @@ export interface FileRoutesByTo {
   '/api/v1/docs': typeof ApiV1DocsIndexRoute
   '/api/v1/prompts': typeof ApiV1PromptsIndexRoute
   '/api/v1/reports': typeof ApiV1ReportsIndexRoute
+  '/app/$brand/control-room/budgets': typeof AuthedAppBrandControlRoomBudgetsRoute
   '/app/$brand/control-room/editorial': typeof AuthedAppBrandControlRoomEditorialRoute
   '/app/$brand/control-room/ideas': typeof AuthedAppBrandControlRoomIdeasRoute
   '/app/$brand/control-room/profile': typeof AuthedAppBrandControlRoomProfileRoute
@@ -779,6 +788,7 @@ export interface FileRoutesById {
   '/api/v1/docs/': typeof ApiV1DocsIndexRoute
   '/api/v1/prompts/': typeof ApiV1PromptsIndexRoute
   '/api/v1/reports/': typeof ApiV1ReportsIndexRoute
+  '/_authed/app/$brand/control-room/budgets': typeof AuthedAppBrandControlRoomBudgetsRoute
   '/_authed/app/$brand/control-room/editorial': typeof AuthedAppBrandControlRoomEditorialRoute
   '/_authed/app/$brand/control-room/ideas': typeof AuthedAppBrandControlRoomIdeasRoute
   '/_authed/app/$brand/control-room/profile': typeof AuthedAppBrandControlRoomProfileRoute
@@ -867,6 +877,7 @@ export interface FileRouteTypes {
     | '/api/v1/docs/'
     | '/api/v1/prompts/'
     | '/api/v1/reports/'
+    | '/app/$brand/control-room/budgets'
     | '/app/$brand/control-room/editorial'
     | '/app/$brand/control-room/ideas'
     | '/app/$brand/control-room/profile'
@@ -949,6 +960,7 @@ export interface FileRouteTypes {
     | '/api/v1/docs'
     | '/api/v1/prompts'
     | '/api/v1/reports'
+    | '/app/$brand/control-room/budgets'
     | '/app/$brand/control-room/editorial'
     | '/app/$brand/control-room/ideas'
     | '/app/$brand/control-room/profile'
@@ -1036,6 +1048,7 @@ export interface FileRouteTypes {
     | '/api/v1/docs/'
     | '/api/v1/prompts/'
     | '/api/v1/reports/'
+    | '/_authed/app/$brand/control-room/budgets'
     | '/_authed/app/$brand/control-room/editorial'
     | '/_authed/app/$brand/control-room/ideas'
     | '/_authed/app/$brand/control-room/profile'
@@ -1502,6 +1515,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiV1ToolsAnalyzeRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/_authed/app/$brand/control-room/budgets': {
+      id: '/_authed/app/$brand/control-room/budgets'
+      path: '/budgets'
+      fullPath: '/app/$brand/control-room/budgets'
+      preLoaderRoute: typeof AuthedAppBrandControlRoomBudgetsRouteImport
+      parentRoute: typeof AuthedAppBrandControlRoomRoute
+    }
     '/_authed/app/$brand/control-room/editorial': {
       id: '/_authed/app/$brand/control-room/editorial'
       path: '/editorial'
@@ -1734,6 +1754,7 @@ const AuthedAdminRouteWithChildren = AuthedAdminRoute._addFileChildren(
 )
 
 interface AuthedAppBrandControlRoomRouteChildren {
+  AuthedAppBrandControlRoomBudgetsRoute: typeof AuthedAppBrandControlRoomBudgetsRoute
   AuthedAppBrandControlRoomEditorialRoute: typeof AuthedAppBrandControlRoomEditorialRoute
   AuthedAppBrandControlRoomIdeasRoute: typeof AuthedAppBrandControlRoomIdeasRoute
   AuthedAppBrandControlRoomProfileRoute: typeof AuthedAppBrandControlRoomProfileRoute
@@ -1743,6 +1764,8 @@ interface AuthedAppBrandControlRoomRouteChildren {
 
 const AuthedAppBrandControlRoomRouteChildren: AuthedAppBrandControlRoomRouteChildren =
   {
+    AuthedAppBrandControlRoomBudgetsRoute:
+      AuthedAppBrandControlRoomBudgetsRoute,
     AuthedAppBrandControlRoomEditorialRoute:
       AuthedAppBrandControlRoomEditorialRoute,
     AuthedAppBrandControlRoomIdeasRoute: AuthedAppBrandControlRoomIdeasRoute,
