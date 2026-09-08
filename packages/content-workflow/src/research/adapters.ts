@@ -113,9 +113,11 @@ export class FixtureResearchAdapter implements ResearchAdapter {
 }
 
 export function buildFixtureSources(project: ResearchProject): ResearchSource[] {
-	const keywords = project.keywords.slice(0, 3);
-	const primary = keywords[0] ?? project.slug;
-	const secondary = keywords[1] ?? primary;
+	// Fixture titles stand in for what a provider would return about this brand's
+	// subject, so they follow topics rather than the sorted keyword vocabulary.
+	const topics = project.topics.slice(0, 3);
+	const primary = topics[0] ?? project.slug;
+	const secondary = topics[1] ?? primary;
 	const language = project.languages[0] ?? null;
 
 	const specs = [

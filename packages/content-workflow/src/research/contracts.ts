@@ -110,7 +110,18 @@ export interface ResearchProject {
 	brandId: string;
 	slug: string;
 	languages: string[];
+	/**
+	 * The vocabulary a source is matched against. Sorted for reproducibility, so
+	 * position here carries no meaning and nothing may read it as a ranking.
+	 */
 	keywords: string[];
+	/**
+	 * What this brand wants covered, in the order its owner wrote it. This is the
+	 * subject of a run; `keywords` is only how sources are recognised. Keeping
+	 * them apart is what stops an alphabetically lucky term from deciding the
+	 * topic.
+	 */
+	topics: string[];
 	negativeKeywords: string[];
 	profileVersionId: string;
 	profileHash: string;

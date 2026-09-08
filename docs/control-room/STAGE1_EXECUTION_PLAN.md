@@ -249,8 +249,9 @@ Each slice has one status:
 | 0 | Product contract and neutral shell | `MERGED` | Content delta `ab50d742..ef1ea56f`, PR #25; PR #26 / `39ec0ea3` reconciled the already-merged branch with an empty delta; retrospective review remains incomplete |
 | Plan | Detailed Stage 1 execution control | `MERGED` | Delivered inside Slice 1 PR #28 and merged as `313daa0c`; PR #27 is superseded |
 | 1 | Profile and draft YouTube target | `MERGED` | PR #28, head `45dd3b96`, merge `313daa0c`; required checks green on the head, blind review passed, staging migration `0037` applied and the canary flag enabled |
-| 2 | Research | `MERGED` | PR #31, head `52741ae`, merge `86a0a633`; six blind reviews, the last three approved; required checks green on the head; migration `0040` |
-| 3 | Ideas and scripts | `MERGED` | PR #32, head `3a6c9cd`, merge `58daa20f`; three blind reviews, the third approved; required checks green on the head; migration `0041`; YouTube Pro transfer under Apache-2.0 |
+| 2 | Research | `MERGED` | PR #31, head `52741ae`, merge `86a0a633`; six blind reviews, the last three approved; required checks green on the head; migration `0042` (renumbered from `0040` — see DECISION_LOG 2026-09-07) |
+| 3 | Ideas and scripts | `MERGED` | PR #32, head `3a6c9cd`, merge `58daa20f`; three blind reviews, the third approved; required checks green on the head; migration `0043` (renumbered from `0041`); YouTube Pro transfer under Apache-2.0 |
+| 4 | Thumbnails and editorial approval | `MERGED` | PR #44, merge `07fdc84`; all 7 required checks green on GitHub-hosted runners; editorial decisions bind content/profile/evidence/asset hashes; integration test proves zero release authority |
 | 4 | Thumbnails and editorial approval | `IN_PROGRESS` | Accepted Slice 3 merge SHA and private-storage acceptance path |
 | 5 | Local vertical acceptance | `NOT_STARTED` | Accepted Slice 4 merge SHA and disposable environment |
 

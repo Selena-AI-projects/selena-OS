@@ -256,7 +256,9 @@ function buildOpportunity(
 	project: ResearchProject,
 	verifiedFactStatements: string[],
 ): ResearchOpportunity {
-	const [firstNeed, secondNeed] = project.keywords;
+	// Topics carry the owner's stated subject and their order. Reading the sorted
+	// keyword vocabulary here instead would make the alphabet decide the subject.
+	const [firstNeed, secondNeed] = project.topics;
 	const need = firstNeed ?? project.slug;
 	const supporting = verifiedFactStatements.map((statement) => statement.toLowerCase());
 	const factRequirements = [need, secondNeed]
