@@ -3,6 +3,11 @@ import { readFileSync } from "node:fs";
 import { assertDatabaseTlsVerified, requiresVerifiedDatabaseTls } from "@workspace/lib/db/staging-tls";
 import { createOpaqueWorkflowPayload } from "@workspace/lib/selena-control-room";
 import { Pool, type PoolClient } from "pg";
+import {
+	createReleaseGatewayClient,
+	type ReleaseGatewayClient,
+	requiredGatewayConfig,
+} from "./selena-release-gateway-client";
 
 const WORKFLOW_QUEUE_CONTEXT = { organizationId: "__outbox_queue__", brandId: "__outbox_queue__" };
 const SELENA_TRIGGER_TASK_ID = "selena-release-workflow";
@@ -25,6 +30,64 @@ export type TriggerWorkflowClient = {
 		payload: ReturnType<typeof createOpaqueWorkflowPayload>;
 	}): Promise<string>;
 };
+
+type CarryInput = {
+	concurrencyKey: string;
+	idempotencyKey: string;
+	payload: ReturnType<typeof createOpaqueWorkflowPayload>;
+};
+
+/**
+ * How a claimed release left the queue.
+ *
+ * `RUNNING` means the carry only started the work and something else will
+ * finish it; the terminal states mean the release reached its conclusion
+ * before the queue entry was closed. The conclusion itself — accepted,
+ * refused, rejected — is recorded by the gateway in the publication attempt,
+ * not here.
+ */
+export type ReleaseCarry = {
+	reference: string;
+	state: "RUNNING" | "COMPLETED" | "FAILED" | "RECONCILIATION_REQUIRED";
+};
+
+export type ReleaseCarrier = { carry(input: CarryInput): Promise<ReleaseCarry> };
+
+export function createTriggerCarrier(client: TriggerWorkflowClient): ReleaseCarrier {
+	return {
+		async carry(input) {
+			return { reference: await client.trigger(input), state: "RUNNING" };
+		},
+	};
+}
+
+/**
+ * Carries a release through the gateway in this process.
+ *
+ * Every answer the gateway can give about a release is a conclusion, so the
+ * queue entry closes either way: retrying a rejected release would post
+ * nothing, and retrying an ambiguous one is how a post appears twice. Only a
+ * gateway that could not be reached or is not configured leaves the entry to
+ * be tried again.
+ */
+export function createGatewayReleaseCarrier(gateway: ReleaseGatewayClient): ReleaseCarrier {
+	return {
+		async carry(input) {
+			const manifest = await gateway.signManifest(input.payload.releaseIntentId);
+			const report = await gateway.dispatch({
+				idempotencyKey: input.idempotencyKey,
+				manifestId: manifest.manifestId,
+			});
+			if (report.outcome === "NOT_CONFIGURED") {
+				throw new Error(`Release Gateway has no provider configured: ${report.missing.join(", ")}`);
+			}
+			if (report.outcome === "ACCEPTED") return { reference: report.providerReferenceId, state: "COMPLETED" };
+			if (report.outcome === "SKIPPED") return { reference: report.reservationId, state: "COMPLETED" };
+			if (report.outcome === "AMBIGUOUS") return { reference: manifest.manifestId, state: "RECONCILIATION_REQUIRED" };
+			return { reference: manifest.manifestId, state: "FAILED" };
+		},
+	};
+}
 
 type TriggerClientConfig = {
 	apiUrl: string;
@@ -142,14 +205,23 @@ async function claimOutbox(pool: Pool): Promise<ClaimedOutbox | null> {
 	}
 }
 
-async function recordDispatch(pool: Pool, outbox: ClaimedOutbox, triggerRunId: string): Promise<void> {
+async function recordDispatch(pool: Pool, outbox: ClaimedOutbox, carry: ReleaseCarry): Promise<void> {
 	const client = await pool.connect();
 	try {
 		await withWorkerContext(client, async () => {
-			await client.query("SELECT * FROM selena_release.record_trigger_workflow_dispatch($1, $2, $3)", [
+			if (carry.state === "RUNNING") {
+				await client.query("SELECT * FROM selena_release.record_trigger_workflow_dispatch($1, $2, $3)", [
+					outbox.outboxEventId,
+					outbox.leaseOwner,
+					carry.reference,
+				]);
+				return;
+			}
+			await client.query("SELECT * FROM selena_release.record_direct_release_dispatch($1, $2, $3, $4)", [
 				outbox.outboxEventId,
 				outbox.leaseOwner,
-				triggerRunId,
+				carry.reference,
+				carry.state,
 			]);
 		});
 	} finally {
@@ -175,12 +247,12 @@ async function retryOrDeadLetter(pool: Pool, outbox: ClaimedOutbox, error: unkno
 
 export async function dispatchOneTriggerWorkflow(
 	pool: Pool,
-	client: TriggerWorkflowClient,
+	carrier: ReleaseCarrier,
 ): Promise<"IDLE" | "DISPATCHED" | "RETRIED"> {
 	const outbox = await claimOutbox(pool);
 	if (!outbox) return "IDLE";
 	try {
-		const triggerRunId = await client.trigger({
+		const carry = await carrier.carry({
 			concurrencyKey: `brand:${outbox.brandId}`,
 			idempotencyKey: outbox.idempotencyKey,
 			payload: createOpaqueWorkflowPayload({
@@ -188,7 +260,7 @@ export async function dispatchOneTriggerWorkflow(
 				releaseIntentId: outbox.releaseIntentId,
 			}),
 		});
-		await recordDispatch(pool, outbox, triggerRunId);
+		await recordDispatch(pool, outbox, carry);
 		return "DISPATCHED";
 	} catch (error) {
 		await retryOrDeadLetter(pool, outbox, error);
@@ -196,19 +268,33 @@ export async function dispatchOneTriggerWorkflow(
 	}
 }
 
+/**
+ * Which transport carries an approved release, chosen by what is configured.
+ *
+ * A contour with neither is not broken, but it does queue releases nobody will
+ * ever carry, so it says so once instead of starting in silence.
+ */
+function releaseCarrier(): ReleaseCarrier | null {
+	const trigger = requiredTriggerConfig();
+	if (trigger) return createTriggerCarrier(createTriggerDevClient(trigger));
+	const gateway = requiredGatewayConfig();
+	if (gateway) return createGatewayReleaseCarrier(createReleaseGatewayClient(gateway));
+	console.warn("selena_release: no release carrier is configured; approved releases will wait in the queue");
+	return null;
+}
+
 export function startSelenaTriggerDispatcher(): (() => Promise<void>) | null {
-	const config = requiredTriggerConfig();
-	if (!config) return null;
+	const carrier = releaseCarrier();
+	if (!carrier) return null;
 	const connectionString = process.env.DATABASE_URL;
-	if (!connectionString) throw new Error("DATABASE_URL is required for the Selena Trigger dispatcher");
+	if (!connectionString) throw new Error("DATABASE_URL is required for the Selena release dispatcher");
 	const pool = createRegistryWorkerPool(connectionString);
-	const client = createTriggerDevClient(config);
 	let running = false;
 	const tick = async () => {
 		if (running) return;
 		running = true;
 		try {
-			while ((await dispatchOneTriggerWorkflow(pool, client)) === "DISPATCHED") undefined;
+			while ((await dispatchOneTriggerWorkflow(pool, carrier)) === "DISPATCHED") undefined;
 		} finally {
 			running = false;
 		}

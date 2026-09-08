@@ -185,6 +185,13 @@ export const ENV_REGISTRY: EnvVarSpec[] = [
 			"Internal authentication token for calls to the isolated Selena Release Gateway; never exposed to the browser.",
 	},
 	{
+		name: "SELENA_GATEWAY_BASE_URL",
+		scope: "server",
+		requiredBy: "optional",
+		description:
+			"Where the worker reaches the Release Gateway. HTTPS, or plain HTTP only on a contour's private network.",
+	},
+	{
 		name: "SELENA_GATEWAY_SIGNING_PRIVATE_KEY",
 		scope: "server",
 		requiredBy: "optional",
