@@ -7,12 +7,15 @@ import { readFileSync } from "node:fs";
  * work at import time: anything that reached for these settings by importing it
  * would migrate the database as a side effect of asking how to connect.
  */
-export function connectionSettings(databaseUrl, stagingMvp = process.env.SELENA_STAGING_MVP === "true") {
-	if (!stagingMvp) return { connectionString: databaseUrl };
+export function connectionSettings(
+	databaseUrl,
+	verifyTls = process.env.SELENA_RUNTIME_DB_VERIFY_TLS === "true" || process.env.SELENA_STAGING_MVP === "true",
+) {
+	if (!verifyTls) return { connectionString: databaseUrl };
 
 	const rootCertificatePath = process.env.PGSSLROOTCERT;
 	if (!rootCertificatePath) {
-		throw new Error("PGSSLROOTCERT is required for staging connections");
+		throw new Error("PGSSLROOTCERT is required when database TLS must be verified");
 	}
 
 	const url = new URL(databaseUrl);

@@ -1,11 +1,10 @@
 import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
 import * as schema from "./schema";
-import { assertStagingDatabaseTls } from "./staging-tls";
+import { assertDatabaseTlsVerified } from "./staging-tls";
 
 function createDatabasePool(connectionString: string): Pool {
-	const isStagingMvp = process.env.SELENA_STAGING_MVP === "true";
-	assertStagingDatabaseTls(connectionString, isStagingMvp);
+	assertDatabaseTlsVerified(connectionString);
 	return new Pool({ connectionString });
 }
 

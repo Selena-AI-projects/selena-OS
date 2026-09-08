@@ -80,6 +80,13 @@ export const ENV_REGISTRY: EnvVarSpec[] = [
 			"Supabase root CA materialized only by a Selena staging runtime for verify-full TLS; configure it separately per service.",
 	},
 	{
+		name: "SELENA_RUNTIME_DB_VERIFY_TLS",
+		scope: "server",
+		requiredBy: "optional",
+		description:
+			"Requires every runtime database connection to verify the server certificate against a root CA. Implied by SELENA_STAGING_MVP.",
+	},
+	{
 		name: "SELENA_STAGING_MVP",
 		scope: "server",
 		requiredBy: "optional",

@@ -3,7 +3,7 @@
 # The staging database accepts only verify-full TLS. The root CA is supplied
 # per runtime service and materialized with owner-only permissions at startup;
 # it is never placed in the image or sent to the browser.
-if [ "${SELENA_STAGING_MVP:-}" = "true" ]; then
+if [ "${SELENA_STAGING_MVP:-}" = "true" ] || [ "${SELENA_RUNTIME_DB_VERIFY_TLS:-}" = "true" ]; then
 	: "${SELENA_RUNTIME_DATABASE_CA_PEM:?SELENA_RUNTIME_DATABASE_CA_PEM is required for Selena staging runtimes}"
 
 	umask 077
