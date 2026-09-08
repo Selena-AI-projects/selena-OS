@@ -30,7 +30,7 @@ concurrency:
 jobs:
   build:
     name: Build
-    runs-on: [self-hosted, Linux, X64, selena-ci]
+    runs-on: ubuntu-latest
     timeout-minutes: 25
 
     steps:
