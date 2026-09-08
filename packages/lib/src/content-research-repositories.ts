@@ -41,6 +41,12 @@ import {
 	scrContentResearchRuns,
 	scrContentResearchSources,
 } from "./db/schema";
+import {
+	PROVIDER_COST_ESTIMATES,
+	ProviderBudgetError,
+	reserveProviderCall,
+	settleProviderCall,
+} from "./provider-budget-repositories";
 
 const AGGREGATE_TYPE = "content_research";
 
@@ -571,7 +577,26 @@ export function createContentResearchRepositories(database: typeof db = db) {
 					});
 
 					let outcome: ResearchRunOutcome;
+					let reservationId: string | null = null;
 					try {
+						// The durable gate. A non-fixture adapter may not run before a
+						// RESERVED ledger row exists against a budget an interactive owner
+						// set; the estimate is the run's permitted calls at a fixed
+						// per-provider cost, and zero never means unknown — the definer
+						// function refuses it. The fixture path touches neither the budget
+						// nor the ledger.
+						if (adapterId !== "fixture") {
+							const permitted = videoRadarGates().maxProviderCalls ?? 0;
+							reservationId = await reserveProviderCall(tx, {
+								brandId: input.brandId,
+								providerId: adapterId,
+								purpose: "research.run",
+								idempotencyKey: input.idempotencyKey,
+								estimatedCalls: permitted,
+								estimatedCostMicros: (PROVIDER_COST_ESTIMATES[adapterId] ?? 0) * permitted,
+								correlationId,
+							});
+						}
 						outcome = await runResearchPipeline({
 							project,
 							adapter: researchAdapter(adapterId, input.imported),
@@ -582,10 +607,27 @@ export function createContentResearchRepositories(database: typeof db = db) {
 						// A refused adapter is recorded as a failed run rather than
 						// disappearing: an absent run reads as "never attempted", and
 						// rethrowing here would roll back the very event that says so.
-						outcome = failedOutcome(
-							error instanceof ContentResearchError ? error.code : "INTERNAL_ERROR",
-							startedAt.toISOString(),
-						);
+						// A budget refusal takes the same path, keeping its own code.
+						const code =
+							error instanceof ProviderBudgetError
+								? (error.code as unknown as ResearchErrorCode)
+								: error instanceof ContentResearchError
+									? error.code
+									: "INTERNAL_ERROR";
+						outcome = failedOutcome(code, startedAt.toISOString());
+					}
+					if (reservationId) {
+						const failureCode = outcome.status === "FAILED" ? (outcome.failures[0]?.code ?? "INTERNAL_ERROR") : null;
+						if (failureCode) {
+							await settleProviderCall(tx, { ledgerId: reservationId, status: "FAILED", errorCode: failureCode });
+						} else {
+							await settleProviderCall(tx, { ledgerId: reservationId, status: "DISPATCHED" });
+							await settleProviderCall(tx, {
+								ledgerId: reservationId,
+								status: "SETTLED",
+								actualCalls: outcome.counters.externalProviderCalls,
+							});
+						}
 					}
 
 					const completedAt = new Date();

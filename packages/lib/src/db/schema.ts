@@ -1501,6 +1501,79 @@ export const scrEditorialApprovals = selenaRegistrySchema
 	)
 	.enableRLS();
 
+export const scrBudgetWindowEnum = selenaRegistrySchema.enum("budget_window", ["DAY", "MONTH"]);
+export const scrProviderCallStatusEnum = selenaRegistrySchema.enum("provider_call_status", [
+	"RESERVED",
+	"DISPATCHED",
+	"SETTLED",
+	"FAILED",
+	"EXPIRED",
+]);
+
+export const scrProviderBudgets = selenaRegistrySchema
+	.table(
+		"provider_budgets",
+		{
+			id: uuid("id").defaultRandom().primaryKey().notNull(),
+			organizationId: text("organization_id")
+				.notNull()
+				.references(() => organization.id),
+			brandId: text("brand_id")
+				.notNull()
+				.references(() => brands.id),
+			providerId: text("provider_id").notNull(),
+			windowKind: scrBudgetWindowEnum("window_kind").notNull(),
+			ceilingCalls: integer("ceiling_calls").notNull(),
+			ceilingCostMicros: bigint("ceiling_cost_micros", { mode: "number" }).notNull(),
+			setBy: text("set_by").notNull(),
+			createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+		},
+		(table) => ({
+			lookupIdx: index("provider_budgets_lookup_idx").on(table.brandId, table.providerId, table.createdAt.desc()),
+			orgIdx: index("provider_budgets_org_idx").on(table.organizationId),
+		}),
+	)
+	.enableRLS();
+
+export const scrProviderCallLedger = selenaRegistrySchema
+	.table(
+		"provider_call_ledger",
+		{
+			id: uuid("id").defaultRandom().primaryKey().notNull(),
+			organizationId: text("organization_id")
+				.notNull()
+				.references(() => organization.id),
+			brandId: text("brand_id")
+				.notNull()
+				.references(() => brands.id),
+			providerId: text("provider_id").notNull(),
+			purpose: text("purpose").notNull(),
+			idempotencyKey: text("idempotency_key").notNull(),
+			status: scrProviderCallStatusEnum("status").notNull().default("RESERVED"),
+			estimatedCalls: integer("estimated_calls").notNull(),
+			estimatedCostMicros: bigint("estimated_cost_micros", { mode: "number" }).notNull(),
+			actualCalls: integer("actual_calls"),
+			actualCostMicros: bigint("actual_cost_micros", { mode: "number" }),
+			errorCode: text("error_code"),
+			correlationId: uuid("correlation_id"),
+			reservedBy: text("reserved_by").notNull(),
+			reservedAt: timestamp("reserved_at", { withTimezone: true }).defaultNow().notNull(),
+			dispatchedAt: timestamp("dispatched_at", { withTimezone: true }),
+			settledAt: timestamp("settled_at", { withTimezone: true }),
+		},
+		(table) => ({
+			keyUnique: uniqueIndex("provider_call_ledger_key_unique").on(
+				table.organizationId,
+				table.brandId,
+				table.providerId,
+				table.idempotencyKey,
+			),
+			windowIdx: index("provider_call_ledger_window_idx").on(table.brandId, table.providerId, table.reservedAt),
+			orgIdx: index("provider_call_ledger_org_idx").on(table.organizationId),
+		}),
+	)
+	.enableRLS();
+
 export const scrContentItems = selenaRegistrySchema
 	.table(
 		"content_items",

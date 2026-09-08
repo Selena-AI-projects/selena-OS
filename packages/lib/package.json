@@ -50,6 +50,7 @@
 		"./content-creation-repositories": "./src/content-creation-repositories.ts",
 		"./content-review-repositories": "./src/content-review-repositories.ts",
 		"./content-research-repositories": "./src/content-research-repositories.ts",
+		"./provider-budget-repositories": "./src/provider-budget-repositories.ts",
 		"./selena-control-room": "./src/selena-control-room.ts",
 		"./selena-private-storage": "./src/selena-private-storage.ts",
 		"./selena-clamav": "./src/selena-clamav.ts",

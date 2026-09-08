@@ -1,5 +1,32 @@
 # Content OS Stage 1 decisions
 
+## 2026-09-08 — Slice 3.1 durable provider budget ledger
+
+- Decision: migration `0044` adds `selena_registry.provider_budgets` and
+  `selena_registry.provider_call_ledger`. Budgets are owner-only and
+  append-only — an interactive owner INSERTs a new row to change a ceiling, and
+  nothing may UPDATE or DELETE one. The ledger is written only through the
+  `reserve_provider_call` / `settle_provider_call` SECURITY DEFINER functions
+  (the web runtime holds no INSERT or UPDATE policy on it), and a reservation
+  counts as spent against the window from the moment it is RESERVED until it is
+  EXPIRED — an in-flight call is money already committed, not money still
+  available. Cost estimates come from fixed per-provider constants
+  (`PROVIDER_COST_ESTIMATES`: gemini 20,000 micros/call, video-radar 5,000)
+  until real pricing lands; a zero or missing estimate is refused as
+  `UNKNOWN_COST_BLOCKED` rather than treated as free. The fixture path in both
+  creation and research is untouched — zero reserves, zero ledger reads — so the
+  Stage 1 acceptance's externalProviderCalls=0 evidence stays byte-identical.
+- Evidence: the process-scoped `ProviderCallLedger` starts at zero on every
+  deploy, so its ceiling could never be reached across a restart — Stage 1's own
+  comments call it decoration and name a durable shared ledger as the
+  prerequisite for any live-call authorization (plan 7.5).
+- Alternatives rejected: mutable budget rows (an edit war over one row has no
+  history); letting the web runtime write the ledger directly (the advisory-lock
+  window arithmetic would then be advisory in the bad sense); estimating unknown
+  costs as zero (a free reservation under a cost ceiling is not a gate).
+- Authority: owner's autonomous-execution mandate of 2026-09-08.
+- Affected requirements: Stage 1 plan 7.5, Stage 3 Slice 3.1.
+
 ## 2026-09-08 — Slice 4 editorial review shape
 
 - Decision: the editorial route lives at `/control-room/editorial` (the spec's `/review` name collides with the release-era `#review` hash section); audit actions are `content.editorial_approved`, `content.editorial_changes_requested`, `content.editorial_rejected` — one per decision — instead of the spec's single revoke action, because `editorial_approvals` is append-only and a later decision supersedes rather than revokes; `CHANGES_REQUESTED` returns the item to `SCRIPT_DRAFTED`, `REJECTED` archives it; the thumbnail block inside `structured_body` stays unpopulated in Slice 4 — the asset bundle binds through `content_assets` rows and the approval's `asset_bundle_hash`, so no immutable version needs rewriting.
