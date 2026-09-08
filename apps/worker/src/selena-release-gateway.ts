@@ -7,7 +7,9 @@ import {
 	ensureGatewaySigningKey,
 	signReleaseManifest,
 } from "@workspace/lib/selena-release-gateway";
+import { configureReleaseProviders } from "@workspace/lib/selena-release-providers";
 import { Pool, type PoolClient } from "pg";
+import { dispatchReleaseManifest, type GatewayQuery } from "./selena-release-dispatch";
 
 const GATEWAY_CONTEXT = { organizationId: "__gateway__", brandId: "__gateway__" };
 
@@ -125,7 +127,7 @@ async function resolveSigningKey(pool: Pool): Promise<{ privateKey: string; vers
 	}
 }
 
-async function readJson(request: IncomingMessage): Promise<{ releaseIntentId: string }> {
+async function readJson(request: IncomingMessage): Promise<Record<string, unknown>> {
 	const chunks: Buffer[] = [];
 	let size = 0;
 	for await (const chunk of request) {
@@ -134,11 +136,44 @@ async function readJson(request: IncomingMessage): Promise<{ releaseIntentId: st
 		if (size > 32 * 1024) throw new Error("Gateway request is too large");
 		chunks.push(buffer);
 	}
-	const parsed = JSON.parse(Buffer.concat(chunks).toString("utf8")) as { releaseIntentId?: unknown };
-	if (typeof parsed.releaseIntentId !== "string" || !/^[0-9a-f-]{36}$/i.test(parsed.releaseIntentId)) {
-		throw new Error("releaseIntentId must be a UUID");
+	return JSON.parse(Buffer.concat(chunks).toString("utf8")) as Record<string, unknown>;
+}
+
+function requireUuid(value: unknown, field: string): string {
+	if (typeof value !== "string" || !/^[0-9a-f-]{36}$/i.test(value)) throw new Error(`${field} must be a UUID`);
+	return value;
+}
+
+/**
+ * A dispatch is bound to one key for its whole life: the same key reserves it,
+ * authorizes it and reaches the provider, so a repeated request returns the
+ * reservation already made rather than publishing a second time.
+ */
+function requireIdempotencyKey(value: unknown): string {
+	if (typeof value !== "string" || value.trim().length === 0 || value.length > 200) {
+		throw new Error("idempotencyKey is required");
 	}
-	return { releaseIntentId: parsed.releaseIntentId };
+	return value;
+}
+
+/** Runs one committed transaction in the Gateway's context for a manifest. */
+function gatewayTransactionFor(pool: Pool, manifestId: string) {
+	return async <Result>(task: (query: GatewayQuery) => Promise<Result>): Promise<Result> => {
+		const client = await pool.connect();
+		try {
+			return await withGatewayContext(
+				client,
+				() =>
+					task(async <Row>(sql: string, parameters: unknown[]) => {
+						const result = await client.query(sql, parameters);
+						return result.rows as Row[];
+					}),
+				manifestId,
+			);
+		} finally {
+			client.release();
+		}
+	};
 }
 
 function sendJson(response: ServerResponse, status: number, body: Record<string, unknown>): void {
@@ -157,16 +192,31 @@ export async function startSelenaReleaseGateway(): Promise<void> {
 		if (request.url === "/healthz" && request.method === "GET") return sendJson(response, 200, { status: "ok" });
 		if (!isGatewayAuthorizationValid(token, request.headers.authorization?.replace(/^Bearer /, "")))
 			return sendJson(response, 401, { error: "unauthorized" });
-		if (request.url !== "/v1/release-manifests" || request.method !== "POST")
-			return sendJson(response, 404, { error: "not_found" });
+		const isManifestRequest = request.url === "/v1/release-manifests" && request.method === "POST";
+		const isDispatchRequest = request.url === "/v1/release-dispatches" && request.method === "POST";
+		if (!isManifestRequest && !isDispatchRequest) return sendJson(response, 404, { error: "not_found" });
 		try {
+			const body = await readJson(request);
+			if (isDispatchRequest) {
+				const manifestId = requireUuid(body.manifestId, "manifestId");
+				return sendJson(
+					response,
+					200,
+					await dispatchReleaseManifest({
+						configuration: configureReleaseProviders(),
+						idempotencyKey: requireIdempotencyKey(body.idempotencyKey),
+						inGatewayContext: gatewayTransactionFor(pool, manifestId),
+						manifestId,
+					}),
+				);
+			}
 			return sendJson(
 				response,
 				201,
 				await createSignedManifest({
 					pool,
 					privateKey,
-					releaseIntentId: (await readJson(request)).releaseIntentId,
+					releaseIntentId: requireUuid(body.releaseIntentId, "releaseIntentId"),
 					signingKeyVersion,
 				}),
 			);
