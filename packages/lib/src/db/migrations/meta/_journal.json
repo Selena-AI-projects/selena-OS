@@ -1,321 +1,335 @@
 {
-	"version": "7",
-	"dialect": "postgresql",
-	"entries": [
-		{
-			"idx": 0,
-			"version": "7",
-			"when": 1770853000310,
-			"tag": "0000_hot_excalibur",
-			"breakpoints": true
-		},
-		{
-			"idx": 1,
-			"version": "7",
-			"when": 1771495206934,
-			"tag": "0001_sturdy_ares",
-			"breakpoints": true
-		},
-		{
-			"idx": 2,
-			"version": "7",
-			"when": 1773081311430,
-			"tag": "0002_legal_ultimatum",
-			"breakpoints": true
-		},
-		{
-			"idx": 3,
-			"version": "7",
-			"when": 1773081457906,
-			"tag": "0003_phase3-constraints-and-indices",
-			"breakpoints": true
-		},
-		{
-			"idx": 4,
-			"version": "7",
-			"when": 1773100369290,
-			"tag": "0004_nebulous_gunslinger",
-			"breakpoints": true
-		},
-		{
-			"idx": 5,
-			"version": "7",
-			"when": 1773125217919,
-			"tag": "0005_known_warhawk",
-			"breakpoints": true
-		},
-		{
-			"idx": 6,
-			"version": "7",
-			"when": 1773200000000,
-			"tag": "0006_multi_domain_aliases",
-			"breakpoints": true
-		},
-		{
-			"idx": 7,
-			"version": "7",
-			"when": 1775800000000,
-			"tag": "0007_report_progress",
-			"breakpoints": true
-		},
-		{
-			"idx": 8,
-			"version": "7",
-			"when": 1776000000000,
-			"tag": "0008_provider_engines",
-			"breakpoints": true
-		},
-		{
-			"idx": 9,
-			"version": "7",
-			"when": 1780782746840,
-			"tag": "0009_brand_opportunities",
-			"breakpoints": true
-		},
-		{
-			"idx": 10,
-			"version": "7",
-			"when": 1784000000000,
-			"tag": "0010_scope_brands_to_orgs",
-			"breakpoints": true
-		},
-		{
-			"idx": 11,
-			"version": "7",
-			"when": 1785181564412,
-			"tag": "0011_secrets",
-			"breakpoints": true
-		},
-		{
-			"idx": 12,
-			"version": "7",
-			"when": 1785900686908,
-			"tag": "0012_billing_foundations",
-			"breakpoints": true
-		},
-		{
-			"idx": 13,
-			"version": "7",
-			"when": 1785954515007,
-			"tag": "0013_usage_events",
-			"breakpoints": true
-		},
-		{
-			"idx": 14,
-			"version": "7",
-			"when": 1786004156368,
-			"tag": "0014_membership_uniqueness",
-			"breakpoints": true
-		},
-		{
-			"idx": 15,
-			"version": "7",
-			"when": 1786724700000,
-			"tag": "0015_selena_visibility_client",
-			"breakpoints": true
-		},
-		{
-			"idx": 16,
-			"version": "7",
-			"when": 1786725600000,
-			"tag": "0016_selena_scan_findings_payments",
-			"breakpoints": true
-		},
-		{
-			"idx": 17,
-			"version": "7",
-			"when": 1786726200000,
-			"tag": "0017_selena_project_profiles",
-			"breakpoints": true
-		},
-		{
-			"idx": 18,
-			"version": "7",
-			"when": 1786726800000,
-			"tag": "0018_selena_measurement_runs",
-			"breakpoints": true
-		},
-		{
-			"idx": 19,
-			"version": "7",
-			"when": 1786727400000,
-			"tag": "0019_recommendation_engine",
-			"breakpoints": true
-		},
-		{
-			"idx": 20,
-			"version": "7",
-			"when": 1786728000000,
-			"tag": "0020_selena_website_snapshots",
-			"breakpoints": true
-		},
-		{
-			"idx": 21,
-			"version": "7",
-			"when": 1787745600000,
-			"tag": "0021_selena_control_room",
-			"breakpoints": true
-		},
-		{
-			"idx": 22,
-			"version": "7",
-			"when": 1787751397000,
-			"tag": "0022_grant_web_performance_schema",
-			"breakpoints": true
-		},
-		{
-			"idx": 23,
-			"version": "7",
-			"when": 1787755000000,
-			"tag": "0023_repair_web_performance_schema_usage",
-			"breakpoints": true
-		},
-		{
-			"idx": 24,
-			"version": "7",
-			"when": 1787808833306,
-			"tag": "0024_repair_staging_dry_run_approval_policy",
-			"breakpoints": true
-		},
-		{
-			"idx": 25,
-			"version": "7",
-			"when": 1787810400000,
-			"tag": "0025_private_asset_storage",
-			"breakpoints": true
-		},
-		{
-			"idx": 26,
-			"version": "7",
-			"when": 1787810460000,
-			"tag": "0026_private_asset_scan_queue",
-			"breakpoints": true
-		},
-		{
-			"idx": 27,
-			"version": "7",
-			"when": 1787810520000,
-			"tag": "0027_release_gateway_manifest_boundary",
-			"breakpoints": true
-		},
-		{
-			"idx": 28,
-			"version": "7",
-			"when": 1787810580000,
-			"tag": "0028_trigger_workflow_outbox_dispatch",
-			"breakpoints": true
-		},
-		{
-			"idx": 29,
-			"version": "7",
-			"when": 1787810640000,
-			"tag": "0029_gateway_postiz_submission_boundary",
-			"breakpoints": true
-		},
-		{
-			"idx": 30,
-			"version": "7",
-			"when": 1787810700000,
-			"tag": "0030_release_cancellation_workflow_state",
-			"breakpoints": true
-		},
-		{
-			"idx": 31,
-			"version": "7",
-			"when": 1787810760000,
-			"tag": "0031_postiz_performance_ingestion",
-			"breakpoints": true
-		},
-		{
-			"idx": 32,
-			"version": "7",
-			"when": 1787810820000,
-			"tag": "0032_channel_provider_binding",
-			"breakpoints": true
-		},
-		{
-			"idx": 33,
-			"version": "7",
-			"when": 1787810880000,
-			"tag": "0033_release_provider_allowlist",
-			"breakpoints": true
-		},
-		{
-			"idx": 34,
-			"version": "7",
-			"when": 1787810940000,
-			"tag": "0034_control_room_release_read_grants",
-			"breakpoints": true
-		},
-		{
-			"idx": 35,
-			"version": "7",
-			"when": 1787811000000,
-			"tag": "0035_aether_bridge_inbox",
-			"breakpoints": true
-		},
-		{
-			"idx": 36,
-			"version": "7",
-			"when": 1787811060000,
-			"tag": "0036_gateway_signing_key_custody",
-			"breakpoints": true
-		},
-		{
-			"idx": 37,
-			"version": "7",
-			"when": 1788620325000,
-			"tag": "0037_content_project_profiles",
-			"breakpoints": true
-		},
-		{
-			"idx": 38,
-			"version": "7",
-			"when": 1788620400000,
-			"tag": "0038_growth_project_bindings",
-			"breakpoints": true
-		},
-		{
-			"idx": 39,
-			"version": "7",
-			"when": 1788620460000,
-			"tag": "0039_aether_events_content_draft",
-			"breakpoints": true
-		},
-		{
-			"idx": 40,
-			"version": "7",
-			"when": 1788620520000,
-			"tag": "0040_content_policy_lifecycle",
-			"breakpoints": true
-		},
-		{
-			"idx": 41,
-			"version": "7",
-			"when": 1788620580000,
-			"tag": "0041_content_policy_web_writes_revoked",
-			"breakpoints": true
-		},
-		{
-			"idx": 42,
-			"version": "7",
-			"when": 1788620640000,
-			"tag": "0042_content_research_registry",
-			"breakpoints": true
-		},
-		{
-			"idx": 43,
-			"version": "7",
-			"when": 1788620700000,
-			"tag": "0043_structured_content_and_editorial_review",
-			"breakpoints": true
-		},
-		{
-			"idx": 44,
-			"version": "7",
-			"when": 1788620760000,
-			"tag": "0044_provider_budget_ledger",
-			"breakpoints": true
-		}
-	]
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1770853000310,
+      "tag": "0000_hot_excalibur",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1771495206934,
+      "tag": "0001_sturdy_ares",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1773081311430,
+      "tag": "0002_legal_ultimatum",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1773081457906,
+      "tag": "0003_phase3-constraints-and-indices",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1773100369290,
+      "tag": "0004_nebulous_gunslinger",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1773125217919,
+      "tag": "0005_known_warhawk",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1773200000000,
+      "tag": "0006_multi_domain_aliases",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1775800000000,
+      "tag": "0007_report_progress",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1776000000000,
+      "tag": "0008_provider_engines",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1780782746840,
+      "tag": "0009_brand_opportunities",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1784000000000,
+      "tag": "0010_scope_brands_to_orgs",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1785181564412,
+      "tag": "0011_secrets",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1785900686908,
+      "tag": "0012_billing_foundations",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1785954515007,
+      "tag": "0013_usage_events",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1786004156368,
+      "tag": "0014_membership_uniqueness",
+      "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1786724700000,
+      "tag": "0015_selena_visibility_client",
+      "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1786725600000,
+      "tag": "0016_selena_scan_findings_payments",
+      "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1786726200000,
+      "tag": "0017_selena_project_profiles",
+      "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1786726800000,
+      "tag": "0018_selena_measurement_runs",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1786727400000,
+      "tag": "0019_recommendation_engine",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1786728000000,
+      "tag": "0020_selena_website_snapshots",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1787745600000,
+      "tag": "0021_selena_control_room",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1787751397000,
+      "tag": "0022_grant_web_performance_schema",
+      "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1787755000000,
+      "tag": "0023_repair_web_performance_schema_usage",
+      "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1787808833306,
+      "tag": "0024_repair_staging_dry_run_approval_policy",
+      "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1787810400000,
+      "tag": "0025_private_asset_storage",
+      "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1787810460000,
+      "tag": "0026_private_asset_scan_queue",
+      "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "7",
+      "when": 1787810520000,
+      "tag": "0027_release_gateway_manifest_boundary",
+      "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "7",
+      "when": 1787810580000,
+      "tag": "0028_trigger_workflow_outbox_dispatch",
+      "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1787810640000,
+      "tag": "0029_gateway_postiz_submission_boundary",
+      "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "7",
+      "when": 1787810700000,
+      "tag": "0030_release_cancellation_workflow_state",
+      "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1787810760000,
+      "tag": "0031_postiz_performance_ingestion",
+      "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1787810820000,
+      "tag": "0032_channel_provider_binding",
+      "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1787810880000,
+      "tag": "0033_release_provider_allowlist",
+      "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1787810940000,
+      "tag": "0034_control_room_release_read_grants",
+      "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "7",
+      "when": 1787811000000,
+      "tag": "0035_aether_bridge_inbox",
+      "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1787811060000,
+      "tag": "0036_gateway_signing_key_custody",
+      "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "7",
+      "when": 1788620325000,
+      "tag": "0037_content_project_profiles",
+      "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "7",
+      "when": 1788620400000,
+      "tag": "0038_growth_project_bindings",
+      "breakpoints": true
+    },
+    {
+      "idx": 39,
+      "version": "7",
+      "when": 1788620460000,
+      "tag": "0039_aether_events_content_draft",
+      "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1788620520000,
+      "tag": "0040_content_policy_lifecycle",
+      "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1788620580000,
+      "tag": "0041_content_policy_web_writes_revoked",
+      "breakpoints": true
+    },
+    {
+      "idx": 42,
+      "version": "7",
+      "when": 1788620640000,
+      "tag": "0042_content_research_registry",
+      "breakpoints": true
+    },
+    {
+      "idx": 43,
+      "version": "7",
+      "when": 1788620700000,
+      "tag": "0043_structured_content_and_editorial_review",
+      "breakpoints": true
+    },
+    {
+      "idx": 44,
+      "version": "7",
+      "when": 1788620760000,
+      "tag": "0044_direct_release_dispatch_record",
+      "breakpoints": true
+    },
+    {
+      "idx": 45,
+      "version": "7",
+      "when": 1788620820000,
+      "tag": "0045_channel_binding_owner_writes",
+      "breakpoints": true
+    },
+    {
+      "idx": 46,
+      "version": "7",
+      "when": 1788620880000,
+      "tag": "0046_provider_budget_ledger",
+      "breakpoints": true
+    }
+  ]
 }

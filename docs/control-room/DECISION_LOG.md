@@ -2,7 +2,9 @@
 
 ## 2026-09-08 — Slice 3.1 durable provider budget ledger
 
-- Decision: migration `0044` adds `selena_registry.provider_budgets` and
+- Decision: migration `0046` (renumbered from `0044` after the release-dispatch
+  branch landed `0044`/`0045` on main first — the order is only about which
+  reached the tree first) adds `selena_registry.provider_budgets` and
   `selena_registry.provider_call_ledger`. Budgets are owner-only and
   append-only — an interactive owner INSERTs a new row to change a ceiling, and
   nothing may UPDATE or DELETE one. The ledger is written only through the

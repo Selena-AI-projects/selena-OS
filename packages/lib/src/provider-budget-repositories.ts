@@ -10,7 +10,7 @@ import { scrProviderBudgets, scrProviderCallLedger } from "./db/schema";
 // Provider budget and call-ledger repository (Slice 3.1).
 //
 // The only doors to the durable ledger are the two SECURITY DEFINER functions
-// from migration 0044: `reserve_provider_call` writes a RESERVED row under an
+// from migration 0046: `reserve_provider_call` writes a RESERVED row under an
 // advisory lock against a budget an interactive owner set, and
 // `settle_provider_call` advances that row's status. This module never writes
 // the ledger directly — the web runtime holds no INSERT or UPDATE policy on it

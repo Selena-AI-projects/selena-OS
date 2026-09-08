@@ -15,6 +15,7 @@ import {
 	addReviewEvidenceFn,
 	approveContentVersionFn,
 	cancelReleaseIntentFn,
+	confirmChannelBindingFn,
 	createContentVersionFn,
 	createControlRoomContentFn,
 	getControlRoomWorkspaceFn,
@@ -273,6 +274,9 @@ function ControlRoomPage() {
 	const [bindingEnvironment, setBindingEnvironment] = useState<(typeof GROWTH_SOURCE_ENVIRONMENTS)[number]>("local");
 	const [bindingRevokeReason, setBindingRevokeReason] = useState("");
 	const [providerStatus, setProviderStatus] = useState<ReleaseProviderStatus | null>(null);
+	const [channelAccountRef, setChannelAccountRef] = useState("");
+	const [channelProviderAccountId, setChannelProviderAccountId] = useState("");
+	const [channelEnvironment, setChannelEnvironment] = useState<"PRODUCTION" | "STAGING" | "DRY_RUN">("STAGING");
 	const [policyVersion, setPolicyVersion] = useState("");
 	const [policyRequireEvidence, setPolicyRequireEvidence] = useState(true);
 	const [policyRevokeReason, setPolicyRevokeReason] = useState("");
@@ -337,6 +341,23 @@ function ControlRoomPage() {
 				setNotice("The channel connection could not be checked. Nothing was published.");
 			}
 		});
+	}
+
+	function submitChannelBinding(event: FormEvent<HTMLFormElement>) {
+		event.preventDefault();
+		runShowingReason(
+			() =>
+				confirmChannelBindingFn({
+					data: {
+						accountRef: channelAccountRef.trim(),
+						brandId,
+						environment: channelEnvironment,
+						provider: "blotato",
+						providerAccountId: channelProviderAccountId.trim(),
+					},
+				}),
+			"Channel bound: an approved release for this brand may now be carried to its provider",
+		);
 	}
 
 	function runShowingReason(action: () => Promise<unknown>, successMessage: string) {
@@ -1240,6 +1261,60 @@ function ControlRoomPage() {
 											{providerStatus.reason && <p className="text-muted-foreground">{providerStatus.reason}</p>}
 										</>
 									)}
+								</CardContent>
+							</Card>
+						)}
+						{data.role === "owner" && (
+							<Card className="rounded-md shadow-none">
+								<CardHeader>
+									<CardTitle className="text-base">Bind a channel</CardTitle>
+								</CardHeader>
+								<CardContent>
+									<form className="grid gap-3" onSubmit={submitChannelBinding}>
+										<Label className="grid gap-2">
+											Channel name
+											<Input
+												required
+												placeholder="Selena LinkedIn Page"
+												value={channelAccountRef}
+												onChange={(event) => setChannelAccountRef(event.target.value)}
+											/>
+										</Label>
+										<Label className="grid gap-2">
+											Account id at the provider
+											<Input
+												required
+												placeholder="the LinkedIn account as Blotato numbers it"
+												value={channelProviderAccountId}
+												onChange={(event) => setChannelProviderAccountId(event.target.value)}
+											/>
+										</Label>
+										<Label className="grid gap-2">
+											Contour allowed to reach the provider
+											<select
+												className="h-9 rounded-md border border-input bg-background px-3 text-sm"
+												value={channelEnvironment}
+												onChange={(event) =>
+													setChannelEnvironment(event.target.value as "PRODUCTION" | "STAGING" | "DRY_RUN")
+												}
+											>
+												{["STAGING", "PRODUCTION", "DRY_RUN"].map((environment) => (
+													<option key={environment} value={environment}>
+														{environment}
+													</option>
+												))}
+											</select>
+										</Label>
+										<p className="text-xs text-muted-foreground">
+											Binding a channel says where an approved release may land, not that it will be sent: only a
+											contour matching this line can reach the provider at all, and the release policy still has to
+											agree. Only an owner can bind, and the act is recorded in the audit log.
+										</p>
+										<Button disabled={pending} type="submit">
+											<IconLockCheck className="size-4" />
+											Bind channel
+										</Button>
+									</form>
 								</CardContent>
 							</Card>
 						)}
