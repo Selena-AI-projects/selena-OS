@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import { createContentCreationRepositories } from "./content-creation-repositories";
 import { createContentResearchRepositories } from "./content-research-repositories";
 import { createContentWorkflowRepositories } from "./content-workflow-repositories";
-import { createProviderBudgetRepositories, ProviderBudgetError } from "./provider-budget-repositories";
+import { createProviderBudgetRepositories, ProviderBudgetError, providerErrorMessages } from "./provider-budget-repositories";
 
 const disposableDatabaseUrl = process.env.SELENA_DISPOSABLE_DATABASE_URL;
 
@@ -102,15 +102,20 @@ describe.skipIf(!disposableDatabaseUrl)("provider budget PostgreSQL adapter", ()
 		expect(await ledgerCount()).toBe(0);
 
 		// A member cannot set a budget; the database policy is the enforcement.
-		await expect(
-			budgets.setBudget(member, {
+		// The driver wraps the RLS refusal ("Failed query: ..."), so the verdict
+		// is read along the whole cause chain rather than the surface message.
+		try {
+			await budgets.setBudget(member, {
 				brandId,
 				providerId: "gemini",
 				windowKind: "DAY",
 				ceilingCalls: 8,
 				ceilingCostMicros: 400_000,
-			}),
-		).rejects.toThrow(/row-level security/);
+			});
+			throw new Error("expected the member budget insert to be refused");
+		} catch (error) {
+			expect(providerErrorMessages(error).join(" | ")).toMatch(/row-level security/);
+		}
 
 		const original = {
 			CONTENT_OS_GEMINI_LIVE: process.env.CONTENT_OS_GEMINI_LIVE,

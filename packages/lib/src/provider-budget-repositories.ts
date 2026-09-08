@@ -50,11 +50,24 @@ export const PROVIDER_COST_ESTIMATES: Record<string, number> = {
  * The definer functions speak through SQLERRM prefixes. Anything else — an RLS
  * refusal, an aborted connection — is not a budget verdict and stays untyped.
  */
+export function providerErrorMessages(error: unknown): string[] {
+	const messages: string[] = [];
+	let current: unknown = error;
+	for (let depth = 0; depth < 6 && current instanceof Error; depth += 1) {
+		messages.push(current.message);
+		current = current.cause;
+	}
+	return messages;
+}
+
 export function toProviderBudgetError(error: unknown): ProviderBudgetError | null {
-	const message = error instanceof Error ? error.message : null;
-	if (!message) return null;
-	for (const code of PROVIDER_BUDGET_ERROR_CODES) {
-		if (message.startsWith(`${code}:`)) return new ProviderBudgetError(code, message);
+	// The driver may wrap the definer function's RAISE ("Failed query: ...")
+	// with the real Postgres error in `cause`, so the verdict is searched for
+	// along the whole cause chain, not only on the surface message.
+	for (const message of providerErrorMessages(error)) {
+		for (const code of PROVIDER_BUDGET_ERROR_CODES) {
+			if (message.includes(`${code}:`)) return new ProviderBudgetError(code, message);
+		}
 	}
 	return null;
 }

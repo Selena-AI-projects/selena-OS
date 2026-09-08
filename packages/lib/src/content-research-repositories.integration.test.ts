@@ -61,6 +61,15 @@ describe.skipIf(!disposableDatabaseUrl)("content research PostgreSQL adapter", (
 			        ($2, 'Research Sibling Brand', 'https://sibling.example.test', $3)`,
 			[brandId, siblingBrandId, organizationId],
 		);
+		// A generous durable budget, so the env gates below stay the thing each
+		// case exercises; without a budget row every non-fixture refusal would be
+		// PROVIDER_BUDGET_MISSING before any gate is reached.
+		await root.query(
+			`INSERT INTO selena_registry.provider_budgets
+			   (organization_id, brand_id, provider_id, window_kind, ceiling_calls, ceiling_cost_micros, set_by)
+			 VALUES ($1, $2, 'video-radar', 'MONTH', 1000, 1000000000, $3)`,
+			[organizationId, brandId, ownerId],
+		);
 
 		const profiles = createContentWorkflowRepositories();
 		const research = createContentResearchRepositories();
@@ -162,11 +171,15 @@ describe.skipIf(!disposableDatabaseUrl)("content research PostgreSQL adapter", (
 		// The fourth case leaves every gate open and shows the adapter still
 		// refuses, because Stage 1 injects no dispatcher at all.
 		const gateCases = [
-			{ name: "flag", env: {}, expected: "ADAPTER_DISABLED" },
+			// The durable reserve runs first: with no MAX_CALLS the permitted count
+			// is zero, and zero is not allowed to mean unknown — so the ceiling
+			// case is refused by the budget gate, while the flag case keeps a
+			// ceiling so the live flag stays the thing it exercises.
+			{ name: "flag", env: { CONTENT_OS_VIDEO_RADAR_MAX_CALLS: "5" }, expected: "ADAPTER_DISABLED" },
 			{
 				name: "ceiling",
 				env: { CONTENT_OS_VIDEO_RADAR_LIVE: "true", CONTENT_OS_VIDEO_RADAR_CREDENTIAL_PRESENT: "true" },
-				expected: "PROVIDER_QUOTA_EXCEEDED",
+				expected: "UNKNOWN_COST_BLOCKED",
 			},
 			{
 				name: "credential",
