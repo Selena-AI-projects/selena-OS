@@ -1,5 +1,45 @@
 # Content OS Stage 1 decisions
 
+## 2026-09-08 — Slice 3.3 YouTube research dispatcher
+
+- Decision: the Video Radar adapter gets a real transport,
+  `createYouTubeResearchDispatcher` in `packages/lib/src/youtube-research-dispatcher.ts`.
+  `CONTENT_OS_YOUTUBE_API_KEY` (registered optional/server, marked credential)
+  is read only inside that module — the adapter and its gates still see just a
+  boolean — and an absent or empty key makes the factory return null, so the
+  adapter's Stage 1 `PROVIDER_UNAVAILABLE` refusal is byte-identical.
+  Accounting: 1 HTTP request = 1 ledger call; the dispatcher counts the
+  requests it actually makes, reports them as `externalProviderCalls`, and the
+  wiring records each beyond the adapter's own entry into the process ledger,
+  while the durable budget reservation in `runResearch` still fronts every
+  non-fixture run and settles on the actual count. The dispatcher never issues
+  more requests than `CONTENT_OS_VIDEO_RADAR_MAX_CALLS` permits: with a
+  ceiling of 1 it makes the search call only and returns degraded candidates
+  with null stats instead of squeezing in the videos call.
+- Mapping: search.list (type=video, order=relevance, publishedAfter = now
+  minus a fixed 30-day window, maxResults ≤ 25) then videos.list
+  (snippet,statistics,contentDetails) for the found ids. Missing or hidden
+  numeric statistics map to null — the contract's explicit unavailable — never
+  zero. `channelHistory` is left empty (baseline honestly reports
+  UNAVAILABLE) because comparable per-channel upload histories would cost one
+  search.list per channel; `/channels` statistics are not fetched because
+  `ResearchSource` has no field they could populate without inventing history
+  entries. One snapshot is captured at fetch time; transcripts are PENDING —
+  retrieval is a different provider this dispatcher does not call. Error
+  normalization: 401 and non-quota 403 → PROVIDER_AUTH_FAILED, 403
+  quota/dailyLimit → PROVIDER_QUOTA_EXCEEDED, 403/429 rate limits →
+  PROVIDER_RATE_LIMITED, network and 5xx → PROVIDER_UNAVAILABLE; every message
+  is fixed wording or scrubbed of the key, and no URL carrying the key is ever
+  thrown or logged.
+- Unchanged contract: enabling a live run still requires the env switches
+  (`CONTENT_OS_VIDEO_RADAR_LIVE`, `CONTENT_OS_VIDEO_RADAR_MAX_CALLS`,
+  `CONTENT_OS_VIDEO_RADAR_CREDENTIAL_PRESENT`), an owner-set provider budget
+  backing the durable reservation, and an explicit user action selecting the
+  non-fixture adapter. CI keeps all gates closed, so no test can place a live
+  call. The fixture path touches none of this.
+- Authority: owner's autonomous-execution mandate of 2026-09-08.
+- Affected requirements: Stage 3 Slice 3.3.
+
 ## 2026-09-08 — Slice 3.1 durable provider budget ledger
 
 - Decision: migration `0046` (renumbered from `0044` after the release-dispatch

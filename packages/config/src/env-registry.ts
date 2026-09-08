@@ -125,6 +125,14 @@ export const ENV_REGISTRY: EnvVarSpec[] = [
 		description: "Enables the neutral Content OS Stage 1 shell only when set to the exact value true.",
 	},
 	{
+		name: "CONTENT_OS_YOUTUBE_API_KEY",
+		scope: "server",
+		requiredBy: "optional",
+		credential: true,
+		description:
+			"YouTube Data API v3 key for live Content OS research. Read only inside the youtube-research-dispatcher module; the adapter and gates only ever see that a credential exists.",
+	},
+	{
 		name: "SELENA_RELEASE_PUBLISH_ENABLED",
 		scope: "server",
 		requiredBy: "optional",
