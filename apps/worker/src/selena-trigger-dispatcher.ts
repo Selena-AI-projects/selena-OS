@@ -286,8 +286,17 @@ function releaseCarrier(): ReleaseCarrier | null {
 export function startSelenaTriggerDispatcher(): (() => Promise<void>) | null {
 	const carrier = releaseCarrier();
 	if (!carrier) return null;
-	const connectionString = process.env.DATABASE_URL;
-	if (!connectionString) throw new Error("DATABASE_URL is required for the Selena release dispatcher");
+	// The queue functions identify their caller by the role it connects as, and
+	// they refuse a session that looks like more than one runtime at once — which
+	// is exactly how an administrative connection looks, since it is a member of
+	// every role. The dispatcher therefore takes its own connection string under
+	// `selena_worker_login`, the way the web runtime already takes one under
+	// `selena_web_login`, and falls back to the shared one only where no separate
+	// login was provisioned.
+	const connectionString = process.env.SELENA_REGISTRY_WORKER_DATABASE_URL ?? process.env.DATABASE_URL;
+	if (!connectionString) {
+		throw new Error("SELENA_REGISTRY_WORKER_DATABASE_URL or DATABASE_URL is required for the release dispatcher");
+	}
 	const pool = createRegistryWorkerPool(connectionString);
 	let running = false;
 	const tick = async () => {
