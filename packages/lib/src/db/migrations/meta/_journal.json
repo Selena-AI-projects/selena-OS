@@ -316,6 +316,13 @@
       "when": 1788620760000,
       "tag": "0044_direct_release_dispatch_record",
       "breakpoints": true
+    },
+    {
+      "idx": 45,
+      "version": "7",
+      "when": 1788620820000,
+      "tag": "0045_channel_binding_owner_writes",
+      "breakpoints": true
     }
   ]
 }
