@@ -1,5 +1,6 @@
 import {
 	IconAlertTriangle,
+	IconArrowsLeftRight,
 	IconBuilding,
 	IconBuildings,
 	IconBulb,
@@ -53,7 +54,7 @@ import { NavAppInfo } from "@/components/nav-app-info";
 import { type NavGroup, NavMain } from "@/components/nav-main";
 import { NavUser } from "@/components/nav-user";
 import { CONTENT_PRODUCT_NAME } from "@/lib/content-product";
-import { rememberSelenaProduct } from "@/lib/selena-product-entry";
+import { forgetSelenaProduct, rememberSelenaProduct } from "@/lib/selena-product-entry";
 
 /**
  * How much of the app the shell around this page can reach:
@@ -128,6 +129,21 @@ function ProductSwitcher() {
 								</Link>
 							</DropdownMenuItem>
 						</DropdownMenuGroup>
+						<DropdownMenuSeparator />
+						<DropdownMenuItem asChild className="cursor-pointer">
+							<Link
+								to="/app/selena"
+								onClick={() => {
+									// Without forgetting the product, the entry would send the
+									// visitor straight back into the brand they are leaving.
+									forgetSelenaProduct();
+									setOpenMobile(false);
+								}}
+							>
+								<IconArrowsLeftRight />
+								Switch brand
+							</Link>
+						</DropdownMenuItem>
 					</DropdownMenuContent>
 				</DropdownMenu>
 			</SidebarMenuItem>

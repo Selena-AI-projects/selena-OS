@@ -25,13 +25,25 @@ import {
 import { Input } from "@workspace/ui/components/input";
 import { Label } from "@workspace/ui/components/label";
 import { useEffect, useMemo, useState } from "react";
-import { BRAND_CREATION_ROUTE, CONTENT_PRODUCT_ROUTE } from "@/lib/content-product";
 import { SelenaWordmark } from "@/components/selena-wordmark";
 import { useAuth } from "@/hooks/use-auth";
 import { validateWebsiteUrl } from "@/lib/brand-website";
-import { CONTENT_PRODUCT_DESCRIPTION, CONTENT_PRODUCT_NAME } from "@/lib/content-product";
+import {
+	BRAND_CREATION_ROUTE,
+	CONTENT_PRODUCT_DESCRIPTION,
+	CONTENT_PRODUCT_NAME,
+	CONTENT_PRODUCT_ROUTE,
+	type ContentBrandChoice,
+	resolveContentBrand,
+} from "@/lib/content-product";
 import { resetPostHog } from "@/lib/posthog";
-import { getLastSelenaProduct, rememberSelenaProduct, type SelenaProduct } from "@/lib/selena-product-entry";
+import {
+	getLastContentBrand,
+	getLastSelenaProduct,
+	rememberContentBrand,
+	rememberSelenaProduct,
+	type SelenaProduct,
+} from "@/lib/selena-product-entry";
 import { humanizeSelenaError } from "@/lib/selena-workspace-errors";
 import { createSelenaProjectFn, getContentOsBrandFn, getSelenaWorkspaceFn } from "../../../server/selena-client";
 import { confirmSelenaProfileFn } from "../../../server/selena-onboarding";
@@ -62,7 +74,10 @@ function SelenaWorkspace() {
 	const { projects } = workspace;
 	// Null when this organization has no brand yet, which is the state a fresh
 	// cabinet starts in: the entry then leads to creating one, not to a 404.
-	const contentBrandId = contentOs.brandId;
+	const contentBrands = contentOs.brands;
+	// Resolved on the client because the choice lives in this browser: the
+	// server has no way to know which queue this reviewer was last working in.
+	const [contentBrandId, setContentBrandId] = useState<string | null>(contentOs.brandId);
 	const router = useRouter();
 	const { user } = useAuth();
 	const [selectedProduct, setSelectedProduct] = useState<SelenaProduct | null>(null);
@@ -96,17 +111,19 @@ function SelenaWorkspace() {
 	}, []);
 
 	useEffect(() => {
+		const brandId = resolveContentBrand(contentBrands, getLastContentBrand());
+		setContentBrandId(brandId);
 		const product = getLastSelenaProduct();
 		if (product === "content-control") {
-			if (contentBrandId) {
-				void router.navigate({ to: CONTENT_PRODUCT_ROUTE, params: { brand: contentBrandId } });
+			if (brandId) {
+				void router.navigate({ to: CONTENT_PRODUCT_ROUTE, params: { brand: brandId } });
 			} else {
 				void router.navigate({ to: BRAND_CREATION_ROUTE });
 			}
 			return;
 		}
 		if (product === "ai-visibility") setSelectedProduct(product);
-	}, [router]);
+	}, [router, contentBrands]);
 
 	useEffect(() => {
 		if (!selectedProject?.profile) {
@@ -310,6 +327,7 @@ function SelenaWorkspace() {
 		rememberSelenaProduct(product);
 		if (product === "content-control") {
 			if (contentBrandId) {
+				rememberContentBrand(contentBrandId);
 				void router.navigate({ to: CONTENT_PRODUCT_ROUTE, params: { brand: contentBrandId } });
 			} else {
 				void router.navigate({ to: BRAND_CREATION_ROUTE });
@@ -319,7 +337,15 @@ function SelenaWorkspace() {
 		setSelectedProduct(product);
 	};
 
-	if (!selectedProduct) return <SelenaProductEntry onSelect={chooseProduct} />;
+	if (!selectedProduct)
+		return (
+			<SelenaProductEntry
+				onSelect={chooseProduct}
+				brands={contentBrands}
+				selectedBrandId={contentBrandId}
+				onSelectBrand={setContentBrandId}
+			/>
+		);
 
 	return (
 		<div className="selena-app min-h-screen">
@@ -462,7 +488,17 @@ function SelenaWorkspace() {
 	);
 }
 
-function SelenaProductEntry({ onSelect }: { onSelect: (product: SelenaProduct) => void }) {
+function SelenaProductEntry({
+	onSelect,
+	brands,
+	selectedBrandId,
+	onSelectBrand,
+}: {
+	onSelect: (product: SelenaProduct) => void;
+	brands: ContentBrandChoice[];
+	selectedBrandId: string | null;
+	onSelectBrand: (brandId: string) => void;
+}) {
 	return (
 		<div className="selena-app min-h-screen">
 			<main className="mx-auto flex min-h-screen w-full max-w-5xl items-center px-5 py-8 sm:px-8">
@@ -499,6 +535,30 @@ function SelenaProductEntry({ onSelect }: { onSelect: (product: SelenaProduct) =
 								Open {CONTENT_PRODUCT_NAME} <IconArrowRight className="size-4" />
 							</span>
 						</button>
+					</div>
+					<div className="mt-6 flex flex-wrap items-center gap-3">
+						{brands.length > 1 && (
+							<>
+								<Label htmlFor="content-brand" className="text-sm text-[#6e6258]">
+									Brand
+								</Label>
+								<select
+									id="content-brand"
+									className="min-h-11 rounded-md border border-[#e6ddd1] bg-[#fffdf8] px-3 text-sm text-[#181614]"
+									value={selectedBrandId ?? ""}
+									onChange={(event) => onSelectBrand(event.target.value)}
+								>
+									{brands.map((brand) => (
+										<option key={brand.id} value={brand.id}>
+											{brand.name}
+										</option>
+									))}
+								</select>
+							</>
+						)}
+						<a href={BRAND_CREATION_ROUTE} className="selena-text-button inline-flex items-center gap-2 text-sm">
+							<IconPlus className="size-4" /> Add a brand
+						</a>
 					</div>
 				</section>
 			</main>

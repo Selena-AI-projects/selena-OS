@@ -19,3 +19,18 @@ export const CONTENT_PRODUCT_ROUTE = "/app/$brand/control-room" as const;
  * resolve. Only a real brand id gets past both.
  */
 export const BRAND_CREATION_ROUTE = "/app/new" as const;
+
+export type ContentBrandChoice = { id: string; name: string };
+
+/**
+ * Which brand Content OS opens for a workspace that has more than one.
+ *
+ * A remembered choice outranks the default so that returning to the cabinet
+ * lands on the queue the reviewer was working in; a brand that has since been
+ * removed, or belongs to another workspace, is not honoured, because opening
+ * it would end in the bare 404 `getContentOsBrandFn` exists to prevent.
+ */
+export function resolveContentBrand(brands: ContentBrandChoice[], remembered: string | null): string | null {
+	if (remembered && brands.some((brand) => brand.id === remembered)) return remembered;
+	return brands[0]?.id ?? null;
+}
