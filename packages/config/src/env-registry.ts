@@ -185,6 +185,14 @@ export const ENV_REGISTRY: EnvVarSpec[] = [
 			"Internal authentication token for calls to the isolated Selena Release Gateway; never exposed to the browser.",
 	},
 	{
+		name: "SELENA_REGISTRY_WORKER_DATABASE_URL",
+		scope: "server",
+		requiredBy: "optional",
+		credential: true,
+		description:
+			"Worker connection under the restricted registry-worker login; the queue refuses an administrative session.",
+	},
+	{
 		name: "SELENA_GATEWAY_BASE_URL",
 		scope: "server",
 		requiredBy: "optional",

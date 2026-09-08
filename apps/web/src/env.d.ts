@@ -67,6 +67,7 @@ declare global {
 			readonly CLAMAV_PORT?: string;
 			readonly SELENA_GATEWAY_INTERNAL_TOKEN?: string;
 			readonly SELENA_GATEWAY_BASE_URL?: string;
+			readonly SELENA_REGISTRY_WORKER_DATABASE_URL?: string;
 			readonly SELENA_GATEWAY_SIGNING_PRIVATE_KEY?: string;
 			readonly SELENA_GATEWAY_SIGNING_KEY_VERSION?: string;
 			readonly SELENA_GATEWAY_PORT?: string;
