@@ -9,13 +9,16 @@ import {
 	type ReleaseProviderAdapter,
 	toNormalizedRelease,
 } from "./selena-release-provider";
+import { createBlotatoReleaseProvider } from "./selena-release-provider-blotato";
 import { createFakeReleaseProvider } from "./selena-release-provider-fake";
 import { createPostizReleaseProvider } from "./selena-release-provider-postiz";
 
-// Every Postiz request in this file must resolve against this unreachable host,
-// so a stub that ever stops matching fails loudly instead of reaching Postiz.
+// Every provider request in this file must resolve against an unreachable host,
+// so a stub that ever stops matching fails loudly instead of reaching a provider.
 const POSTIZ_TEST_API_URL = "https://postiz.test.invalid/public/v1";
 const POSTIZ_INTEGRATION_ID = "linkedin-page-only";
+const BLOTATO_TEST_API_URL = "https://blotato.test.invalid/v2";
+const BLOTATO_ACCOUNT_ID = "blotato-linkedin-page";
 const NOW = new Date("2030-01-01T00:00:00.000Z");
 const NOT_BEFORE = "2030-01-02T12:00:00.000Z";
 const CONTENT_HASH = "a".repeat(64);
@@ -115,6 +118,43 @@ function createPostizTransport(scenario: Scenario): ReturnType<typeof vi.fn<type
 	});
 }
 
+function createBlotatoTransport(scenario: Scenario): ReturnType<typeof vi.fn<typeof fetch>> {
+	return vi.fn<typeof fetch>(async (input, init) => {
+		const url = String(input);
+		const method = init?.method ?? "GET";
+		if (!url.startsWith(BLOTATO_TEST_API_URL)) throw new Error(`Blotato adapter escaped the test transport: ${url}`);
+		if (url.endsWith("/accounts")) {
+			return new Response(
+				JSON.stringify([
+					{
+						displayName: "Selena LinkedIn Page",
+						id: BLOTATO_ACCOUNT_ID,
+						platform: "linkedin",
+						status: "active",
+						subaccounts: [],
+					},
+				]),
+				{ status: 200 },
+			);
+		}
+		if (method === "POST" && url.endsWith("/posts")) {
+			if (scenario === "provider-rejects") return new Response("rejected", { status: 400 });
+			if (scenario === "provider-unreachable") return new Response("unavailable", { status: 503 });
+			return new Response(JSON.stringify({ postSubmissionId: "blotato-post-1", scheduledTime: NOT_BEFORE }), {
+				status: 200,
+			});
+		}
+		if (method === "GET" && url.includes("/posts/submissions/")) {
+			if (scenario === "unknown-reference") return new Response("no such submission", { status: 404 });
+			return new Response(JSON.stringify({ scheduledTime: NOT_BEFORE, status: "scheduled" }), { status: 200 });
+		}
+		if (method === "GET" && url.endsWith("/analytics")) {
+			return new Response(JSON.stringify({ lastError: null, metrics: { impressions: "12" } }), { status: 200 });
+		}
+		throw new Error(`Unexpected Blotato request: ${method} ${url}`);
+	});
+}
+
 const subjects: Subject[] = [
 	{
 		name: "in-memory",
@@ -145,6 +185,17 @@ const subjects: Subject[] = [
 					token: "postiz-test-token",
 				},
 				createPostizTransport(scenario),
+			);
+		},
+	},
+	{
+		name: "blotato",
+		externalAccountId: BLOTATO_ACCOUNT_ID,
+		referenceId: "blotato-post-1",
+		create(scenario) {
+			return createBlotatoReleaseProvider(
+				{ allowedAccountId: BLOTATO_ACCOUNT_ID, apiKey: "blotato-test-key", apiUrl: BLOTATO_TEST_API_URL },
+				createBlotatoTransport(scenario),
 			);
 		},
 	},

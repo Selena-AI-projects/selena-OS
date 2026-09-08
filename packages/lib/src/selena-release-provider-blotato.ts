@@ -234,6 +234,12 @@ export function createBlotatoReleaseProvider(
 					state: "UNKNOWN",
 				};
 			} catch (error) {
+				// A 404 is the one answer that separates "Blotato has no such
+				// submission" from "we could not find out": everything else leaves the
+				// reference reconcilable rather than declaring it absent.
+				if (error instanceof BlotatoApiError && error.status === 404) {
+					return { providerReferenceId: input.providerReferenceId, state: "NOT_FOUND" };
+				}
 				return {
 					providerReferenceId: input.providerReferenceId,
 					reason: error instanceof Error ? error.message : "Blotato status lookup failed",

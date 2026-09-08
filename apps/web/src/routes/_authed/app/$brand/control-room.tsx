@@ -18,6 +18,7 @@ import {
 	createContentVersionFn,
 	createControlRoomContentFn,
 	getControlRoomWorkspaceFn,
+	getReleaseProviderStatusFn,
 	queueReleaseIntentFn,
 	revokeApprovalFn,
 	setReleaseKillSwitchFn,
@@ -57,6 +58,8 @@ const CONTROL_ROOM_SECTIONS = [
 ] as const;
 
 type ControlRoomSection = (typeof CONTROL_ROOM_SECTIONS)[number];
+
+type ReleaseProviderStatus = Awaited<ReturnType<typeof getReleaseProviderStatusFn>>;
 
 function isControlRoomSection(value: string): value is ControlRoomSection {
 	return CONTROL_ROOM_SECTIONS.some((section) => section === value);
@@ -269,6 +272,7 @@ function ControlRoomPage() {
 	const [bindingBusinessKey, setBindingBusinessKey] = useState("");
 	const [bindingEnvironment, setBindingEnvironment] = useState<(typeof GROWTH_SOURCE_ENVIRONMENTS)[number]>("local");
 	const [bindingRevokeReason, setBindingRevokeReason] = useState("");
+	const [providerStatus, setProviderStatus] = useState<ReleaseProviderStatus | null>(null);
 	const [policyVersion, setPolicyVersion] = useState("");
 	const [policyRequireEvidence, setPolicyRequireEvidence] = useState(true);
 	const [policyRevokeReason, setPolicyRevokeReason] = useState("");
@@ -321,6 +325,16 @@ function ControlRoomPage() {
 				setNotice(successMessage);
 			} catch {
 				setNotice("The request could not be completed. Retry the action; no content was released.");
+			}
+		});
+	}
+
+	function checkProviderConnection() {
+		startTransition(async () => {
+			try {
+				setProviderStatus(await getReleaseProviderStatusFn({ data: { brandId } }));
+			} catch {
+				setNotice("The channel connection could not be checked. Nothing was published.");
 			}
 		});
 	}
@@ -1189,41 +1203,82 @@ function ControlRoomPage() {
 				)}
 
 				{activeSection === "publications" && (
-					<Card className="rounded-md shadow-none">
-						<CardHeader>
-							<CardTitle className="text-base">Publishing activity</CardTitle>
-						</CardHeader>
-						<CardContent>
-							<Table>
-								<TableHeader>
-									<TableRow>
-										<TableHead>Material</TableHead>
-										<TableHead>Channel</TableHead>
-										<TableHead>Latest update</TableHead>
-										<TableHead>Status</TableHead>
-									</TableRow>
-								</TableHeader>
-								<TableBody>
-									{data.publications.length === 0 ? (
-										<EmptyRows columns={4} label="Nothing has been published" />
+					<div className="space-y-4">
+						{data.role === "owner" && (
+							<Card className="rounded-md shadow-none">
+								<CardHeader className="flex flex-row items-start justify-between gap-4 space-y-0">
+									<CardTitle className="text-base">Channel connection</CardTitle>
+									<Button disabled={pending} onClick={checkProviderConnection} size="sm" variant="outline">
+										<IconRefresh className="size-4" />
+										Check connection
+									</Button>
+								</CardHeader>
+								<CardContent className="space-y-2 text-sm">
+									{providerStatus === null ? (
+										<p className="text-muted-foreground">
+											Check which account this workspace's publishing key can see. The check only reads the account; it
+											cannot publish.
+										</p>
+									) : providerStatus.state === "NOT_CONFIGURED" ? (
+										<p className="text-muted-foreground">
+											No publishing key is configured here, so nothing can be sent. Missing:{" "}
+											{providerStatus.missing.join(", ")}.
+										</p>
 									) : (
-										data.publications.map((item) => (
-											<TableRow key={item.id}>
-												<TableCell className="font-medium">
-													{materialName(manifestById.get(item.releaseManifestId)?.contentVersionId ?? "")}
-												</TableCell>
-												<TableCell>{channelName(item.channelAccountId)}</TableCell>
-												<TableCell>{formatDate(item.updatedAt)}</TableCell>
-												<TableCell>
-													<StatusBadge value={item.status} />
-												</TableCell>
-											</TableRow>
-										))
+										<>
+											<div className="flex flex-wrap items-center gap-2">
+												<StatusBadge value={providerStatus.state} />
+												<span className="text-muted-foreground">
+													{providerStatus.providerId} · {providerStatus.environment}
+												</span>
+											</div>
+											{providerStatus.account && (
+												<p className="font-medium">
+													{providerStatus.account.accountRef} ({providerStatus.account.platform})
+												</p>
+											)}
+											{providerStatus.reason && <p className="text-muted-foreground">{providerStatus.reason}</p>}
+										</>
 									)}
-								</TableBody>
-							</Table>
-						</CardContent>
-					</Card>
+								</CardContent>
+							</Card>
+						)}
+						<Card className="rounded-md shadow-none">
+							<CardHeader>
+								<CardTitle className="text-base">Publishing activity</CardTitle>
+							</CardHeader>
+							<CardContent>
+								<Table>
+									<TableHeader>
+										<TableRow>
+											<TableHead>Material</TableHead>
+											<TableHead>Channel</TableHead>
+											<TableHead>Latest update</TableHead>
+											<TableHead>Status</TableHead>
+										</TableRow>
+									</TableHeader>
+									<TableBody>
+										{data.publications.length === 0 ? (
+											<EmptyRows columns={4} label="Nothing has been published" />
+										) : (
+											data.publications.map((item) => (
+												<TableRow key={item.id}>
+													<TableCell className="font-medium">
+														{materialName(manifestById.get(item.releaseManifestId)?.contentVersionId ?? "")}
+													</TableCell>
+													<TableCell>{channelName(item.channelAccountId)}</TableCell>
+													<TableCell>{formatDate(item.updatedAt)}</TableCell>
+													<TableCell>
+														<StatusBadge value={item.status} />
+													</TableCell>
+												</TableRow>
+											))
+										)}
+									</TableBody>
+								</Table>
+							</CardContent>
+						</Card>
+					</div>
 				)}
 
 				{activeSection === "performance" && (
