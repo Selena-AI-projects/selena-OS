@@ -7,7 +7,7 @@
 | 1 — profile and draft YouTube target | MERGED | `45dd3b96` | `313daa0c` |
 | 2 — research | MERGED | `52741ae` | `86a0a633` |
 | 3 — ideas and scripts | MERGED | `3a6c9cd` | `58daa20f` |
-| 4 — thumbnails and editorial approval | IN_REVIEW | branch `feat/content-os-slice4` | editorial decisions on the latest version; CLEAN-gated asset bundle; no release authority |
+| 4 — thumbnails and editorial approval | MERGED | PR #44, merge `07fdc84`, all 7 required checks green | editorial decisions on the latest version; CLEAN-gated asset bundle; no release authority |
 | 5 — local vertical acceptance | PARTIAL — disposable-database class recorded | workflow "Stage 1 Acceptance" run #1 (2026-09-07, Success, artifact `stage1-acceptance-evidence`) | fixture vertical with `externalProviderCalls = 0` three ways; browser-evidence class still open |
 
 ## Gates still open
