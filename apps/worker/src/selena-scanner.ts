@@ -2,7 +2,7 @@ import { randomUUID, timingSafeEqual } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { Socket } from "node:net";
-import { assertStagingDatabaseTls } from "@workspace/lib/db/staging-tls";
+import { assertDatabaseTlsVerified, requiresVerifiedDatabaseTls } from "@workspace/lib/db/staging-tls";
 import { parseClamAvScanReply } from "@workspace/lib/selena-clamav";
 import {
 	createSelenaStorageKey,
@@ -130,9 +130,8 @@ async function readBody(request: IncomingMessage): Promise<Uint8Array> {
 }
 
 function createScannerPool(connectionString: string): Pool {
-	const isStagingMvp = process.env.SELENA_STAGING_MVP === "true";
-	assertStagingDatabaseTls(connectionString, isStagingMvp);
-	if (!isStagingMvp) return new Pool({ connectionString });
+	assertDatabaseTlsVerified(connectionString);
+	if (!requiresVerifiedDatabaseTls()) return new Pool({ connectionString });
 
 	const url = new URL(connectionString);
 	const certificatePath = url.searchParams.get("sslrootcert");

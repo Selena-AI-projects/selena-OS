@@ -23,7 +23,7 @@ import {
 	resolveBinding,
 	setWorkerServiceSettings,
 } from "@workspace/lib/content-workflow-projection";
-import { assertStagingDatabaseTls } from "@workspace/lib/db/staging-tls";
+import { assertDatabaseTlsVerified, requiresVerifiedDatabaseTls } from "@workspace/lib/db/staging-tls";
 import { type EventEnvelope, EventRejected, parseEnvelope } from "@workspace/lib/selena-aether-bridge";
 import {
 	type ProjectionErrorCode,
@@ -175,9 +175,8 @@ function requiredEnv(name: string): string {
 }
 
 function createWorkerPool(connectionString: string): Pool {
-	const isStagingMvp = process.env.SELENA_STAGING_MVP === "true";
-	assertStagingDatabaseTls(connectionString, isStagingMvp);
-	if (!isStagingMvp) return new Pool({ connectionString });
+	assertDatabaseTlsVerified(connectionString);
+	if (!requiresVerifiedDatabaseTls()) return new Pool({ connectionString });
 	const url = new URL(connectionString);
 	const certificatePath = url.searchParams.get("sslrootcert");
 	if (!certificatePath) throw new Error("Aether projection worker staging connection needs a root certificate");

@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
-import { assertStagingDatabaseTls } from "@workspace/lib/db/staging-tls";
+import { assertDatabaseTlsVerified, requiresVerifiedDatabaseTls } from "@workspace/lib/db/staging-tls";
 import { createOpaqueWorkflowPayload } from "@workspace/lib/selena-control-room";
 import { Pool, type PoolClient } from "pg";
 
@@ -77,9 +77,8 @@ export function createTriggerDevClient(
 }
 
 function createRegistryWorkerPool(connectionString: string): Pool {
-	const isStagingMvp = process.env.SELENA_STAGING_MVP === "true";
-	assertStagingDatabaseTls(connectionString, isStagingMvp);
-	if (!isStagingMvp) return new Pool({ connectionString });
+	assertDatabaseTlsVerified(connectionString);
+	if (!requiresVerifiedDatabaseTls()) return new Pool({ connectionString });
 	const url = new URL(connectionString);
 	const certificatePath = url.searchParams.get("sslrootcert");
 	if (!certificatePath) throw new Error("Selena Trigger dispatcher staging connection needs a root certificate");

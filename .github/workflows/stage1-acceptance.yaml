@@ -29,7 +29,7 @@ concurrency:
 jobs:
   stage1-acceptance:
     name: Fixture vertical acceptance
-    runs-on: [self-hosted, Linux, X64, selena-ci]
+    runs-on: ubuntu-latest
     timeout-minutes: 20
 
     env:

@@ -12,7 +12,7 @@ cleanup() {
 
 trap cleanup EXIT
 
-if [ "${SELENA_STAGING_MVP:-}" = "true" ]; then
+if [ "${SELENA_STAGING_MVP:-}" = "true" ] || [ "${SELENA_RUNTIME_DB_VERIFY_TLS:-}" = "true" ]; then
 	: "${SELENA_MIGRATION_DATABASE_URL:?SELENA_MIGRATION_DATABASE_URL is required for staging migrations}"
 	: "${SELENA_MIGRATION_DATABASE_CA_PEM:?SELENA_MIGRATION_DATABASE_CA_PEM is required for staging migrations}"
 
