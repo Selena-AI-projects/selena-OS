@@ -1493,3 +1493,41 @@ export const getReleaseProviderStatusFn = createServerFn({ method: "GET" })
 			state: connection.state,
 		};
 	});
+
+const channelBindingSchema = brandSchema.extend({
+	accountRef: z.string().trim().min(1).max(200),
+	environment: z.enum(["PRODUCTION", "STAGING", "DRY_RUN"]),
+	provider: z.enum(["blotato", "postiz"]),
+	providerAccountId: z.string().trim().min(1).max(200),
+});
+
+/**
+ * Where an approved release is allowed to land.
+ *
+ * The channel and its provider binding are written together by a function the
+ * database opens only to an interactive owner session for this brand: no
+ * runtime may write either row, and a channel without a binding — or a binding
+ * pointing at no channel — would be equally useless. Publishing is still not
+ * enabled by this: the binding says which contour may reach the provider, and
+ * the release policy still has to agree.
+ */
+export const confirmChannelBindingFn = createServerFn({ method: "POST" })
+	.validator(channelBindingSchema)
+	.handler(async ({ data }) => {
+		const context = await resolveSessionAuthContext();
+		assertHumanReviewer(context);
+		return await withControlRoomTransaction(context, data.brandId, async (tx) => {
+			const result = await tx.execute(sql`
+				SELECT * FROM selena_registry.confirm_channel_provider_binding(
+					${data.brandId},
+					${data.accountRef},
+					${data.providerAccountId},
+					${data.provider},
+					${data.environment}::selena_registry.release_environment
+				)
+			`);
+			const row = (result as unknown as { rows?: { account_id?: string }[] }).rows?.[0];
+			if (!row?.account_id) throw new Error("The channel binding was not recorded");
+			return { channelAccountId: row.account_id };
+		});
+	});
