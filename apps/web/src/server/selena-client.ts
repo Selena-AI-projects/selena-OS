@@ -10,7 +10,7 @@ import {
 } from "@workspace/lib/db/schema";
 import { createSelenaRepositories } from "@workspace/lib/selena-visibility-repositories";
 import { actionPlanSchema, projectCreateSchema } from "@workspace/selena-visibility-contracts";
-import { and, desc, eq } from "drizzle-orm";
+import { and, asc, desc, eq } from "drizzle-orm";
 import { z } from "zod";
 import { resolveSessionAuthContext } from "../lib/selena-auth-context.server";
 
@@ -22,7 +22,7 @@ export const listSelenaProjectsFn = createServerFn({ method: "GET" }).handler(as
 });
 
 /**
- * The brand Content OS opens, or null when this tenant has none.
+ * The brands Content OS may open, oldest first.
  *
  * Resolved here rather than from a list of the user's brands, because the
  * Control Room establishes its database context under one organization: the
@@ -31,15 +31,20 @@ export const listSelenaProjectsFn = createServerFn({ method: "GET" }).handler(as
  * application and is then refused by `selena_registry.set_request_context`,
  * whose membership lookup joins brand to organization. That refusal surfaces
  * as a bare 404, so the mismatch has to be prevented here, not diagnosed later.
+ *
+ * The order is part of the answer, not a detail: the entry opens one of these
+ * brands, and an unordered read lets a workspace with several land on a
+ * different one from one visit to the next — an approval queue that changes
+ * contents without anyone choosing.
  */
 export const getContentOsBrandFn = createServerFn({ method: "GET" }).handler(async () => {
 	const context = await resolveSessionAuthContext();
-	const [brand] = await db
-		.select({ id: brands.id })
+	const rows = await db
+		.select({ id: brands.id, name: brands.name })
 		.from(brands)
 		.where(eq(brands.organizationId, context.tenantId))
-		.limit(1);
-	return { brandId: brand?.id ?? null };
+		.orderBy(asc(brands.createdAt), asc(brands.id));
+	return { brandId: rows[0]?.id ?? null, brands: rows };
 });
 
 export const getSelenaWorkspaceFn = createServerFn({ method: "GET" }).handler(async () => {
