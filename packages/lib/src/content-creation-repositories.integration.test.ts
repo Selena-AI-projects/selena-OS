@@ -69,6 +69,15 @@ describe.skipIf(!disposableDatabaseUrl)("content creation PostgreSQL adapter", (
 			 VALUES ($1, $2, 'youtube', $3), ($1, $4, 'youtube', $3)`,
 			[organizationId, brandId, ownerId, siblingBrandId],
 		);
+		// A generous durable budget, so the deeper env gates below stay the thing
+		// each case actually exercises; without any budget row every non-fixture
+		// refusal would be PROVIDER_BUDGET_MISSING before a gate is reached.
+		await root.query(
+			`INSERT INTO selena_registry.provider_budgets
+			   (organization_id, brand_id, provider_id, window_kind, ceiling_calls, ceiling_cost_micros, set_by)
+			 VALUES ($1, $2, 'gemini', 'MONTH', 1000, 1000000000, $3)`,
+			[organizationId, brandId, ownerId],
+		);
 
 		const profiles = createContentWorkflowRepositories();
 		const research = createContentResearchRepositories();
@@ -242,7 +251,10 @@ describe.skipIf(!disposableDatabaseUrl)("content creation PostgreSQL adapter", (
 			idempotencyKey: `script-refused-${suffix}`,
 			adapterId: "gemini",
 		});
-		expect(refusedScript).toMatchObject({ status: "FAILED", errorCode: "ADAPTER_DISABLED" });
+		// With no CONTENT_OS_GEMINI_MAX_CALLS in the environment the durable
+		// reserve refuses first: zero permitted calls is not allowed to mean
+		// unknown, so the refusal code is the budget gate's, not the adapter's.
+		expect(refusedScript).toMatchObject({ status: "FAILED", errorCode: "UNKNOWN_COST_BLOCKED" });
 		const runsAfterRefusal = await root.query<{ count: string }>(
 			`SELECT count(*) AS count FROM selena_registry.generation_runs WHERE brand_id = $1`,
 			[brandId],
@@ -266,7 +278,7 @@ describe.skipIf(!disposableDatabaseUrl)("content creation PostgreSQL adapter", (
 			adapterId: "gemini",
 		});
 		expect(refused.status).toBe("FAILED");
-		expect(refused.errorCode).toBe("ADAPTER_DISABLED");
+		expect(refused.errorCode).toBe("UNKNOWN_COST_BLOCKED");
 		expect(creationProviderCallCount()).toBe(0);
 
 		// A sibling brand's content is neither readable nor reachable.
@@ -373,7 +385,7 @@ describe.skipIf(!disposableDatabaseUrl)("content creation PostgreSQL adapter", (
 		// would say so.
 		const gateCases: [string, Record<string, string | undefined>, string][] = [
 			["the live flag alone", { CONTENT_OS_GEMINI_LIVE: undefined }, "ADAPTER_DISABLED"],
-			["the call ceiling alone", { CONTENT_OS_GEMINI_MAX_CALLS: undefined }, "PROVIDER_QUOTA_EXCEEDED"],
+			["the call ceiling alone", { CONTENT_OS_GEMINI_MAX_CALLS: undefined }, "UNKNOWN_COST_BLOCKED"],
 			["the credential alone", { CONTENT_OS_GEMINI_CREDENTIAL_PRESENT: undefined }, "PROVIDER_AUTH_FAILED"],
 			["every gate open", {}, "PROVIDER_UNAVAILABLE"],
 		];

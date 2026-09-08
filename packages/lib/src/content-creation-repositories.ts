@@ -44,6 +44,12 @@ import {
 	scrContentVersions,
 	scrGenerationRuns,
 } from "./db/schema";
+import {
+	PROVIDER_COST_ESTIMATES,
+	ProviderBudgetError,
+	reserveProviderCall,
+	settleProviderCall,
+} from "./provider-budget-repositories";
 import { contentWorkflowV2Hash, sha256 } from "./selena-control-room";
 
 const AGGREGATE_TYPE = "content_creation";
@@ -454,12 +460,42 @@ export function createContentCreationRepositories(database: typeof db = db) {
 		let output: unknown = null;
 		let errorCode: string | null = null;
 		let externalProviderCalls = 0;
+		let reservationId: string | null = null;
 		try {
+			// The durable gate. A non-fixture adapter may not run before a RESERVED
+			// ledger row exists against a budget an interactive owner set; the cost
+			// estimate is a fixed per-provider constant, and zero never means
+			// unknown — the definer function refuses it. The fixture path touches
+			// neither the budget nor the ledger.
+			if (input.adapterId !== "fixture") {
+				reservationId = await reserveProviderCall(tx, {
+					brandId,
+					providerId: input.adapterId,
+					purpose: `creation.${input.kind}`,
+					idempotencyKey: input.idempotencyKey,
+					estimatedCalls: input.requestedCallCount,
+					estimatedCostMicros: (PROVIDER_COST_ESTIMATES[input.adapterId] ?? 0) * input.requestedCallCount,
+					correlationId,
+				});
+			}
 			const result = await input.run();
 			output = result.output;
 			externalProviderCalls = result.externalProviderCalls;
 		} catch (error) {
-			errorCode = error instanceof ContentCreationError ? error.code : "INTERNAL_ERROR";
+			// A reserve refusal is the run's failure, with its own normalized code,
+			// never an unhandled throw that would roll the record of it back.
+			errorCode =
+				error instanceof ProviderBudgetError || error instanceof ContentCreationError
+					? error.code
+					: "INTERNAL_ERROR";
+		}
+		if (reservationId) {
+			if (errorCode) {
+				await settleProviderCall(tx, { ledgerId: reservationId, status: "FAILED", errorCode });
+			} else {
+				await settleProviderCall(tx, { ledgerId: reservationId, status: "DISPATCHED" });
+				await settleProviderCall(tx, { ledgerId: reservationId, status: "SETTLED", actualCalls: externalProviderCalls });
+			}
 		}
 
 		const status: GenerationRunRow["status"] = errorCode ? "FAILED" : "COMPLETED";
