@@ -182,6 +182,7 @@ export function AppSidebar({
 					{ title: "Research", url: "/control-room/research", icon: IconSearch },
 					{ title: "Ideas", url: "/control-room/ideas", icon: IconBulb },
 					{ title: "Scripts", url: "/control-room/scripts", icon: IconFileText },
+					{ title: "Editorial review", url: "/control-room/editorial", icon: IconShieldCheck },
 				],
 			});
 		}

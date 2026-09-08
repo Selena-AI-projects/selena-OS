@@ -1,5 +1,29 @@
 # Content OS Stage 1 decisions
 
+## 2026-09-08 — Slice 4 editorial review shape
+
+- Decision: the editorial route lives at `/control-room/editorial` (the spec's `/review` name collides with the release-era `#review` hash section); audit actions are `content.editorial_approved`, `content.editorial_changes_requested`, `content.editorial_rejected` — one per decision — instead of the spec's single revoke action, because `editorial_approvals` is append-only and a later decision supersedes rather than revokes; `CHANGES_REQUESTED` returns the item to `SCRIPT_DRAFTED`, `REJECTED` archives it; the thumbnail block inside `structured_body` stays unpopulated in Slice 4 — the asset bundle binds through `content_assets` rows and the approval's `asset_bundle_hash`, so no immutable version needs rewriting.
+- Evidence: recon of `0043` policies (only `content_hash` is database-bound; owner-only APPROVED; reason required), existing `#review` section in the monolith, append-only trigger on `editorial_approvals`.
+- Alternatives rejected: reusing the release `approvals` table (binds a channel account and grants release authority); writing a new content version per thumbnail change (hash churn without editorial meaning).
+- Authority: owner's autonomous-execution mandate of 2026-09-08.
+- Affected requirements: spec §14, §15, §16 Slice 4.
+
+## 2026-09-08 — move CI to GitHub-hosted runners while the Hetzner runner is down
+
+- Decision: every workflow's `runs-on` moves from `[self-hosted, Linux, X64, selena-ci]` to `ubuntu-latest`. The Hetzner server `selena-remote-runner` stays untouched and running — it hosts other owner data and is explicitly out of scope; only its GitHub-runner service is dead (offline after a reboot 22h prior, root password unavailable to the owner at the time). GitHub-hosted minutes are included in the organization's new Team plan.
+- Evidence: runner Offline in repository settings; E2E run canceled mid-build; five required checks queued indefinitely on PR #44.
+- Alternatives rejected: Blacksmith runners (separate billing, owner not ready to decide); repairing the runner service first (requires an interactive root login only the owner can perform — recorded as an open follow-up, not a prerequisite).
+- Follow-up: restore `svc.sh`/systemd autostart for the runner on the Hetzner box, then optionally move heavy jobs back to it for speed.
+- Authority: owner's autonomous-execution mandate; owner explicitly forbade touching the Hetzner server.
+
+## 2026-09-08 — supersede the stalled Slice 4 handoff branch
+
+- Decision: `feat/content-os-slice4` (built on current main) is the Slice 4 candidate; the stalled `claude/handoff-slice4-continuation-1s7cha` branch (8 ahead / 8 behind, ends with an explicit handoff commit) is kept unmerged as review input, not deleted. Two of its ideas are noted for follow-up: a dedicated thumbnail-attach route outside the public API prefix, and recording an image's origin (generated vs uploaded) on the asset row — Stage 1 only has uploads, so §14's origin distinction is vacuously satisfied and deferred.
+- Evidence: branch history on GitHub, 2026-09-07; both implementations target the same editorial_approvals table.
+- Alternatives rejected: rebasing the stalled branch (8 behind, unknown conflicts with merged Slice 3 rounds); merging both (duplicate consumers of one table).
+- Authority: owner's autonomous-execution mandate §4.
+
+
 ## 2026-09-05 — implement Slice 1 on an isolated branch
 
 - Decision: implement the profile and draft-only YouTube target inside `selena-OS` on `feat/content-os-slice1`.
