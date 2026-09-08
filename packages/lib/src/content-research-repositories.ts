@@ -47,6 +47,7 @@ import {
 	reserveProviderCall,
 	settleProviderCall,
 } from "./provider-budget-repositories";
+import { createYouTubeResearchDispatcher } from "./youtube-research-dispatcher";
 
 const AGGREGATE_TYPE = "content_research";
 
@@ -99,7 +100,28 @@ export function researchProviderCallCount(): number {
 
 function researchAdapter(adapterId: ResearchAdapterId, imported?: ResearchSource[]): ResearchAdapter {
 	if (adapterId === "fixture") return new FixtureResearchAdapter(imported);
-	return new VideoRadarAdapter({ gates: videoRadarGates(), ledger: providerCallLedger });
+	// The dispatcher exists only when CONTENT_OS_YOUTUBE_API_KEY is set, and the
+	// key itself is read solely inside the dispatcher module. Every gate above
+	// it is unchanged: with any gate closed the adapter refuses before the
+	// dispatcher is touched, and the durable budget reservation in runResearch
+	// still fronts the whole non-fixture path.
+	const dispatch = createYouTubeResearchDispatcher();
+	return new VideoRadarAdapter({
+		gates: videoRadarGates(),
+		ledger: providerCallLedger,
+		dispatch: dispatch
+			? async (request) => {
+					const result = await dispatch(request);
+					// The adapter recorded one ledger entry for the dispatch; the
+					// remainder keeps the invariant that 1 HTTP request = 1 ledger
+					// call, so the process ceiling counts real requests.
+					for (let extra = 1; extra < result.externalProviderCalls; extra += 1) {
+						providerCallLedger.record("video-radar", request.now);
+					}
+					return result;
+				}
+			: undefined,
+	});
 }
 
 /** A run that never produced a result is still recorded, with a normalized code. */
