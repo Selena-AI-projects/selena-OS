@@ -62,6 +62,7 @@ function ResearchPage() {
 	// Held across renders so a double-submitted import returns the run that
 	// already exists instead of forking a second one.
 	const importKey = useRef(crypto.randomUUID());
+	const liveKey = useRef(crypto.randomUUID());
 
 	function act(action: () => Promise<unknown>, success: string, onDone?: () => void) {
 		startTransition(async () => {
@@ -85,6 +86,22 @@ function ResearchPage() {
 			"Fixture research imported",
 			() => {
 				importKey.current = crypto.randomUUID();
+			},
+		);
+	}
+
+	function runLive() {
+		act(
+			async () => {
+				const run = await runContentResearchFn({ data: { brandId, idempotencyKey: liveKey.current, live: true } });
+				if (run.status === "FAILED") {
+					throw new Error("Live run was refused — the run record below names which fuse said no.");
+				}
+				return run;
+			},
+			"Live YouTube research completed",
+			() => {
+				liveKey.current = crypto.randomUUID();
 			},
 		);
 	}
@@ -144,7 +161,9 @@ function ResearchPage() {
 					<CardHeader>
 						<CardTitle>Import research</CardTitle>
 						<CardDescription>
-							Fixture and import are the only modes available. No external provider is contacted and nothing is charged.
+							Fixture import spends nothing. A live YouTube run must pass every fuse — the live switches, the
+							credential, and the budget you set on the Budgets screen — and every request it makes is written to the
+							ledger.
 						</CardDescription>
 					</CardHeader>
 					<CardContent className="flex flex-col gap-3">
@@ -153,9 +172,12 @@ function ResearchPage() {
 							<span className="font-mono">{confirmedProfile.profileHash.slice(0, 12)}…</span>)
 						</p>
 						{canDecide ? (
-							<div>
+							<div className="flex flex-wrap gap-2">
 								<Button className="min-h-11" type="button" disabled={pending} onClick={importFixture}>
 									<IconDownload aria-hidden="true" /> Import fixture research
+								</Button>
+								<Button className="min-h-11" type="button" disabled={pending} onClick={runLive} variant="outline">
+									<IconDownload aria-hidden="true" /> Run live YouTube research
 								</Button>
 							</div>
 						) : (

@@ -5,7 +5,13 @@ import { isContentOsStage1Enabled } from "@/lib/content-os-stage1.server";
 import { resolveSessionAuthContext } from "@/lib/selena-auth-context.server";
 
 const brandInput = z.object({ brandId: z.string().trim().min(1).max(120) });
-const runInput = brandInput.extend({ idempotencyKey: z.string().trim().min(1).max(200) });
+const runInput = brandInput.extend({
+	idempotencyKey: z.string().trim().min(1).max(200),
+	// The client may only state an intent; the server maps it to the adapter.
+	// A live run still has to pass every fuse — env gates, credential, the
+	// owner-set durable budget — or it fails with that fuse's own code.
+	live: z.boolean().optional(),
+});
 const decisionInput = brandInput.extend({
 	opportunityId: z.string().uuid(),
 	decision: z.enum(["SAVED", "REJECTED", "SENT_TO_CREATION"]),
@@ -33,6 +39,7 @@ export const runContentResearchFn = createServerFn({ method: "POST" })
 		return contentResearchRepositories.runResearch(context, {
 			brandId: data.brandId,
 			idempotencyKey: data.idempotencyKey,
+			adapterId: data.live ? "video-radar" : undefined,
 		});
 	});
 
