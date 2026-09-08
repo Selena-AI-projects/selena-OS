@@ -4,6 +4,7 @@ import { Client } from "pg";
 import { describe, expect, it } from "vitest";
 import { createContentCreationRepositories, creationProviderCallCount } from "./content-creation-repositories";
 import { createContentResearchRepositories, researchProviderCallCount } from "./content-research-repositories";
+import { createContentReviewRepositories } from "./content-review-repositories";
 import { createContentWorkflowRepositories } from "./content-workflow-repositories";
 
 // Stage 1 acceptance: the complete fixture vertical for one disposable brand.
@@ -151,6 +152,27 @@ describe.skipIf(!disposableDatabaseUrl)("Content OS Stage 1 acceptance", () => {
 		const versions = finalState.versionsByItem[selected.contentId];
 		expect(versions).toHaveLength(3);
 		expect(finalState.items[0].workflowStage).toBe("SCRIPT_DRAFTED");
+
+		// 4b. Editorial review (Slice 4): a member sends it back with a reason,
+		// the interactive owner approves the latest version; the empty asset
+		// bundle is legal and no release authority comes into existence.
+		const review = createContentReviewRepositories();
+		const latestVersionId = versions.reduce((a, b) => (b.version > a.version ? b : a)).id;
+		const changesRequested = await review.decideEditorial(member, {
+			brandId,
+			contentVersionId: latestVersionId,
+			decision: "CHANGES_REQUESTED",
+			reason: "Acceptance pass: tighten the hook",
+		});
+		expect(changesRequested.workflowStage).toBe("SCRIPT_DRAFTED");
+		const editorialApproved = await review.decideEditorial(owner, {
+			brandId,
+			contentVersionId: latestVersionId,
+			decision: "APPROVED",
+		});
+		expect(editorialApproved.workflowStage).toBe("APPROVED");
+		const editorialState = await review.getReview(owner, brandId);
+		expect(editorialState.items[0].decisions).toHaveLength(2);
 		// The prohibited fact stayed out of every generated claim context.
 		for (const entry of versions) {
 			const claimIds = entry.structuredBody?.evidenceClaimIds ?? [];
@@ -206,7 +228,8 @@ describe.skipIf(!disposableDatabaseUrl)("Content OS Stage 1 acceptance", () => {
 			opportunities: researchState.opportunities.length,
 			ideas: withIdeas.ideas.length,
 			contentVersions: versions.length,
-			workflowStage: finalState.items[0].workflowStage,
+			editorialDecisions: editorialState.items[0].decisions.length,
+			workflowStage: editorialState.items[0].workflowStage,
 			externalProviderCalls: {
 				researchLedger: researchProviderCallCount(),
 				creationLedger: creationProviderCallCount(),
