@@ -57,6 +57,8 @@ function ProjectProfilePage() {
 	const [pending, startTransition] = useTransition();
 	const [languages, setLanguages] = useState("en");
 	const [audience, setAudience] = useState("");
+	const [audienceNeeds, setAudienceNeeds] = useState("");
+	const [audienceSecondary, setAudienceSecondary] = useState("");
 	const [voice, setVoice] = useState("");
 	const [ctaRules, setCtaRules] = useState("");
 	const [visualRules, setVisualRules] = useState("");
@@ -118,7 +120,11 @@ function ProjectProfilePage() {
 						brandId,
 						profile: {
 							languages: languageValues,
-							audience: { primary: audience.trim(), secondary: [], needs: [] },
+							audience: {
+								primary: audience.trim(),
+								secondary: splitLines(audienceSecondary),
+								needs: splitLines(audienceNeeds),
+							},
 							voice: { traits: splitLines(voice), examples: [], exclusions: [] },
 							ctaRules: splitLines(ctaRules),
 							visualRules: { palette: [], imagery: splitLines(visualRules), avoid: [] },
@@ -183,6 +189,27 @@ function ProjectProfilePage() {
 						/>
 					</div>
 					<div className="space-y-2">
+						<Label htmlFor="profile-audience-needs">Topics to cover</Label>
+						<Textarea
+							id="profile-audience-needs"
+							value={audienceNeeds}
+							onChange={(event) => setAudienceNeeds(event.target.value)}
+							placeholder="One subject per line, e.g. where to eat in Canggu"
+						/>
+						<p className="text-xs text-muted-foreground">
+							Research runs on these, in this order. Without them a run falls back to the brand name.
+						</p>
+					</div>
+					<div className="space-y-2">
+						<Label htmlFor="profile-audience-secondary">Secondary audiences</Label>
+						<Textarea
+							id="profile-audience-secondary"
+							value={audienceSecondary}
+							onChange={(event) => setAudienceSecondary(event.target.value)}
+							placeholder="One audience per line"
+						/>
+					</div>
+					<div className="space-y-2">
 						<Label htmlFor="profile-voice">Voice traits</Label>
 						<Textarea
 							id="profile-voice"
@@ -190,6 +217,9 @@ function ProjectProfilePage() {
 							onChange={(event) => setVoice(event.target.value)}
 							placeholder="One trait per line, e.g. warm"
 						/>
+						<p className="text-xs text-muted-foreground">
+							How this brand sounds, not what it covers. Traits never become research topics.
+						</p>
 					</div>
 					<div className="space-y-2">
 						<Label htmlFor="profile-cta">CTA rules</Label>

@@ -61,7 +61,7 @@ describe("research project derivation", () => {
 		expect(deriveResearchProject({ ...deriveInput(), profile: normalizeProfile(profileInput) })).toEqual(project());
 	});
 
-	it("refuses a profile with no audience or voice terms to research against", () => {
+	it("refuses a profile with no audience terms to research against", () => {
 		const empty = normalizeProfile({
 			...profileInput,
 			audience: { primary: "a", secondary: [], needs: [] },
@@ -73,6 +73,35 @@ describe("research project derivation", () => {
 	it("carries the brand's own exclusions into negative keywords", () => {
 		expect(project().negativeKeywords).toContain("guaranteed revenue");
 		expect(project().negativeKeywords).toContain("stock robots");
+	});
+
+	it("keeps voice traits out of the search vocabulary", () => {
+		expect(project().keywords).not.toContain("direct");
+	});
+
+	it("takes topics from the owner's stated needs, in the order they wrote them", () => {
+		expect(project().topics).toEqual(["booking workflow", "client retention", "studio managers"]);
+	});
+
+	it("lets a stated need decide the subject even when a voice trait sorts first", () => {
+		// "aloof" sorts before "booking workflow"; the alphabet must not win.
+		const profile = normalizeProfile({
+			...profileInput,
+			voice: { traits: ["aloof"], examples: [], exclusions: [] },
+		});
+		const derived = deriveResearchProject({ ...deriveInput(), profile });
+		expect(derived.topics[0]).toBe("booking workflow");
+		expect(derived.keywords).not.toContain("aloof");
+	});
+
+	it("states no topic rather than borrowing one when the owner named none", () => {
+		const profile = normalizeProfile({
+			...profileInput,
+			audience: { primary: "independent studio owners", secondary: [], needs: [] },
+		});
+		const derived = deriveResearchProject({ ...deriveInput(), profile });
+		expect(derived.topics).toEqual([]);
+		expect(derived.keywords).toContain("independent studio owners");
 	});
 
 	function deriveInput() {
