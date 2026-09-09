@@ -94,7 +94,7 @@ function transport(scenario: "healthy" | "rejects" = "healthy") {
 		const url = String(input);
 		if (url.endsWith("/accounts")) {
 			return new Response(
-				JSON.stringify([{ displayName: "Page", id: ACCOUNT_ID, platform: "linkedin", status: "active", subaccounts: [] }]),
+				JSON.stringify({ items: [{ fullname: "Page", id: ACCOUNT_ID, platform: "linkedin" }] }),
 				{ status: 200 },
 			);
 		}
