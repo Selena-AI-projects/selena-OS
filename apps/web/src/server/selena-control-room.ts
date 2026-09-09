@@ -6,6 +6,7 @@ import {
 	scrApprovals,
 	scrAuditEvents,
 	scrChannelAccounts,
+	scrChannelProviderBindings,
 	scrContentAssets,
 	scrContentItems,
 	scrContentPolicies,
@@ -229,6 +230,7 @@ export const getControlRoomWorkspaceFn = createServerFn({ method: "GET" })
 						versions,
 						assets,
 						accounts,
+						channelBindings,
 						approvals,
 						manifests,
 						publications,
@@ -339,6 +341,24 @@ export const getControlRoomWorkspaceFn = createServerFn({ method: "GET" })
 								),
 							)
 							.orderBy(desc(scrChannelAccounts.createdAt))
+							.limit(20),
+						db
+							.select({
+								id: scrChannelProviderBindings.id,
+								channelAccountId: scrChannelProviderBindings.channelAccountId,
+								provider: scrChannelProviderBindings.provider,
+								environment: scrChannelProviderBindings.environment,
+								active: scrChannelProviderBindings.active,
+								createdAt: scrChannelProviderBindings.createdAt,
+							})
+							.from(scrChannelProviderBindings)
+							.where(
+								and(
+									eq(scrChannelProviderBindings.organizationId, context.tenantId),
+									eq(scrChannelProviderBindings.brandId, data.brandId),
+								),
+							)
+							.orderBy(desc(scrChannelProviderBindings.createdAt))
 							.limit(20),
 						db
 							.select({
@@ -525,6 +545,7 @@ export const getControlRoomWorkspaceFn = createServerFn({ method: "GET" })
 						versions: clientVersions,
 						assets,
 						accounts,
+						channelBindings,
 						approvals,
 						releaseIntents,
 						outboxEvents,
@@ -1529,5 +1550,28 @@ export const confirmChannelBindingFn = createServerFn({ method: "POST" })
 			const row = (result as unknown as { rows?: { account_id?: string }[] }).rows?.[0];
 			if (!row?.account_id) throw new Error("The channel binding was not recorded");
 			return { channelAccountId: row.account_id };
+		});
+	});
+
+/**
+ * Stand a binding down.
+ *
+ * Binding said where an approved release may land; nothing said how to take
+ * that back. A binding made under the wrong contour — the one case this
+ * exists for — had no function to call and no policy that would let an owner
+ * write the row directly. This flips the same flag `confirm_channel_provider_binding`
+ * would flip on a collision, through the same owner-only path, and the flip is
+ * still an act in the audit log rather than a row disappearing.
+ */
+export const revokeChannelBindingFn = createServerFn({ method: "POST" })
+	.validator(brandSchema.extend({ bindingId: z.string().uuid() }))
+	.handler(async ({ data }) => {
+		const context = await resolveSessionAuthContext();
+		assertHumanReviewer(context);
+		return await withControlRoomTransaction(context, data.brandId, async (tx) => {
+			await tx.execute(sql`
+				SELECT selena_registry.revoke_channel_provider_binding(${data.brandId}, ${data.bindingId})
+			`);
+			return { revoked: true };
 		});
 	});
