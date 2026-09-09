@@ -330,6 +330,13 @@
       "when": 1788620880000,
       "tag": "0046_provider_budget_ledger",
       "breakpoints": true
+    },
+    {
+      "idx": 47,
+      "version": "7",
+      "when": 1788620940000,
+      "tag": "0047_channel_binding_revocation",
+      "breakpoints": true
     }
   ]
 }

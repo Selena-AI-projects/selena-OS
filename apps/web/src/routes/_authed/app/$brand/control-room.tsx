@@ -10,6 +10,7 @@ import { Textarea } from "@workspace/ui/components/textarea";
 import { type FormEvent, useEffect, useState, useTransition } from "react";
 import { CONTENT_PRODUCT_DESCRIPTION, CONTENT_PRODUCT_NAME } from "@/lib/content-product";
 import { buildTitle, getAppName, getBrandName } from "@/lib/route-head";
+import { resolveBoundEnvironment } from "@/lib/selena-channel-binding";
 import { revokeContentPolicyFn, setContentPolicyFn } from "@/server/selena-content-policy";
 import {
 	addReviewEvidenceFn,
@@ -22,6 +23,7 @@ import {
 	getReleaseProviderStatusFn,
 	queueReleaseIntentFn,
 	revokeApprovalFn,
+	revokeChannelBindingFn,
 	setReleaseKillSwitchFn,
 } from "@/server/selena-control-room";
 import {
@@ -276,7 +278,6 @@ function ControlRoomPage() {
 	const [providerStatus, setProviderStatus] = useState<ReleaseProviderStatus | null>(null);
 	const [channelAccountRef, setChannelAccountRef] = useState("");
 	const [channelProviderAccountId, setChannelProviderAccountId] = useState("");
-	const [channelEnvironment, setChannelEnvironment] = useState<"PRODUCTION" | "STAGING" | "DRY_RUN">("STAGING");
 	const [policyVersion, setPolicyVersion] = useState("");
 	const [policyRequireEvidence, setPolicyRequireEvidence] = useState(true);
 	const [policyRevokeReason, setPolicyRevokeReason] = useState("");
@@ -284,6 +285,12 @@ function ControlRoomPage() {
 	const versionById = new Map(data.versions.map((item) => [item.id, item]));
 	const accountById = new Map(data.accounts.map((item) => [item.id, item]));
 	const linkedInPageAccount = data.accounts.find((account) => account.platform === "linkedin_page");
+	// The only contour a binding may honestly name: the one the runtime's own
+	// publishing key already guards with. Nothing here can distinguish a
+	// deliberate choice of environment from a mistaken one, so there is no
+	// choice — an unchecked or unconfigured connection means no contour is
+	// known yet, not a default one to fall back on.
+	const boundEnvironment = resolveBoundEnvironment(providerStatus);
 	const manifestById = new Map(data.manifests.map((item) => [item.id, item]));
 	const brandStopActive = data.killSwitches.some(
 		(killSwitch) => killSwitch.scope === "GLOBAL" || (killSwitch.scope === "BRAND" && killSwitch.brandId === brandId),
@@ -345,18 +352,26 @@ function ControlRoomPage() {
 
 	function submitChannelBinding(event: FormEvent<HTMLFormElement>) {
 		event.preventDefault();
+		if (!boundEnvironment) return;
 		runShowingReason(
 			() =>
 				confirmChannelBindingFn({
 					data: {
 						accountRef: channelAccountRef.trim(),
 						brandId,
-						environment: channelEnvironment,
+						environment: boundEnvironment,
 						provider: "blotato",
 						providerAccountId: channelProviderAccountId.trim(),
 					},
 				}),
-			"Channel bound: an approved release for this brand may now be carried to its provider",
+			`Channel bound: an approved release for this brand may now be carried to its provider on ${boundEnvironment}`,
+		);
+	}
+
+	function revokeChannelBinding(bindingId: string) {
+		runShowingReason(
+			() => revokeChannelBindingFn({ data: { bindingId, brandId } }),
+			"Channel binding revoked: a release can no longer be carried to that contour",
 		);
 	}
 
@@ -1289,32 +1304,84 @@ function ControlRoomPage() {
 												onChange={(event) => setChannelProviderAccountId(event.target.value)}
 											/>
 										</Label>
-										<Label className="grid gap-2">
-											Contour allowed to reach the provider
-											<select
-												className="h-9 rounded-md border border-input bg-background px-3 text-sm"
-												value={channelEnvironment}
-												onChange={(event) =>
-													setChannelEnvironment(event.target.value as "PRODUCTION" | "STAGING" | "DRY_RUN")
-												}
-											>
-												{["STAGING", "PRODUCTION", "DRY_RUN"].map((environment) => (
-													<option key={environment} value={environment}>
-														{environment}
-													</option>
-												))}
-											</select>
-										</Label>
+										<div className="grid gap-2 text-sm">
+											<span className="font-medium">Contour this binding will target</span>
+											{boundEnvironment ? (
+												<div className="flex items-center gap-2">
+													<StatusBadge value={boundEnvironment} />
+													<span className="text-xs text-muted-foreground">
+														what this workspace's publishing key already reports itself as
+													</span>
+												</div>
+											) : (
+												<p className="text-xs text-muted-foreground">
+													Unknown until the connection above is checked. A binding can only ever name the contour the
+													runtime already is — there is nothing here to choose.
+												</p>
+											)}
+										</div>
 										<p className="text-xs text-muted-foreground">
 											Binding a channel says where an approved release may land, not that it will be sent: only a
 											contour matching this line can reach the provider at all, and the release policy still has to
 											agree. Only an owner can bind, and the act is recorded in the audit log.
 										</p>
-										<Button disabled={pending} type="submit">
+										<Button disabled={pending || !boundEnvironment} type="submit">
 											<IconLockCheck className="size-4" />
 											Bind channel
 										</Button>
 									</form>
+								</CardContent>
+							</Card>
+						)}
+						{data.role === "owner" && (
+							<Card className="rounded-md shadow-none">
+								<CardHeader>
+									<CardTitle className="text-base">Channel bindings</CardTitle>
+								</CardHeader>
+								<CardContent>
+									<Table>
+										<TableHeader>
+											<TableRow>
+												<TableHead>Channel</TableHead>
+												<TableHead>Provider</TableHead>
+												<TableHead>Contour</TableHead>
+												<TableHead>Status</TableHead>
+												<TableHead>Bound</TableHead>
+												<TableHead />
+											</TableRow>
+										</TableHeader>
+										<TableBody>
+											{data.channelBindings.length === 0 ? (
+												<EmptyRows columns={6} label="No channel has been bound yet" />
+											) : (
+												data.channelBindings.map((binding) => (
+													<TableRow key={binding.id}>
+														<TableCell className="font-medium">{channelName(binding.channelAccountId)}</TableCell>
+														<TableCell>{binding.provider}</TableCell>
+														<TableCell>
+															<StatusBadge value={binding.environment} />
+														</TableCell>
+														<TableCell>
+															<StatusBadge value={binding.active ? "ACTIVE" : "REVOKED"} />
+														</TableCell>
+														<TableCell>{formatDate(binding.createdAt)}</TableCell>
+														<TableCell>
+															{binding.active && (
+																<Button
+																	disabled={pending}
+																	onClick={() => revokeChannelBinding(binding.id)}
+																	size="sm"
+																	variant="outline"
+																>
+																	Revoke
+																</Button>
+															)}
+														</TableCell>
+													</TableRow>
+												))
+											)}
+										</TableBody>
+									</Table>
 								</CardContent>
 							</Card>
 						)}
