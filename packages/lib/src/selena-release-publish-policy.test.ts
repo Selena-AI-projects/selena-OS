@@ -74,29 +74,32 @@ function blotatoResponse(body: unknown, status = 200): Response {
 	return new Response(JSON.stringify(body), { headers: { "content-type": "application/json" }, status });
 }
 
-function blotatoTransport(): { calls: string[]; fetchFn: typeof fetch } {
+function blotatoTransport(): { bodies: string[]; calls: string[]; fetchFn: typeof fetch } {
 	const calls: string[] = [];
-	const fetchFn = vi.fn(async (input: RequestInfo | URL) => {
+	const bodies: string[] = [];
+	const fetchFn = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
 		const url = String(input);
 		calls.push(url);
+		if (init?.body) bodies.push(String(init.body));
 		if (url.endsWith("/accounts")) {
-			return blotatoResponse([
-				{
-					id: BLOTATO_ACCOUNT_ID,
-					displayName: "Selena LinkedIn Page",
-					platform: "linkedin",
-					status: "active",
-					subaccounts: [{ id: "page-1", name: "Selena" }],
-					username: "selena",
-				},
-			]);
+			return blotatoResponse({
+				items: [
+					{
+						fullname: "Selena LinkedIn Page",
+						id: BLOTATO_ACCOUNT_ID,
+						platform: "linkedin",
+						username: "selena",
+					},
+				],
+			});
 		}
+		if (url.endsWith("/subaccounts")) return blotatoResponse({ items: [{ id: "page-1", name: "Selena" }] });
 		if (url.endsWith("/posts")) return blotatoResponse({ postSubmissionId: "sub-1", scheduledTime: NOT_BEFORE });
 		if (url.includes("/analytics")) return blotatoResponse({ lastError: null, metrics: { impressions: "12" } });
-		if (url.includes("/submissions/")) return blotatoResponse({ status: "scheduled", scheduledTime: NOT_BEFORE });
+		if (url.endsWith("/sub-1")) return blotatoResponse({ status: "scheduled", scheduledTime: NOT_BEFORE });
 		throw new Error(`Unexpected Blotato request: ${url}`);
 	});
-	return { calls, fetchFn: fetchFn as unknown as typeof fetch };
+	return { bodies, calls, fetchFn: fetchFn as unknown as typeof fetch };
 }
 
 function blotatoProvider(fetchFn: typeof fetch) {
@@ -228,11 +231,15 @@ describe("staging acceptance: repeated queueing never reaches a provider", () =>
 
 describe("blotato adapter", () => {
 	it("reports the connection only for the configured account and page", async () => {
-		const { fetchFn } = blotatoTransport();
+		const { calls, fetchFn } = blotatoTransport();
 		await expect(blotatoProvider(fetchFn).validateConnection()).resolves.toMatchObject({
 			account: { externalAccountId: BLOTATO_ACCOUNT_ID, platform: "linkedin_page" },
 			state: "CONNECTED",
 		});
+		expect(calls).toEqual([
+			`${BLOTATO_TEST_API_URL}/users/me/accounts`,
+			`${BLOTATO_TEST_API_URL}/users/me/accounts/${BLOTATO_ACCOUNT_ID}/subaccounts`,
+		]);
 	});
 
 	it("treats a page the account does not hold as misconfiguration, not as connected", async () => {
@@ -314,10 +321,22 @@ describe("blotato adapter", () => {
 	});
 
 	it("accepts a dispatch and returns the submission id as the provider reference", async () => {
-		const { fetchFn } = blotatoTransport();
+		const { bodies, fetchFn } = blotatoTransport();
 		const provider = blotatoProvider(fetchFn);
 		const prepared = provider.prepareManifest({ authorization: authorization(), now: NOW, release: release() });
 		await expect(provider.dispatch(prepared)).resolves.toEqual({ outcome: "ACCEPTED", providerReferenceId: "sub-1" });
+		expect(JSON.parse(bodies[0] ?? "")).toEqual({
+			post: {
+				accountId: BLOTATO_ACCOUNT_ID,
+				content: {
+					mediaUrls: ["https://storage.test.invalid/asset-1.png"],
+					platform: "linkedin",
+					text: "A reviewed release body\n\nhttps://selena.test.invalid/offer",
+				},
+				target: { pageId: "page-1", targetType: "linkedin" },
+			},
+			scheduledTime: NOT_BEFORE,
+		});
 	});
 
 	it("calls a provider rejection definitive and a transport failure ambiguous", async () => {

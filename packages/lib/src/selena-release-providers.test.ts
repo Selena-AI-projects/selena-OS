@@ -17,7 +17,7 @@ function transport(): { calls: string[]; fetchFn: typeof fetch } {
 		const json = (body: unknown) =>
 			new Response(JSON.stringify(body), { headers: { "content-type": "application/json" }, status: 200 });
 		if (url.endsWith("/accounts")) {
-			return json([{ id: ACCOUNT_ID, displayName: "Page", platform: "linkedin", status: "active", subaccounts: [] }]);
+			return json({ items: [{ id: ACCOUNT_ID, fullname: "Page", platform: "linkedin" }] });
 		}
 		if (url.endsWith("/posts")) return json({ postSubmissionId: "sub-1", scheduledTime: NOT_BEFORE });
 		throw new Error(`Unexpected request: ${url}`);
