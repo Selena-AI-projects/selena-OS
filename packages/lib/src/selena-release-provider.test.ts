@@ -125,18 +125,19 @@ function createBlotatoTransport(scenario: Scenario): ReturnType<typeof vi.fn<typ
 		if (!url.startsWith(BLOTATO_TEST_API_URL)) throw new Error(`Blotato adapter escaped the test transport: ${url}`);
 		if (url.endsWith("/accounts")) {
 			return new Response(
-				JSON.stringify([
-					{
-						displayName: "Selena LinkedIn Page",
-						id: BLOTATO_ACCOUNT_ID,
-						platform: "linkedin",
-						status: "active",
-						subaccounts: [],
-					},
-				]),
+				JSON.stringify({
+					items: [
+						{
+							fullname: "Selena LinkedIn Page",
+							id: BLOTATO_ACCOUNT_ID,
+							platform: "linkedin",
+						},
+					],
+				}),
 				{ status: 200 },
 			);
 		}
+		if (url.endsWith("/subaccounts")) return new Response(JSON.stringify({ items: [] }), { status: 200 });
 		if (method === "POST" && url.endsWith("/posts")) {
 			if (scenario === "provider-rejects") return new Response("rejected", { status: 400 });
 			if (scenario === "provider-unreachable") return new Response("unavailable", { status: 503 });
@@ -144,7 +145,7 @@ function createBlotatoTransport(scenario: Scenario): ReturnType<typeof vi.fn<typ
 				status: 200,
 			});
 		}
-		if (method === "GET" && url.includes("/posts/submissions/")) {
+		if (method === "GET" && url.endsWith("/blotato-post-1")) {
 			if (scenario === "unknown-reference") return new Response("no such submission", { status: 404 });
 			return new Response(JSON.stringify({ scheduledTime: NOT_BEFORE, status: "scheduled" }), { status: 200 });
 		}

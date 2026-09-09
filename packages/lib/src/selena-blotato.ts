@@ -11,10 +11,11 @@
 const DEFAULT_BLOTATO_API_URL = "https://backend.blotato.com/v2";
 
 export const BLOTATO_ROUTES = {
-	accounts: "/accounts",
+	accounts: "/users/me/accounts",
 	postAnalytics: (postId: string) => `/posts/${encodeURIComponent(postId)}/analytics`,
 	posts: "/posts",
-	submission: (submissionId: string) => `/posts/submissions/${encodeURIComponent(submissionId)}`,
+	subaccounts: (accountId: string) => `/users/me/accounts/${encodeURIComponent(accountId)}/subaccounts`,
+	submission: (submissionId: string) => `/posts/${encodeURIComponent(submissionId)}`,
 } as const;
 
 export type BlotatoAccount = {
@@ -97,10 +98,12 @@ function parseAccount(value: unknown): BlotatoAccount | null {
 	const rawStatus = asString(record.status)?.toUpperCase();
 	const subaccounts = Array.isArray(record.subaccounts) ? record.subaccounts : [];
 	return {
-		displayName: asString(record.displayName) ?? asString(record.name),
+		displayName: asString(record.displayName) ?? asString(record.fullname) ?? asString(record.name),
 		id,
 		platform,
-		status: rawStatus === "ACTIVE" || rawStatus === "DISCONNECTED" ? rawStatus : "UNKNOWN",
+		// The documented connected-accounts response omits status, so an account
+		// returned by that endpoint is active unless Blotato says otherwise.
+		status: rawStatus === "DISCONNECTED" ? "DISCONNECTED" : rawStatus === "UNKNOWN" ? "UNKNOWN" : "ACTIVE",
 		subaccounts: subaccounts
 			.map((entry) => {
 				const sub = asRecord(entry);
@@ -110,6 +113,13 @@ function parseAccount(value: unknown): BlotatoAccount | null {
 			.filter((entry): entry is { id: string; name: string | null } => entry !== null),
 		username: asString(record.username),
 	};
+}
+
+function parseSubaccount(value: unknown): { id: string; name: string | null } | null {
+	const record = asRecord(value);
+	const id = asString(record?.id);
+	if (!id) return null;
+	return { id, name: asString(record?.name) ?? asString(record?.displayName) };
 }
 
 function parseSubmissionState(value: unknown): BlotatoSubmissionState {
@@ -158,12 +168,19 @@ export function createBlotatoAdapter(config: BlotatoAdapterConfig, fetchFn: type
 			const body = unwrap(
 				await request(BLOTATO_ROUTES.posts, {
 					body: JSON.stringify({
-						accountId: input.accountId,
-						mediaUrls: input.mediaUrls,
-						platform: input.platform,
+						post: {
+							accountId: input.accountId,
+							content: {
+								mediaUrls: input.mediaUrls,
+								platform: input.platform,
+								text: input.text,
+							},
+							target: {
+								targetType: input.platform,
+								...(input.pageId ? { pageId: input.pageId } : {}),
+							},
+						},
 						scheduledTime: input.scheduledTime,
-						text: input.text,
-						...(input.pageId ? { pageId: input.pageId } : {}),
 					}),
 					method: "POST",
 				}),
@@ -190,11 +207,32 @@ export function createBlotatoAdapter(config: BlotatoAdapterConfig, fetchFn: type
 
 		async listAccounts() {
 			const body = unwrap(await request(BLOTATO_ROUTES.accounts));
-			const entries = Array.isArray(body) ? body : [];
-			return entries
+			const record = asRecord(body);
+			const entries = Array.isArray(record?.items) ? record.items : Array.isArray(body) ? body : [];
+			const accounts = entries
 				.map(parseAccount)
 				.filter((account): account is BlotatoAccount => account !== null)
 				.filter((account) => account.id === config.allowedAccountId);
+
+			if (!config.allowedPageId) return accounts;
+			return Promise.all(
+				accounts.map(async (account) => {
+					if (account.subaccounts.length > 0) return account;
+					const subaccountBody = unwrap(await request(BLOTATO_ROUTES.subaccounts(account.id)));
+					const subaccountRecord = asRecord(subaccountBody);
+					const subaccountEntries = Array.isArray(subaccountRecord?.items)
+						? subaccountRecord.items
+						: Array.isArray(subaccountBody)
+							? subaccountBody
+							: [];
+					return {
+						...account,
+						subaccounts: subaccountEntries
+							.map(parseSubaccount)
+							.filter((subaccount): subaccount is { id: string; name: string | null } => subaccount !== null),
+					};
+				}),
+			);
 		},
 	};
 }
