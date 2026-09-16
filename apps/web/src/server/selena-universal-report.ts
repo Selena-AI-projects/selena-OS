@@ -359,7 +359,7 @@ export function createUniversalReportHandler(dependencies: {
 					...privateHeaders,
 					"Content-Type": csv ? "text/csv; charset=utf-8" : "text/html; charset=utf-8",
 					"Content-Disposition": `${csv ? "attachment" : "inline"}; filename="local-visibility-report.${csv ? "csv" : "html"}"`,
-					"Content-Security-Policy": `default-src 'none'; style-src 'sha256-${createHash("sha256").update(style).digest("base64")}'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'; sandbox allow-popups`,
+					"Content-Security-Policy": `default-src 'none'; style-src 'sha256-${createHash("sha256").update(style).digest("base64")}'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'; sandbox allow-popups allow-downloads`,
 				},
 			});
 		} catch (error) {

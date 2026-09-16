@@ -51,6 +51,24 @@ function fixture(organizationId = "customer-a", queryCount = 2, pointCount = 9):
 const scope = (r: UniversalReport) => ({ organizationId: r.organizationId, projectId: r.projectId });
 
 describe("universal report presentation", () => {
+	it("permits report downloads while keeping script and form execution blocked", async () => {
+		const r = fixture();
+		const handler = createUniversalReportHandler({
+			authenticate: async () => ({ authType: "session", ...scope(r) }),
+			loadPublication: async () => r,
+		});
+		for (const suffix of ["", "?format=csv"]) {
+			const response = await handler(new Request(`https://example.test/report${suffix}`), r.reportId);
+			expect(response.status).toBe(200);
+			const csp = response.headers.get("Content-Security-Policy");
+			expect(csp).toContain("sandbox allow-popups allow-downloads");
+			expect(csp).toContain("form-action 'none'");
+			expect(csp).not.toContain("allow-scripts");
+			expect(csp).not.toContain("allow-same-origin");
+			expect(response.headers.get("Cache-Control")).toBe("private, no-store");
+			if (suffix) expect(response.headers.get("Content-Disposition")).toContain("attachment");
+		}
+	});
 	it("opens retained legacy reports without fabricating an order and links to production export routes", () => {
 		const r = { ...fixture(), orderId: null };
 		const html = renderUniversalReport(buildUniversalReportView(r, scope(r)));
