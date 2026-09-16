@@ -337,6 +337,13 @@
       "when": 1788620940000,
       "tag": "0047_channel_binding_revocation",
       "breakpoints": true
+    },
+    {
+      "idx": 48,
+      "version": "7",
+      "when": 1789516800000,
+      "tag": "0048_local_prepayment",
+      "breakpoints": true
     }
   ]
 }

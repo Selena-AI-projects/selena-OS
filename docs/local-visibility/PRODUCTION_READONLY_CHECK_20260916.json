@@ -1,0 +1,17 @@
+{
+  "method": "Railway worker SSH, PostgreSQL BEGIN READ ONLY, ROLLBACK",
+  "projectId": "399ba28b-19e0-4a67-98f8-7e2a2ea6e7ee",
+  "environmentId": "4685358e-28cb-4bfd-80c9-8e829fbe6c00",
+  "productionWrites": 0,
+  "providerCalls": 0,
+  "migrationLedger": {
+    "recorded": 48,
+    "unknownHashes": 0,
+    "pending": ["0048_local_prepayment"]
+  },
+  "sourceAvliOrganizationId": "6e45fdda-4bd3-4995-b69b-3313645e8e7b",
+  "sourceAvliOrganizationExists": false,
+  "organizationVisibility": "unrestricted read, RLS disabled on organization",
+  "availableWorkspaces": [{"id": "default", "name": "Default"}],
+  "ownerQuestionPending": "Create a separate AVLI workspace or assign to Default?"
+}

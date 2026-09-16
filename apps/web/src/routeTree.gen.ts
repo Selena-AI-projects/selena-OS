@@ -48,6 +48,7 @@ import { Route as AuthedAppBrandQueryFanOutRouteImport } from './routes/_authed/
 import { Route as AuthedAppBrandShareOfVoiceRouteImport } from './routes/_authed/app/$brand/share-of-voice'
 import { Route as AuthedAppBrandVisibilityRouteImport } from './routes/_authed/app/$brand/visibility'
 import { Route as AuthedReportsRenderReportIdRouteImport } from './routes/_authed/reports/render/$reportId'
+import { Route as AuthedSelenaLocalCheckoutRouteImport } from './routes/_authed/selena/local/checkout'
 import { Route as ApiPlausibleEventIndexRouteImport } from './routes/api/plausible/event/index'
 import { Route as ApiV1BrandsIndexRouteImport } from './routes/api/v1/brands/index'
 import { Route as ApiV1BrandsBrandIdRouteImport } from './routes/api/v1/brands/$brandId'
@@ -84,6 +85,7 @@ import { Route as ApiPlausibleJsScriptIndexRouteImport } from './routes/api/plau
 import { Route as ApiV1PromptsPromptIdSnapshotRouteImport } from './routes/api/v1/prompts/$promptId/snapshot'
 import { Route as ApiV1SelenaCyclesIndexRouteImport } from './routes/api/v1/selena/cycles/index'
 import { Route as ApiV1SelenaFindingsIndexRouteImport } from './routes/api/v1/selena/findings/index'
+import { Route as ApiV1SelenaLocalPrepaymentSplatRouteImport } from './routes/api/v1/selena/local-prepayment/$'
 import { Route as ApiV1SelenaLocksIndexRouteImport } from './routes/api/v1/selena/locks/index'
 import { Route as ApiV1SelenaOrdersIndexRouteImport } from './routes/api/v1/selena/orders/index'
 import { Route as ApiV1SelenaPaymentsTestRouteImport } from './routes/api/v1/selena/payments/test'
@@ -297,6 +299,12 @@ const AuthedReportsRenderReportIdRoute =
     path: '/render/$reportId',
     getParentRoute: () => AuthedReportsRoute,
   } as any)
+const AuthedSelenaLocalCheckoutRoute =
+  AuthedSelenaLocalCheckoutRouteImport.update({
+    id: '/selena/local/checkout',
+    path: '/selena/local/checkout',
+    getParentRoute: () => AuthedRoute,
+  } as any)
 const ApiPlausibleEventIndexRoute = ApiPlausibleEventIndexRouteImport.update({
   id: '/api/plausible/event/',
   path: '/api/plausible/event/',
@@ -498,6 +506,12 @@ const ApiV1SelenaFindingsIndexRoute =
     path: '/api/v1/selena/findings/',
     getParentRoute: () => rootRouteImport,
   } as any)
+const ApiV1SelenaLocalPrepaymentSplatRoute =
+  ApiV1SelenaLocalPrepaymentSplatRouteImport.update({
+    id: '/api/v1/selena/local-prepayment/$',
+    path: '/api/v1/selena/local-prepayment/$',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiV1SelenaLocksIndexRoute = ApiV1SelenaLocksIndexRouteImport.update({
   id: '/api/v1/selena/locks/',
   path: '/api/v1/selena/locks/',
@@ -599,6 +613,7 @@ export interface FileRoutesByFullPath {
   '/app/$brand/share-of-voice': typeof AuthedAppBrandShareOfVoiceRoute
   '/app/$brand/visibility': typeof AuthedAppBrandVisibilityRoute
   '/reports/render/$reportId': typeof AuthedReportsRenderReportIdRoute
+  '/selena/local/checkout': typeof AuthedSelenaLocalCheckoutRoute
   '/api/v1/brands/$brandId': typeof ApiV1BrandsBrandIdRoute
   '/api/v1/competitors/$competitorId': typeof ApiV1CompetitorsCompetitorIdRoute
   '/api/v1/prompts/$promptId': typeof ApiV1PromptsPromptIdRouteWithChildren
@@ -631,6 +646,7 @@ export interface FileRoutesByFullPath {
   '/app/$brand/settings/members': typeof AuthedAppBrandSettingsMembersRoute
   '/app/$brand/settings/prompts': typeof AuthedAppBrandSettingsPromptsRoute
   '/api/v1/prompts/$promptId/snapshot': typeof ApiV1PromptsPromptIdSnapshotRoute
+  '/api/v1/selena/local-prepayment/$': typeof ApiV1SelenaLocalPrepaymentSplatRoute
   '/api/v1/selena/payments/test': typeof ApiV1SelenaPaymentsTestRoute
   '/api/v1/selena/readiness/verify': typeof ApiV1SelenaReadinessVerifyRoute
   '/app/$brand/prompts/': typeof AuthedAppBrandPromptsIndexRoute
@@ -682,6 +698,7 @@ export interface FileRoutesByTo {
   '/app/$brand/share-of-voice': typeof AuthedAppBrandShareOfVoiceRoute
   '/app/$brand/visibility': typeof AuthedAppBrandVisibilityRoute
   '/reports/render/$reportId': typeof AuthedReportsRenderReportIdRoute
+  '/selena/local/checkout': typeof AuthedSelenaLocalCheckoutRoute
   '/api/v1/brands/$brandId': typeof ApiV1BrandsBrandIdRoute
   '/api/v1/competitors/$competitorId': typeof ApiV1CompetitorsCompetitorIdRoute
   '/api/v1/prompts/$promptId': typeof ApiV1PromptsPromptIdRouteWithChildren
@@ -714,6 +731,7 @@ export interface FileRoutesByTo {
   '/app/$brand/settings/members': typeof AuthedAppBrandSettingsMembersRoute
   '/app/$brand/settings/prompts': typeof AuthedAppBrandSettingsPromptsRoute
   '/api/v1/prompts/$promptId/snapshot': typeof ApiV1PromptsPromptIdSnapshotRoute
+  '/api/v1/selena/local-prepayment/$': typeof ApiV1SelenaLocalPrepaymentSplatRoute
   '/api/v1/selena/payments/test': typeof ApiV1SelenaPaymentsTestRoute
   '/api/v1/selena/readiness/verify': typeof ApiV1SelenaReadinessVerifyRoute
   '/app/$brand/prompts': typeof AuthedAppBrandPromptsIndexRoute
@@ -771,6 +789,7 @@ export interface FileRoutesById {
   '/_authed/app/$brand/share-of-voice': typeof AuthedAppBrandShareOfVoiceRoute
   '/_authed/app/$brand/visibility': typeof AuthedAppBrandVisibilityRoute
   '/_authed/reports/render/$reportId': typeof AuthedReportsRenderReportIdRoute
+  '/_authed/selena/local/checkout': typeof AuthedSelenaLocalCheckoutRoute
   '/api/v1/brands/$brandId': typeof ApiV1BrandsBrandIdRoute
   '/api/v1/competitors/$competitorId': typeof ApiV1CompetitorsCompetitorIdRoute
   '/api/v1/prompts/$promptId': typeof ApiV1PromptsPromptIdRouteWithChildren
@@ -803,6 +822,7 @@ export interface FileRoutesById {
   '/_authed/app/$brand/settings/members': typeof AuthedAppBrandSettingsMembersRoute
   '/_authed/app/$brand/settings/prompts': typeof AuthedAppBrandSettingsPromptsRoute
   '/api/v1/prompts/$promptId/snapshot': typeof ApiV1PromptsPromptIdSnapshotRoute
+  '/api/v1/selena/local-prepayment/$': typeof ApiV1SelenaLocalPrepaymentSplatRoute
   '/api/v1/selena/payments/test': typeof ApiV1SelenaPaymentsTestRoute
   '/api/v1/selena/readiness/verify': typeof ApiV1SelenaReadinessVerifyRoute
   '/_authed/app/$brand/prompts/': typeof AuthedAppBrandPromptsIndexRoute
@@ -860,6 +880,7 @@ export interface FileRouteTypes {
     | '/app/$brand/share-of-voice'
     | '/app/$brand/visibility'
     | '/reports/render/$reportId'
+    | '/selena/local/checkout'
     | '/api/v1/brands/$brandId'
     | '/api/v1/competitors/$competitorId'
     | '/api/v1/prompts/$promptId'
@@ -892,6 +913,7 @@ export interface FileRouteTypes {
     | '/app/$brand/settings/members'
     | '/app/$brand/settings/prompts'
     | '/api/v1/prompts/$promptId/snapshot'
+    | '/api/v1/selena/local-prepayment/$'
     | '/api/v1/selena/payments/test'
     | '/api/v1/selena/readiness/verify'
     | '/app/$brand/prompts/'
@@ -943,6 +965,7 @@ export interface FileRouteTypes {
     | '/app/$brand/share-of-voice'
     | '/app/$brand/visibility'
     | '/reports/render/$reportId'
+    | '/selena/local/checkout'
     | '/api/v1/brands/$brandId'
     | '/api/v1/competitors/$competitorId'
     | '/api/v1/prompts/$promptId'
@@ -975,6 +998,7 @@ export interface FileRouteTypes {
     | '/app/$brand/settings/members'
     | '/app/$brand/settings/prompts'
     | '/api/v1/prompts/$promptId/snapshot'
+    | '/api/v1/selena/local-prepayment/$'
     | '/api/v1/selena/payments/test'
     | '/api/v1/selena/readiness/verify'
     | '/app/$brand/prompts'
@@ -1031,6 +1055,7 @@ export interface FileRouteTypes {
     | '/_authed/app/$brand/share-of-voice'
     | '/_authed/app/$brand/visibility'
     | '/_authed/reports/render/$reportId'
+    | '/_authed/selena/local/checkout'
     | '/api/v1/brands/$brandId'
     | '/api/v1/competitors/$competitorId'
     | '/api/v1/prompts/$promptId'
@@ -1063,6 +1088,7 @@ export interface FileRouteTypes {
     | '/_authed/app/$brand/settings/members'
     | '/_authed/app/$brand/settings/prompts'
     | '/api/v1/prompts/$promptId/snapshot'
+    | '/api/v1/selena/local-prepayment/$'
     | '/api/v1/selena/payments/test'
     | '/api/v1/selena/readiness/verify'
     | '/_authed/app/$brand/prompts/'
@@ -1113,6 +1139,7 @@ export interface RootRouteChildren {
   ApiV1DocsIndexRoute: typeof ApiV1DocsIndexRoute
   ApiV1PromptsIndexRoute: typeof ApiV1PromptsIndexRoute
   ApiV1ReportsIndexRoute: typeof ApiV1ReportsIndexRoute
+  ApiV1SelenaLocalPrepaymentSplatRoute: typeof ApiV1SelenaLocalPrepaymentSplatRoute
   ApiV1SelenaPaymentsTestRoute: typeof ApiV1SelenaPaymentsTestRoute
   ApiV1SelenaReadinessVerifyRoute: typeof ApiV1SelenaReadinessVerifyRoute
   ApiPlausibleJsScriptIndexRoute: typeof ApiPlausibleJsScriptIndexRoute
@@ -1403,6 +1430,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthedReportsRenderReportIdRouteImport
       parentRoute: typeof AuthedReportsRoute
     }
+    '/_authed/selena/local/checkout': {
+      id: '/_authed/selena/local/checkout'
+      path: '/selena/local/checkout'
+      fullPath: '/selena/local/checkout'
+      preLoaderRoute: typeof AuthedSelenaLocalCheckoutRouteImport
+      parentRoute: typeof AuthedRoute
+    }
     '/api/plausible/event/': {
       id: '/api/plausible/event/'
       path: '/api/plausible/event'
@@ -1655,6 +1689,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiV1SelenaFindingsIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/v1/selena/local-prepayment/$': {
+      id: '/api/v1/selena/local-prepayment/$'
+      path: '/api/v1/selena/local-prepayment/$'
+      fullPath: '/api/v1/selena/local-prepayment/$'
+      preLoaderRoute: typeof ApiV1SelenaLocalPrepaymentSplatRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/v1/selena/locks/': {
       id: '/api/v1/selena/locks/'
       path: '/api/v1/selena/locks'
@@ -1869,6 +1910,7 @@ interface AuthedRouteChildren {
   AuthedChoosePlanRoute: typeof AuthedChoosePlanRoute
   AuthedReportsRoute: typeof AuthedReportsRouteWithChildren
   AuthedAcceptInvitationInvitationIdRoute: typeof AuthedAcceptInvitationInvitationIdRoute
+  AuthedSelenaLocalCheckoutRoute: typeof AuthedSelenaLocalCheckoutRoute
 }
 
 const AuthedRouteChildren: AuthedRouteChildren = {
@@ -1878,6 +1920,7 @@ const AuthedRouteChildren: AuthedRouteChildren = {
   AuthedReportsRoute: AuthedReportsRouteWithChildren,
   AuthedAcceptInvitationInvitationIdRoute:
     AuthedAcceptInvitationInvitationIdRoute,
+  AuthedSelenaLocalCheckoutRoute: AuthedSelenaLocalCheckoutRoute,
 }
 
 const AuthedRouteWithChildren =
@@ -1941,6 +1984,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiV1DocsIndexRoute: ApiV1DocsIndexRoute,
   ApiV1PromptsIndexRoute: ApiV1PromptsIndexRoute,
   ApiV1ReportsIndexRoute: ApiV1ReportsIndexRoute,
+  ApiV1SelenaLocalPrepaymentSplatRoute: ApiV1SelenaLocalPrepaymentSplatRoute,
   ApiV1SelenaPaymentsTestRoute: ApiV1SelenaPaymentsTestRoute,
   ApiV1SelenaReadinessVerifyRoute: ApiV1SelenaReadinessVerifyRoute,
   ApiPlausibleJsScriptIndexRoute: ApiPlausibleJsScriptIndexRoute,
