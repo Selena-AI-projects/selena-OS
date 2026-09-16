@@ -227,7 +227,7 @@ export function SelenaLocalPrepayment({ workspaceId }: { workspaceId: string }) 
 									});
 								}}
 							>
-								{!busy && !restaurants.length && <p>Add and confirm your restaurant to prepare an order.</p>}
+								{!busy && !error && !restaurants.length && <p>Add and confirm your restaurant to prepare an order.</p>}
 								<label className="block">
 									Restaurant
 									<select required value={selected} onChange={(e) => setSelected(e.target.value)} className={field}>
@@ -300,7 +300,7 @@ export function SelenaLocalPrepayment({ workspaceId }: { workspaceId: string }) 
 				)}
 				<section className="space-y-3">
 					<h2 className="selena-heading text-2xl">Saved orders</h2>
-					{!busy && !orders.length && <p>No orders yet. Prepare one using the form above.</p>}
+					{!busy && !error && !orders.length && <p>No orders yet. Prepare one using the form above.</p>}
 					<ul>
 						{orders.map((o) => (
 							<li key={o.id}>
@@ -314,7 +314,7 @@ export function SelenaLocalPrepayment({ workspaceId }: { workspaceId: string }) 
 				</section>
 				<section className="space-y-3">
 					<h2 className="selena-heading text-2xl">Reports</h2>
-					{!busy && !reports.length && (
+					{!busy && !error && !reports.length && (
 						<p>
 							No reports have been assigned to this workspace. Preparing an order does not create measurement results.
 						</p>

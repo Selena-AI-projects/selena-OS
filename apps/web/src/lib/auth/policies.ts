@@ -108,8 +108,14 @@ export function evaluateDeploymentPolicy(
 	// 3. Public API v1 key authentication (except docs and spec)
 	const isPublicApiV1 = pathname.startsWith("/api/v1/");
 	const isPublicApiV1Doc = pathname === "/api/v1/docs" || pathname === "/api/v1/docs/";
+	// These customer routes enforce session membership and same-origin writes
+	// in createLocalPrepaymentApi; a browser must not carry an admin API key.
+	const isLocalPrepaymentSessionRoute =
+		/^\/api\/v1\/selena\/local-prepayment\/(?:restaurants\/?|(?:orders|reports)(?:\/[^/]+)?\/?|orders\/[^/]+\/(?:pay|payment|test-payment|start|retry|execute)\/?)$/.test(
+			pathname,
+		);
 
-	if (isPublicApiV1 && !isPublicApiV1Doc && !isOpenApi) {
+	if (isPublicApiV1 && !isPublicApiV1Doc && !isOpenApi && !isLocalPrepaymentSessionRoute) {
 		const keyResult = evaluateApiKeyAuth(authorizationHeader, options?.adminApiKeys ?? []);
 		if (keyResult !== "allow") {
 			return {
