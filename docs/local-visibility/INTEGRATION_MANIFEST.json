@@ -1,0 +1,137 @@
+{
+  "contextMode": "repository_only",
+  "status": "DEPLOYED_RUNTIME_SOURCE",
+  "baseCommit": "2e60da30f3ea75b65d10563d03ab502ef4d39a5a",
+  "stagingSourceCommit": "265962769629cb93c5f60f3afe153e8de5ee956e",
+  "files": [
+    {
+      "path": ".changeset/local-prepayment-workspace.md",
+      "sha256": "f13dc9e8acbd6feb494573a24ac488a08d8e0dc6fb2bb2fe73044601c2b40489",
+      "bytes": 174
+    },
+    {
+      "path": "apps/web/scripts/local-prepayment-browser-proof.ts",
+      "sha256": "62986c4137327b2be63cfbd4112d6eb5317ba63ba877c85de701ff887041ad83",
+      "bytes": 6408
+    },
+    {
+      "path": "apps/web/scripts/local-prepayment-migrations-proof.ts",
+      "sha256": "9a2205c9f9de6ef1032744f1881345fb1f62e0a1fe234dbcb873262b15994869",
+      "bytes": 1376
+    },
+    {
+      "path": "apps/web/scripts/local-prepayment-proof.ts",
+      "sha256": "52cc5842287ab84c7b8a25417ca8504a3ba5797f8bedf498559392f90f953e44",
+      "bytes": 6756
+    },
+    {
+      "path": "apps/web/scripts/prepare-local-report-import.ts",
+      "sha256": "2426f52cd0b910a9dc8a2d9ced865cdf34383ec2eca1a95b4c94d2bf4233b7ac",
+      "bytes": 1036
+    },
+    {
+      "path": "apps/web/src/components/selena-local-prepayment.tsx",
+      "sha256": "14affea7a82a2dc4248548b53b6e7505f655b95e625d95e7ec2cfec2053679a5",
+      "bytes": 12237
+    },
+    {
+      "path": "apps/web/src/lib/auth/__tests__/policies.test.ts",
+      "sha256": "1741766d719150c1a9e32f12336e7775a7d05230568a1a95332c0f8103f6b3fd",
+      "bytes": 25623
+    },
+    {
+      "path": "apps/web/src/lib/auth/policies.ts",
+      "sha256": "ea1cfb95860aba48a7e9bca1d4a05d40d7b2e929b997baf08b0da71e74851598",
+      "bytes": 10176
+    },
+    {
+      "path": "apps/web/src/lib/selena-local-customer-location.ts",
+      "sha256": "a65fda85d034dc98cad611a5e7d7b26d280b2591c8ee98392a563c7f6b266761",
+      "bytes": 2813
+    },
+    {
+      "path": "apps/web/src/lib/selena-local-grid.ts",
+      "sha256": "96a003b7c96a52b9fd917c6848ee7f863f9a00f708e1734fb00945e5bcef85a1",
+      "bytes": 10632
+    },
+    {
+      "path": "apps/web/src/lib/selena-local-prepayment.ts",
+      "sha256": "a17693fe92d81f6ad8aa0733c85fb29674aae774d16488e2eeaf96402c09fe3f",
+      "bytes": 1993
+    },
+    {
+      "path": "apps/web/src/routeTree.gen.ts",
+      "sha256": "dc06eb6d8f2e30f6784cd769c376c079b963103a7db5efbcd83b63075722698a",
+      "bytes": 86493
+    },
+    {
+      "path": "apps/web/src/routes/_authed/app/selena.tsx",
+      "sha256": "e8e2ff199eadca4ebb59eb2ca2d02f114ecab2c31b809c039ba37d8ee65be1c1",
+      "bytes": 45482
+    },
+    {
+      "path": "apps/web/src/routes/_authed/selena/local/checkout.tsx",
+      "sha256": "2f6d521aebd1ae2968ecd84fd6c33bd6924689e28af26d1a980045b04b55a128",
+      "bytes": 2930
+    },
+    {
+      "path": "apps/web/src/routes/api/v1/selena/local-prepayment/$.ts",
+      "sha256": "6096a846d0a90c57260d6bd9a38183896c3aeff35db07d3cd1113bc559b0a006",
+      "bytes": 1719
+    },
+    {
+      "path": "apps/web/src/server/selena-local-prepayment-api.test.ts",
+      "sha256": "4e771518efae7b5f4700ba5d88107f49b81162405230159be8215c554cdf6808",
+      "bytes": 4542
+    },
+    {
+      "path": "apps/web/src/server/selena-local-prepayment-api.ts",
+      "sha256": "fd9a23d3819057712792766c01085d75e1b0df7f6642c3651b1846690135c153",
+      "bytes": 3960
+    },
+    {
+      "path": "apps/web/src/server/selena-local-prepayment-store.ts",
+      "sha256": "1f8f2f7333477fd33da0af17fc2a055f73536193fab8dfcd0a279ddf1d00d5fc",
+      "bytes": 5269
+    },
+    {
+      "path": "apps/web/src/server/selena-local-retained-report.ts",
+      "sha256": "5918430ca306d69de4cbcab62605feb07fe68b8d7a6be229dedc39597b3a989f",
+      "bytes": 1007
+    },
+    {
+      "path": "apps/web/src/server/selena-universal-report.test.ts",
+      "sha256": "b52282574211a47552679a71356a8d7a5fa4fada7a174d767475630bf6f0dc66",
+      "bytes": 8885
+    },
+    {
+      "path": "apps/web/src/server/selena-universal-report.ts",
+      "sha256": "53f92d319a4492408f074f0b8f9dd200d18cf9f8101b13948c2df10657e98001",
+      "bytes": 21972
+    },
+    {
+      "path": "apps/web/src/server/selena-workspaces.ts",
+      "sha256": "5ac1ef942d403477c524f8c112f36599c2ae849c8c01ef11bb35b591bec7d217",
+      "bytes": 1810
+    },
+    {
+      "path": "packages/lib/src/db/migrations/0048_local_prepayment.sql",
+      "sha256": "fd4c56cd3462a5221f8b592ad69d29c421a50859416e9dfa68d38ea00cf3ae22",
+      "bytes": 4218
+    },
+    {
+      "path": "packages/lib/src/db/migrations/meta/_journal.json",
+      "sha256": "8760e04ea1a8da3bbf890884e091393762ee9ce30c63a1e4ada2a8bfa8d9aaf7",
+      "bytes": 7544
+    },
+    {
+      "path": "tools/local_prepayment_proof.sh",
+      "sha256": "3af9dc1cbcda49c57fb9f7e6b7b4f51e7e28ea8a7a57d31ea1373701102b09a8",
+      "bytes": 923
+    }
+  ],
+  "sourceManifestSha256": "8503c87d7ca724b0ecafe46d08a8d12eba33dd1fdaa5337c66752d681e301132",
+  "previousReleaseCommit": "8a58fdb44fca69df25c617ece39571184a32ba65",
+  "runtimeSourceCommit": "594d575fe56e3f3d6806b154fa03a25a1845aabb",
+  "runtimeDeployment": "947846c8-ab3c-4b4e-87d6-efc9057b9126"
+}

@@ -44,6 +44,43 @@ const API_KEYS = [VALID_API_KEY, "another-key"];
 // ============================================================================
 
 describe("evaluateDeploymentPolicy", () => {
+	describe("Local Visibility session routes", () => {
+		it("delegates customer requests to their session-authenticated controller without an admin key", () => {
+			for (const path of [
+				"restaurants",
+				"orders",
+				"reports",
+				"orders/order-id",
+				"reports/report-id",
+				"orders/order-id/start",
+			]) {
+				expect(
+					evaluateDeploymentPolicy(LOCAL_FEATURES, req("GET", `/api/v1/selena/local-prepayment/${path}`)).action,
+				).toBe("allow");
+			}
+			expect(
+				evaluateDeploymentPolicy(LOCAL_FEATURES, req("POST", "/api/v1/selena/local-prepayment/orders")).action,
+			).toBe("allow");
+		});
+		it("retains read-only restrictions before delegating to the customer controller", () => {
+			expect(
+				evaluateDeploymentPolicy(DEMO_FEATURES, req("POST", "/api/v1/selena/local-prepayment/orders")),
+			).toMatchObject({ action: "block", status: 403 });
+		});
+		it("does not exempt other APIs or lookalike prefixes", () => {
+			for (const path of [
+				"/api/v1/selena/projects",
+				"/api/v1/selena/payments/test",
+				"/api/v1/selena/local-prepayment-admin/orders",
+				"/api/v1/selena/local-prepayment/admin",
+			]) {
+				expect(evaluateDeploymentPolicy(LOCAL_FEATURES, req("GET", path))).toMatchObject({
+					action: "block",
+					status: 401,
+				});
+			}
+		});
+	});
 	// ────────────────────────────────────────────────────────────
 	// Local mode: readOnly=false
 	// ────────────────────────────────────────────────────────────

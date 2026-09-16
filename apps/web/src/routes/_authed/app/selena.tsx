@@ -395,6 +395,11 @@ function SelenaWorkspace() {
 					</div>
 				</div>
 			</header>
+			<nav aria-label="Local Visibility" className="mx-auto max-w-7xl px-5 sm:px-8">
+				<a href="/selena/local/checkout" className="selena-text-button inline-flex min-h-11 items-center">
+					{tr(locale, "Local Visibility · prepare a report order", "Local Visibility · подготовить заказ отчёта")}
+				</a>
+			</nav>
 
 			<main className="mx-auto grid w-full max-w-7xl gap-8 px-5 py-8 sm:px-8 lg:grid-cols-[18rem_minmax(0,1fr)] lg:py-12">
 				<aside className="space-y-5">
