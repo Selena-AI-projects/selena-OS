@@ -7,11 +7,20 @@
   "migrationLedger": {
     "recorded": 48,
     "unknownHashes": 0,
-    "pending": ["0048_local_prepayment"]
+    "pending": [
+      "0048_local_prepayment"
+    ]
   },
   "sourceAvliOrganizationId": "6e45fdda-4bd3-4995-b69b-3313645e8e7b",
   "sourceAvliOrganizationExists": false,
   "organizationVisibility": "unrestricted read, RLS disabled on organization",
-  "availableWorkspaces": [{"id": "default", "name": "Default"}],
-  "ownerQuestionPending": "Create a separate AVLI workspace or assign to Default?"
+  "availableWorkspaces": [
+    {
+      "id": "default",
+      "name": "Default"
+    }
+  ],
+  "ownerQuestionPending": "Create a separate AVLI workspace or assign to Default?",
+  "phase": "historical pre-workspace-creation read-only check",
+  "supersededBy": "INTEGRATION_STATUS.md"
 }

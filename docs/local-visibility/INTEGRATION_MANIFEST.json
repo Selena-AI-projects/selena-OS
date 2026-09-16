@@ -1,6 +1,6 @@
 {
   "contextMode": "repository_only",
-  "status": "LOCAL_CANDIDATE_NOT_DEPLOYED",
+  "status": "DEPLOYED_RUNTIME_SOURCE",
   "baseCommit": "2e60da30f3ea75b65d10563d03ab502ef4d39a5a",
   "stagingSourceCommit": "265962769629cb93c5f60f3afe153e8de5ee956e",
   "files": [
@@ -131,5 +131,7 @@
     }
   ],
   "sourceManifestSha256": "8503c87d7ca724b0ecafe46d08a8d12eba33dd1fdaa5337c66752d681e301132",
-  "previousReleaseCommit": "8a58fdb44fca69df25c617ece39571184a32ba65"
+  "previousReleaseCommit": "8a58fdb44fca69df25c617ece39571184a32ba65",
+  "runtimeSourceCommit": "594d575fe56e3f3d6806b154fa03a25a1845aabb",
+  "runtimeDeployment": "947846c8-ab3c-4b4e-87d6-efc9057b9126"
 }
