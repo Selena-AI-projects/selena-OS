@@ -11,18 +11,18 @@
 name: CLA Check
 
 on:
-  pull_request:
-    types: [opened, synchronize, reopened]
+  workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
   cla:
+    if: github.event_name == 'pull_request'
     name: Verify CLA signature
     runs-on: ubuntu-latest
     timeout-minutes: 2

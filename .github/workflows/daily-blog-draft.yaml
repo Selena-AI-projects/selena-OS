@@ -1,8 +1,6 @@
 name: Daily Blog Draft
 
 on:
-  schedule:
-    - cron: "0 13 * * *"
   workflow_dispatch:
 
 permissions: {}

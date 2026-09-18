@@ -1,16 +1,12 @@
 # License Compliance Check
 #
 # Validates that all dependencies use licenses compatible with MIT.
-# Runs on every push/PR to main and can be triggered manually.
+# Manual-only: run this from the Actions UI when dependency license validation is needed.
 # Lightweight – only needs Node + pnpm, no Docker or databases.
 
 name: License Check
 
 on:
-  push:
-    branches: [main]
-  pull_request:
-    branches: [main]
   workflow_dispatch:
 
 permissions:
