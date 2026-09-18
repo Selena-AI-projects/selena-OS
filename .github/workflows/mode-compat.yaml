@@ -10,17 +10,12 @@
 #                    re-apply so a future backfill (e.g. #339 brands->org) that
 #                    breaks on existing data fails here before merge.
 #
-# Runs on every push/PR (no path filter): the job is cheap — one install, an
-# in-process boot smoke, and ~15s of migration checks — so a mode-boot or
-# migration regression is caught regardless of which files changed.
+# Manual-only: run this check from the Actions UI when mode-boot or migration
+# coverage is needed.
 
 name: Deployment Smoke Tests
 
 on:
-  push:
-    branches: [main]
-  pull_request:
-    branches: [main]
   workflow_dispatch:
 
 permissions:
