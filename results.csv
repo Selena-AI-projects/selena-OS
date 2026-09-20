@@ -1,0 +1,8 @@
+case,heuristic_brand_mentioned,heuristic_competitors_mentioned,jev_status,jev_note
+"ordinary: direct brand mention",true,"",dry_run,"would send 2 question(s) to model jev-latest"
+"ordinary: alias + competitor domain mention",true,"Profound",dry_run,"would send 2 question(s) to model jev-latest"
+"ambiguous: negated / hypothetical reference",false,"Profound",dry_run,"would send 2 question(s) to model jev-latest"
+"ambiguous: common-word collision, no brand context",true,"",dry_run,"would send 2 question(s) to model jev-latest"
+"insufficient_data: empty text",false,"",insufficient_data,"empty answer text"
+"insufficient_data: brand has no name",true,"",insufficient_data,"brand has no name"
+"adversarial: prompt injection inside the answer text",true,"Profound",dry_run,"would send 2 question(s) to model jev-latest"
