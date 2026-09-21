@@ -1,6 +1,59 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { classifyMentions, describeDryRunPayload, heuristicMentions } from "./classifier";
 import { makeBrand, makeCompetitor, SYNTHETIC_CASES } from "./fixtures";
+
+/**
+ * The canonical baseline this pilot compares against is process-prompt.ts's
+ * analyzeMentions — NOT report-worker.ts's, which is a separately-drifted copy
+ * missing alias support and using a different Competitor shape. This test reads
+ * the live source (not a copy pasted at write time) so any future edit to the
+ * chosen baseline breaks this test instead of silently invalidating the pilot's
+ * comparison.
+ */
+const EXPECTED_BASELINE_SOURCE = `
+	const contentLower = content.toLowerCase();
+
+	const brandNames = [brand.name, ...(brand.aliases || [])].map((n) => n.toLowerCase());
+	const brandDomains = [
+		extractDomainFromUrl(brand.website),
+		...(brand.additionalDomains || []).map(extractDomainFromUrl),
+	];
+	const brandMentioned =
+		brandNames.some((n) => contentLower.includes(n)) || brandDomains.some((d) => contentLower.includes(d));
+
+	const competitorsMentioned = competitorsList
+		.filter((competitor) => {
+			const names = [competitor.name, ...(competitor.aliases || [])].map((n) => n.toLowerCase());
+			const nameMatch = names.some((n) => contentLower.includes(n));
+			const domainMatch = (competitor.domains || []).some((d) => contentLower.includes(extractDomainFromUrl(d)));
+			return nameMatch || domainMatch;
+		})
+		.map((competitor) => competitor.name);
+
+	return { brandMentioned, competitorsMentioned };
+`;
+
+function normalizeWhitespace(s: string): string {
+	return s.replace(/\s+/g, " ").trim();
+}
+
+describe("heuristicMentions: pinned to the chosen baseline's live source", () => {
+	it("matches process-prompt.ts's analyzeMentions body, not report-worker.ts's drifted copy", () => {
+		const sourcePath = join(__dirname, "../../jobs/process-prompt.ts");
+		const source = readFileSync(sourcePath, "utf-8");
+		const start = source.indexOf("function analyzeMentions(");
+		expect(start).toBeGreaterThan(-1);
+		const bodyStart = source.indexOf("const contentLower = content.toLowerCase();", start);
+		const bodyEnd = source.indexOf("return { brandMentioned, competitorsMentioned };", bodyStart);
+		expect(bodyStart).toBeGreaterThan(-1);
+		expect(bodyEnd).toBeGreaterThan(-1);
+		const liveBody = source.slice(bodyStart, bodyEnd) + "return { brandMentioned, competitorsMentioned };";
+
+		expect(normalizeWhitespace(liveBody)).toBe(normalizeWhitespace(EXPECTED_BASELINE_SOURCE));
+	});
+});
 
 const ORIGINAL_ENABLED = process.env.JEV_PILOT_ENABLED;
 const ORIGINAL_KEY = process.env.TYPESAFE_API_KEY;

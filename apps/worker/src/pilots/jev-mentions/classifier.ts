@@ -15,9 +15,18 @@ const DEFAULT_TIMEOUT_MS = 8000;
 const DEFAULT_MAX_RETRIES = 1;
 
 /**
- * Isolated copy of apps/worker/src/jobs/process-prompt.ts's `extractDomainFromUrl` /
- * `analyzeMentions`. Duplicated deliberately (pilot code must not import from or
- * modify the live job files) and must be kept in sync by hand if the original changes.
+ * Isolated copy of the canonical baseline this pilot targets: `analyzeMentions` /
+ * `extractDomainFromUrl` in apps/worker/src/jobs/process-prompt.ts:214-242 — chosen
+ * over the second, separately-drifted copy in report-worker.ts:174-209, which lacks
+ * alias support and takes a different Competitor shape (`.domain` singular vs
+ * `.domains` array). process-prompt.ts's version is also the one driving the
+ * recurring 24h tracking job, not just report generation.
+ *
+ * Duplicated on purpose rather than imported (pilot code must not import from or
+ * modify the live job files) and NOT merged with report-worker.ts's variant.
+ * classifier.test.ts pins this copy against process-prompt.ts's live source, so an
+ * edit to the original there breaks the test instead of silently invalidating this
+ * baseline.
  */
 function extractDomainFromUrl(urlOrDomain: string): string {
 	try {

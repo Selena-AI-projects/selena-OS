@@ -16,7 +16,19 @@ function csvField(value: string): string {
 }
 
 async function main() {
-	const rows: string[] = ["case,heuristic_brand_mentioned,heuristic_competitors_mentioned,jev_status,jev_note"];
+	const rows: string[] = [
+		[
+			"case",
+			"heuristic_brand_mentioned",
+			"heuristic_competitors_mentioned",
+			"reference_brand",
+			"reference_competitors",
+			"heuristic_matches_reference",
+			"reference_rationale",
+			"jev_status",
+			"jev_note",
+		].join(","),
+	];
 
 	for (const testCase of SYNTHETIC_CASES) {
 		const heuristic = heuristicMentions(testCase.text, testCase.brand, [...testCase.competitors]);
@@ -33,11 +45,22 @@ async function main() {
 			jevNote = outcome.reason;
 		}
 
+		const hasReference = testCase.referenceBrand !== null;
+		const matches = hasReference
+			? heuristic.brandMentioned === testCase.referenceBrand &&
+				JSON.stringify([...heuristic.competitorsMentioned].sort()) ===
+					JSON.stringify([...testCase.referenceCompetitors].sort())
+			: null;
+
 		rows.push(
 			[
 				csvField(testCase.name),
 				String(heuristic.brandMentioned),
 				csvField(heuristic.competitorsMentioned.join(";")),
+				String(testCase.referenceBrand),
+				csvField((testCase.referenceCompetitors ?? []).join(";")),
+				matches === null ? "n/a" : String(matches),
+				csvField(testCase.referenceRationale),
 				jevStatus,
 				csvField(jevNote),
 			].join(","),
