@@ -1,0 +1,2 @@
+case,jev_status,model,entity,reference,verdict,probability,input_tokens,output_tokens,note
+"ordinary: direct brand mention",fallback (stopped),,,,,,,,"Jev call failed, used fallback: API error 403: 403 Host not in allowlist: api.typesafe.ai. Add this host to your network egress settings to allow access."

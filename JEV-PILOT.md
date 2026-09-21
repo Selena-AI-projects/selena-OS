@@ -131,6 +131,27 @@ This estimate is not a substitute for a real measurement; the first real call (s
 
 **200 real examples (50 tune / 150 held-out): still BLOCKED.** No `DATABASE_URL` in this sandbox, no `.env`, and `parkourcafe/selena-ai-visibility` (the repo that may actually be in production) is out of this session's access scope regardless. Not simulated; not faked.
 
+## Real test attempt (this pass) — BLOCKED by sandbox network policy, not by TypeSafe
+
+A `TYPESAFE_API_KEY` was provided and the capped runner (`run-real-test.ts`, 7 calls max, stop on first real error) was executed once. Result:
+
+```
+[1/7] ordinary: direct brand mention
+Stopping after a real API failure: Jev call failed, used fallback: API error 403:
+403 Host not in allowlist: api.typesafe.ai. Add this host to your network egress
+settings to allow access.
+
+Calls made: 1/7
+Total input tokens: 0, output tokens: 0
+Measured cost: $0.000000
+```
+
+This 403 is from this sandbox's own outbound-network proxy, not from TypeSafe — the request never reached `api.typesafe.ai` (consistent with `docs.typesafe.ai` and `typesafe.ai` being blocked earlier in this pilot for the same reason). The runner's stop-on-first-failure behavior worked as designed: it made exactly 1 call, not 7, and stopped. **Actual spend: $0** (fact, not estimate — zero tokens were billed because zero requests reached the provider).
+
+The API key was received in this session, written once to a file outside the repository (this session's scratchpad, never inside `selena-OS`), used only via `--env-file` so it never appeared in a shell command string, and deleted immediately after this single attempt. It was never printed, logged, or committed. Given it passed through chat, it should be treated as exposed — **rotate it** on TypeSafe's side independent of anything else in this report.
+
+**This does not move the pilot past SETUP_READY.** API_VERIFIED is still not claimed: the key's validity against the real TypeSafe API remains unconfirmed, since the one request never got past this sandbox's own proxy. Fixing this needs the environment's network egress policy to allow `api.typesafe.ai` (a setting on how this Claude Code environment was created, not something changeable from inside the session) — see this session's own proxy status output, which confirms `api.typesafe.ai` is not on the current allowlist.
+
 ## Reproduce / disable
 
 ```bash
@@ -157,14 +178,16 @@ The existing commit `e723e364` is untouched (not amended, not rebased). This pas
 - `apps/worker/src/pilots/jev-mentions/classifier.test.ts` — added the baseline drift-detection test (reads live source, no hand-pasted copy to drift)
 - `apps/worker/src/pilots/jev-mentions/fixtures.ts` — added `referenceBrand`/`referenceCompetitors`/`referenceRationale` per case; relabeled the negation case from "false positive" to "correct, not a bug," with the reasoning inline
 - `apps/worker/src/pilots/jev-mentions/run-dry-run.ts` — `results.csv` now includes the reference label, a match column, and the rationale
+- `apps/worker/src/pilots/jev-mentions/run-real-test.ts` — new: the capped real-call runner (7 calls max, stops on first real error)
 - `results.csv` — regenerated with the corrected reference labels
+- `real-test-results.csv` — one row, the blocked attempt above
 - `JEV-PILOT.md` — this file
 
-No secrets or personal data appear anywhere in this diff, this report, or any command output above — only variable *names* were ever checked, never values.
+No secrets or personal data appear anywhere in this diff, this report, or any command output above — only variable *names* were ever checked, never a value; the one API key provided this pass was written to a file outside the repository, used once via `--env-file`, and deleted immediately after — it never touched this repository, this diff, or any committed file.
 
 ## Final status
 
-**SETUP_READY** — unchanged from the last pass, now re-verified on the pinned Node version (24.x) with a corrected, honestly-labeled test set and a proven (not asserted) baseline.
+**SETUP_READY, with one real attempt now made and BLOCKED** (not by TypeSafe — see above). Re-verified on the pinned Node version (24.x) with a corrected, honestly-labeled test set and a proven (not asserted) baseline.
 
 Not claimed: **API_VERIFIED**, **BENCHMARK_VERIFIED** (both blocked, as before — see above). **NO_BENEFIT** is not asserted: the one confirmed entity-attribution gap (the Sesame Street case) is real but is a single synthetic example, not a measured error rate. Whether Jev actually closes that gap in practice, and whether the illustrative cost above is worth it, are both open questions a real call would start to answer.
 
