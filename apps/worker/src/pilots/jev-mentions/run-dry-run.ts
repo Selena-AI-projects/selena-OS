@@ -9,11 +9,8 @@
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { classifyMentions, heuristicMentions } from "./classifier";
+import { csvField } from "./csv-utils";
 import { SYNTHETIC_CASES } from "./fixtures";
-
-function csvField(value: string): string {
-	return `"${value.replace(/"/g, '""')}"`;
-}
 
 async function main() {
 	const rows: string[] = [

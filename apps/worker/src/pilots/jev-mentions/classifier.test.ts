@@ -7,51 +7,85 @@ import { makeBrand, makeCompetitor, SYNTHETIC_CASES } from "./fixtures";
 /**
  * The canonical baseline this pilot compares against is process-prompt.ts's
  * analyzeMentions — NOT report-worker.ts's, which is a separately-drifted copy
- * missing alias support and using a different Competitor shape. This test reads
- * the live source (not a copy pasted at write time) so any future edit to the
- * chosen baseline breaks this test instead of silently invalidating the pilot's
- * comparison.
+ * missing alias support and using a different Competitor shape. Neither function is
+ * exported, so this test extracts both functions' BODIES (which contain no
+ * TypeScript-only syntax — the type annotations live only in the signatures) from the
+ * live source and actually EXECUTES them via `new Function`, then asserts their
+ * output matches `heuristicMentions` on the same inputs. This is a behavior
+ * comparison, not a text/shape comparison: a harmless refactor of `analyzeMentions`
+ * (renaming locals, reformatting, reordering statements) leaves this test green as
+ * long as the input/output behavior is unchanged; only an actual behavior change
+ * breaks it.
  */
-const EXPECTED_BASELINE_SOURCE = `
-	const contentLower = content.toLowerCase();
-
-	const brandNames = [brand.name, ...(brand.aliases || [])].map((n) => n.toLowerCase());
-	const brandDomains = [
-		extractDomainFromUrl(brand.website),
-		...(brand.additionalDomains || []).map(extractDomainFromUrl),
-	];
-	const brandMentioned =
-		brandNames.some((n) => contentLower.includes(n)) || brandDomains.some((d) => contentLower.includes(d));
-
-	const competitorsMentioned = competitorsList
-		.filter((competitor) => {
-			const names = [competitor.name, ...(competitor.aliases || [])].map((n) => n.toLowerCase());
-			const nameMatch = names.some((n) => contentLower.includes(n));
-			const domainMatch = (competitor.domains || []).some((d) => contentLower.includes(extractDomainFromUrl(d)));
-			return nameMatch || domainMatch;
-		})
-		.map((competitor) => competitor.name);
-
-	return { brandMentioned, competitorsMentioned };
-`;
-
-function normalizeWhitespace(s: string): string {
-	return s.replace(/\s+/g, " ").trim();
+/** Extracts the brace-balanced body starting at the first '{' found at/after `fromIndex`, excluding the outer braces. */
+function extractBraceBalancedBody(source: string, fromIndex: number): string {
+	const bodyStart = source.indexOf("{", fromIndex);
+	if (bodyStart === -1) throw new Error("no opening brace found");
+	let depth = 0;
+	for (let i = bodyStart; i < source.length; i++) {
+		if (source[i] === "{") depth++;
+		else if (source[i] === "}") {
+			depth--;
+			if (depth === 0) return source.slice(bodyStart + 1, i);
+		}
+	}
+	throw new Error("unbalanced braces");
 }
 
-describe("heuristicMentions: pinned to the chosen baseline's live source", () => {
-	it("matches process-prompt.ts's analyzeMentions body, not report-worker.ts's drifted copy", () => {
-		const sourcePath = join(__dirname, "../../jobs/process-prompt.ts");
-		const source = readFileSync(sourcePath, "utf-8");
-		const start = source.indexOf("function analyzeMentions(");
-		expect(start).toBeGreaterThan(-1);
-		const bodyStart = source.indexOf("const contentLower = content.toLowerCase();", start);
-		const bodyEnd = source.indexOf("return { brandMentioned, competitorsMentioned };", bodyStart);
-		expect(bodyStart).toBeGreaterThan(-1);
-		expect(bodyEnd).toBeGreaterThan(-1);
-		const liveBody = source.slice(bodyStart, bodyEnd) + "return { brandMentioned, competitorsMentioned };";
+function loadLiveAnalyzeMentions(): (
+	content: string,
+	brand: { name: string; aliases?: string[]; website: string; additionalDomains?: string[] },
+	competitorsList: { name: string; aliases?: string[]; domains?: string[] }[],
+) => { brandMentioned: boolean; competitorsMentioned: string[] } {
+	const source = readFileSync(join(__dirname, "../../jobs/process-prompt.ts"), "utf-8");
 
-		expect(normalizeWhitespace(liveBody)).toBe(normalizeWhitespace(EXPECTED_BASELINE_SOURCE));
+	// extractDomainFromUrl's signature has no return-type object literal, so its
+	// body's opening '{' is simply the first one after the function name.
+	const domainFnMarker = source.indexOf("function extractDomainFromUrl(");
+	if (domainFnMarker === -1) throw new Error("extractDomainFromUrl not found in process-prompt.ts");
+	const extractDomainFromUrlBody = extractBraceBalancedBody(source, domainFnMarker);
+	// biome-ignore lint/security/noGlobalEval: deliberately executing the live baseline's own source, extracted at test time, to prove behavior (not just text) equivalence — see comment above.
+	const extractDomainFromUrl = new Function("urlOrDomain", extractDomainFromUrlBody) as (u: string) => string;
+
+	// analyzeMentions's return-type annotation (`): { brandMentioned: boolean; ... }`)
+	// is itself a brace block before the real body, so brace-balancing from the
+	// function name would stop at the annotation instead — anchored on its known
+	// first/last statements instead, which is body-content, not signature shape.
+	const analyzeFnMarker = source.indexOf("function analyzeMentions(");
+	if (analyzeFnMarker === -1) throw new Error("analyzeMentions not found in process-prompt.ts");
+	const bodyStart = source.indexOf("const contentLower = content.toLowerCase();", analyzeFnMarker);
+	const bodyEnd = source.indexOf("return { brandMentioned, competitorsMentioned };", bodyStart);
+	if (bodyStart === -1 || bodyEnd === -1) throw new Error("could not bound analyzeMentions's body");
+	const analyzeMentionsBody = source.slice(bodyStart, bodyEnd) + "return { brandMentioned, competitorsMentioned };";
+	const analyzeMentionsLive = new Function(
+		"content",
+		"brand",
+		"competitorsList",
+		"extractDomainFromUrl",
+		analyzeMentionsBody,
+	) as (
+		content: string,
+		brand: { name: string; aliases?: string[]; website: string; additionalDomains?: string[] },
+		competitorsList: { name: string; aliases?: string[]; domains?: string[] }[],
+		extractDomainFromUrl: (u: string) => string,
+	) => { brandMentioned: boolean; competitorsMentioned: string[] };
+
+	return (content, brand, competitorsList) => analyzeMentionsLive(content, brand, competitorsList, extractDomainFromUrl);
+}
+
+describe("heuristicMentions: behaviorally matches the live baseline (process-prompt.ts, not report-worker.ts)", () => {
+	const analyzeMentionsLive = loadLiveAnalyzeMentions();
+
+	const representativeCases = SYNTHETIC_CASES.filter((c) =>
+		["straightforward", "collision", "negation"].includes(c.category),
+	).slice(0, 6);
+
+	it.each(representativeCases.map((c) => [c.name, c] as const))("matches on: %s", (_name, testCase) => {
+		const brand = testCase.brand;
+		const competitors = [...testCase.competitors];
+		expect(heuristicMentions(testCase.text, brand, competitors)).toEqual(
+			analyzeMentionsLive(testCase.text, brand, competitors),
+		);
 	});
 });
 

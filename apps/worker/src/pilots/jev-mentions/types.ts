@@ -35,6 +35,8 @@ export type ClassifyOutcome =
 			entities: EntityVerdict[];
 			/** From entities where verdict === "ambiguous" (probability inside the gate's dead zone). */
 			ambiguousCount: number;
+			/** Wall-clock time for the `systemOne` call, in ms. */
+			latencyMs: number;
 	  }
 	| { status: "dry_run"; wouldSend: DryRunPayload };
 

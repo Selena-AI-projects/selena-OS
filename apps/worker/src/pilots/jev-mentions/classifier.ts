@@ -89,11 +89,20 @@ function questionKey(index: number): string {
 }
 
 /**
- * One Noul (yes/no) question per entity: "is this entity referred to in the text,
- * directly, by alias, by domain, or by unambiguous paraphrase" — the semantic gap the
- * existing substring-match heuristic cannot close. All questions run in parallel over
+ * One Noul (yes/no) question per entity, testing entity ATTRIBUTION only — is
+ * `answer_text` talking about this specific real-world entity, as opposed to a
+ * coincidental same-name/same-word match with something else (a different product, a
+ * character, a common word, an unrelated person)? All questions run in parallel over
  * the same state (per the TypeSafe skill's composition guidance): one request, not one
  * call per entity.
+ *
+ * Deliberately excludes sentiment/stance/modality (negation, hypotheticals, tone) from
+ * the criteria: this product's `brandMentioned` metric counts topical presence of the
+ * correctly-attributed entity regardless of stance (see JEV-PILOT.md's metric-semantics
+ * section) — an earlier version of this question asked the model to also exclude
+ * negated/hypothetical mentions, which tested stance instead of attribution and
+ * produced a mismatch against that corrected metric. This wording was fixed once,
+ * before the collision benchmark was built, and is not iterated per-example.
  */
 function buildQuestions(text: string, entities: MentionEntity[]) {
 	const state = {
@@ -103,10 +112,10 @@ function buildQuestions(text: string, entities: MentionEntity[]) {
 	const questions: Record<string, ReturnType<typeof noul>> = {};
 	entities.forEach((entity, i) => {
 		questions[questionKey(i)] = noul(
-			`Does \`answer_text\` refer to the entity at \`entities[${i}]\` — by its name, an alias, a domain, or an unambiguous paraphrase (not a negated, hypothetical, or unrelated same-word mention)?`,
+			`Is \`answer_text\` talking about the specific entity at \`entities[${i}]\` — referring to it by name, an alias, a domain, or an unambiguous paraphrase — as opposed to a coincidental same-name or same-word match with a different real-world thing (e.g. a different product, a fictional character, a common word, an unrelated person)? Judge only which entity is being talked about. Ignore whether the text is positive, negative, a denial, or hypothetical about it — a negated or dismissive reference to the correct entity still counts as "true".`,
 			{
-				true: "The text clearly refers to this entity as a real, present subject.",
-				false: "The text does not refer to this entity, or only negates/hypothesizes about it.",
+				true: "The text is clearly discussing this specific, correctly-identified real-world entity — regardless of tone, sentiment, or whether it affirms or denies something about it.",
+				false: "The text does not discuss this entity at all, or the same name/word there refers to something else.",
 			},
 		);
 	});
@@ -132,7 +141,8 @@ export async function classifyMentions(
 	if (text.length === 0) {
 		return { status: "insufficient_data", reason: "empty answer text" };
 	}
-	const entities = buildEntities(input.brand, input.competitors);
+	// Checked before buildEntities: a null/undefined brand (not just a nameless one)
+	// would otherwise throw inside buildEntities instead of failing closed here.
 	if (!input.brand?.name) {
 		return { status: "insufficient_data", reason: "brand has no name" };
 	}
@@ -145,11 +155,12 @@ export async function classifyMentions(
 		};
 	}
 
-	const { state, questions } = buildQuestions(text, entities);
-
 	if (options.dryRun) {
-		return { status: "dry_run", wouldSend: { state, questions, model: process.env.TYPESAFE_DEFAULT_MODEL || "jev-latest" } };
+		return { status: "dry_run", wouldSend: describeDryRunPayload(input) };
 	}
+
+	const entities = buildEntities(input.brand, input.competitors);
+	const { state, questions } = buildQuestions(text, entities);
 
 	const yesThreshold = options.yesThreshold ?? DEFAULT_YES_THRESHOLD;
 	const noThreshold = options.noThreshold ?? DEFAULT_NO_THRESHOLD;
@@ -169,8 +180,10 @@ export async function classifyMentions(
 		};
 	}
 
+	const startedAt = Date.now();
 	try {
 		const result = await client.systemOne({ state, questions });
+		const latencyMs = Date.now() - startedAt;
 		const entityVerdicts: EntityVerdict[] = entities.map((entity, i) => {
 			const answer = result.answers[questionKey(i)];
 			const probability = answer.noul;
@@ -183,6 +196,7 @@ export async function classifyMentions(
 			usage: { inputTokens: result.usage.input_tokens, outputTokens: result.usage.output_tokens },
 			entities: entityVerdicts,
 			ambiguousCount: entityVerdicts.filter((e) => e.verdict === "ambiguous").length,
+			latencyMs,
 		};
 	} catch (err) {
 		const reason =
