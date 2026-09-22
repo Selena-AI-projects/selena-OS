@@ -1,0 +1,12 @@
+[
+	{
+		"note": "Copy this file to shadow-input.json (gitignored, never commit real answer text) and replace these entries with real AI-engine answers you generated yourself (e.g. asking ChatGPT/Perplexity your own test questions about AI-visibility tools). Do not paste client data here.",
+		"text": "This is a placeholder entry. Replace `text` with a real answer, and remove this `note` field (or leave it — it's ignored by the runner).",
+		"brandName": "Elmo",
+		"brandWebsite": "elmo.ai",
+		"brandAliases": ["Elmo AI"],
+		"competitors": [
+			{ "name": "Profound", "domains": ["tryprofound.com"], "aliases": [] }
+		]
+	}
+]

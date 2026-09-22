@@ -88,3 +88,8 @@ apps/web/storybook-static/
 .claude/worktrees/
 .readonlydb
 .pnpm-store/
+
+# Jev pilot shadow-test input: real (not client) sample answer text a contributor
+# prepares locally to run through the pilot. Never commit real answer text here —
+# see shadow-input.example.json for the shape.
+apps/worker/src/pilots/jev-mentions/shadow-input.json
