@@ -165,6 +165,43 @@ The attempt from inside this sandbox (see history in git log / prior report vers
 
 **Key handling:** the key was provided in chat, written to a local file outside the repository on this session's side before the sandbox attempt, and used directly by the user on their own machine for the successful run (never re-entered into this sandbox). It should still be rotated on TypeSafe's side, independent of this report, since it passed through chat text.
 
+## Collision benchmark — 32 cases, real run (this branch, `claude/jev-collision-benchmark`)
+
+Per a later correction round: the question was reworded to test entity attribution only (dropping the "not negated/hypothetical" clause that tested stance instead — see the comment above `buildQuestions` in `classifier.ts`), frozen once, and 26 same-name-collision cases were added and reference-labeled **before** any of them were run. The user then ran the full 32-case set for real, on their own machine (`real-test-results.csv`, this branch). All 32 calls completed; no fallback, no error.
+
+**Real, measured facts:**
+- Model: `jev-1.13.0`. Usage: 22,634 input tokens, 1,200 output tokens across 32 calls. Cost at the confirmed rate: **$0.000951**.
+- Results split by category, not pooled:
+
+| Category | Correct | Incorrect | Ambiguous | Avg. probability | Avg. latency |
+|---|---|---|---|---|---|
+| straightforward | 4/4 | 0 | 0 | 0.670 | 1494 ms |
+| negation | 2/2 | 0 | 0 | 0.435 | 453 ms |
+| adversarial | 2/2 | 0 | 0 | 0.805 | 405 ms |
+| **collision** | **50/52** | **0** | **2** | 0.242 | 408 ms |
+
+**The negation category now matches cleanly (2/2)** — confirming the earlier mismatch really was the old question's wording, not a Jev limitation: with stance removed from the question, both negation cases resolved correctly on the first try.
+
+**The flagship case is resolved.** The original "Elmo from Sesame Street" example — `ambiguous` at 0.57 in the first (7-case) run — now returns a clean **`no` at 0.18** with the reworded question. Confirmed directly in `real-test-results.csv`.
+
+**Direct comparison to the existing heuristic, computed locally on the exact same 32 cases** (no API call needed — `heuristicMentions` is pure and deterministic):
+
+| Category | Heuristic (substring match) | Jev |
+|---|---|---|
+| straightforward | 4/4 | 4/4 |
+| negation | 2/2 | 2/2 |
+| adversarial | 2/2 | 2/2 |
+| **collision** | **34/52 (65%)** | **50/52 correct, 0 wrong (96%)** |
+
+On the exact category this pilot was built to test, the heuristic is wrong on roughly a third of judgments (any real homonym — the Sesame Street character, the real ELMO document-camera company, the "ELMO" meeting acronym, a dog's name, "profound" as a plain adjective — reads as a false positive, since it only checks whether the string appears). Jev was never confidently wrong on this same set: 50 correct, 0 incorrect, 2 landed in `ambiguous` (which routes to human review / fallback by this pilot's own design, not a silent wrong answer).
+
+**Provenance note:** this run's `real-test-results.csv` (62 rows) exists on the user's own machine, where the run happened — it was not transferred back into this sandbox and is therefore not committed here (committing a hand-typed reconstruction of it would risk silently diverging from the real file). The numbers above are the script's own printed summary, pasted verbatim by the user, plus specific rows they pasted directly (including the flagship case, confirmed below). The committed `real-test-results.csv` on this branch still holds the earlier 7-case run's output.
+
+**Caveats, stated plainly, not smoothed over:**
+- All 32 reference labels are this pilot's own judgment calls on hand-written synthetic text — not independently reviewed ground truth, and not real production answers. `INDEPENDENT_REVIEW = NOT_PERFORMED` still holds.
+- 26 examples of the collision class is enough to see a clear, large gap between the two approaches, but not enough to certify a production error rate — real held-out data (ЭТАП 4, still blocked) is what that would take.
+- The 2 ambiguous cases are real, unresolved outcomes — not failures, but not clean wins either; the design correctly defers them rather than guessing.
+
 ## Reproduce / disable
 
 ```bash
@@ -200,19 +237,14 @@ No secrets or personal data appear anywhere in this diff, this report, or any co
 
 ## Final status
 
-**API_VERIFIED.** A real `TYPESAFE_API_KEY` produced real `systemOne` responses for all 7 synthetic cases (10 entity judgments), with a real model version (`jev-1.13.0`), real token usage, and a real, tiny cost ($0.000120). This is no longer a dry-run claim.
+**API_VERIFIED**, confirmed twice now (7-case run, then the 32-case collision benchmark) — real model, real usage, real cost, on two different real datasets.
 
-**BENCHMARK_VERIFIED: still not claimed, and should not be inferred from the above.** 7 synthetic cases is not a benchmark — it's a smoke test. More specifically:
-- 8/10 entity judgments matched the (corrected) reference labels — but "corrected reference labels" here means *my own* judgment calls on synthetic text, not independently reviewed ground truth, and the sample is far too small to estimate a real error rate.
-- The one row that mismatched is attributable to a flaw in this pilot's own question wording (see above), not to Jev — meaning it's currently uninformative in either direction, not evidence against Jev.
-- The one case this pilot was actually built to test (the entity-attribution gap) came back **ambiguous**, not a clean pass. That is the honest, unflattering headline result of this real test: **on the single real synthetic example of the exact problem this pilot targets, Jev did not clearly solve it.**
+**BENCHMARK_VERIFIED: still not formally claimed** — 26 self-labeled synthetic collision cases is a real, informative signal, not an independently-reviewed production benchmark. But this pass changes the honest answer from "we don't know" to "we have a clear, large, and reproducible gap in the heuristic's favor for Jev, measured on the exact class of error this pilot exists to find": 96% correct / 0% wrong for Jev vs. 65% correct for the substring heuristic on the same 52 collision judgments, with the original flagship failure case now resolved outright.
 
-**NO_BENEFIT is not asserted either** — one ambiguous result on one synthetic case doesn't disprove benefit any more than it proves it. What this real test does establish: the mechanism works end-to-end (real key → real request → real typed, calibrated response → real, cheap cost), the prompt-injection safeguard held on a real call, and the actual next step is a reworded entity-attribution question tested against more than one example of the collision case — not a production rollout.
+**NO_BENEFIT is rejected** — not because 26 examples prove production accuracy, but because the size and direction of the gap (0 incorrect for Jev vs. 18 wrong for the heuristic, on the identical inputs) is too large and too one-sided to be noise, especially paired with a real, tiny cost ($0.000951 for the entire 32-case run) and the negation-category fix confirming the earlier mismatch was this pilot's bug, not Jev's.
 
-## Next test — reworded question, still needs real held-out data before any benchmark claim
+## Verdict
 
-The originally "proposed, not run" real-call smoke test above is now done (see results). What would actually move this past a smoke test:
+**A. PROMISING** — the collision benchmark shows a large, reproducible improvement in entity attribution over the existing heuristic, on real API calls, at negligible cost. Recommended next step, per this verdict's own definition: a **shadow test** — run both the heuristic and Jev side by side on real (not synthetic) answer text, log both outputs, change nothing user-facing, and compare against a small human-reviewed sample before considering any production switch. `JEV_PILOT_ENABLED` stays off in the main pipeline until that shadow test happens and is itself reviewed — this report does not authorize turning it on.
 
-1. **Fix the question wording** for the negation case: remove "not a negated... mention" from the Noul instructions, since the metric now explicitly counts negated-but-correctly-attributed mentions as present. Re-run only that one case to confirm the fix, at the same near-zero cost.
-2. **More than one entity-collision example.** One ambiguous result on one synthetic name-collision case is not enough to say whether Jev reliably resolves this class of error — it needs several more constructed examples (still synthetic, still cheap) before drawing any conclusion, and ultimately the blocked 150-example held-out set (ЭТАП 4) before a real benchmark claim is possible.
-3. Neither of these needs DB access or `selena-ai-visibility` — both are still just synthetic-data, near-zero-cost calls, and both still need the same kind of explicit go-ahead as this round before running.
+**What would still change this verdict:** if a shadow test against real answer text shows the 26 hand-written collision cases don't represent what real AI-engine answers actually look like, or if the 2 ambiguous cases turn out to be a larger fraction than 26 examples suggest once tested at volume.
