@@ -68,17 +68,16 @@ There are two `analyzeMentions` copies, and they are **not** identical (correcti
 
 **Proof the pilot's copy reproduces it**, not just an assertion: `classifier.test.ts` now has a test that reads `process-prompt.ts`'s live source at test time (not a copy pasted once) and asserts the pilot's `heuristicMentions` body matches it, whitespace-normalized. If `process-prompt.ts`'s `analyzeMentions` is ever edited, this test breaks instead of silently drifting. This is the only automatic way to make the equivalence claim checkable, since the original function is not exported for direct import.
 
-## Applicability to the real product (point 4) — NOT fully confirmed
+## Applicability to the real product (point 4) — CONFIRMED via Railway, not just docs
 
-Chain, as far as it's confirmed inside this repository:
+**Update (2026-09-23): resolved.** Earlier passes of this report correctly flagged this as unconfirmed and refused to guess. It's since been checked directly against Railway (the actual deployment platform), not just repo documentation, which settles it:
 
-`analyzeMentions()` → pg-boss job `process-prompt` → app `@workspace/worker` (`apps/worker`) → repo `Selena-AI-projects/selena-OS`, branch `claude/selena-typesafe-integration-y98vbj`, base commit `b437efc1`.
+- `app.selenasystems.com` and `staging.selenasystems.com` are both attached, as custom domains, to the `web` service in the **`staging` environment of the `selena-ai-visibility` Railway project** (project id `51dd0770-e622-4734-a705-ace401234bb8`). That service's configured source is `Selena-AI-projects/selena-ai-visibility`, branch **`release/selena-visibility-mvp`**, last deployed successfully 2026-09-16. The `worker` service in the same environment deploys from the same repo and branch (last success 2026-09-12).
+- `selena-OS` has its own, separate, genuinely live Railway project (`selena-os`, deploying `Selena-AI-projects/selena-OS` branch `main`, last success 2026-09-18) — but its `web`/`worker` services have **no custom domain attached**, only Railway's internal `*.up.railway.app` address. It is real and deployed, just not what real users reach.
+- `parkourcafe/selena-ai-visibility` from the earlier `docs/execution/SNAPSHOT.md` reference turned out to be a stale/local naming artifact — the actual GitHub repo is `Selena-AI-projects/selena-ai-visibility`, same org as `selena-OS`, and reachable in this session (added read-only via `add_repo`, no push access).
+- **`analyzeMentions` was compared line-for-line between `selena-OS` and `selena-ai-visibility`'s actually-deployed branch (`release/selena-visibility-mvp`), not just some branch of it: the two are byte-identical.** Same file path (`apps/worker/src/jobs/process-prompt.ts`), same logic, same variable names.
 
-**What is not confirmed: whether this repository's worker is the one actually serving production traffic.** `docs/execution/SNAPSHOT.md` in this same repository states that `selena-OS` and a separate repository, `parkourcafe/selena-ai-visibility`, are **independent forks of the same upstream** (`elmohq/elmo`) — 0 shared commits, identical migrations only through `0020`, diverging from `0021` onward. The same document states the live product domains (`app.selenasystems.com`, `staging.selenasystems.com`) are served from `selena-ai-visibility`'s Railway **staging** environment, and explicitly flags an earlier assumption that they pointed to `selena-OS` production as **wrong**.
-
-I have not checked whether `selena-ai-visibility` even has an `analyzeMentions` function, let alone whether it matches this one — `parkourcafe/selena-ai-visibility` is a different repository under a different GitHub org than the one this session is authorized for, so I did not clone it, read it, or connect to its database. Per the instructions for this pass, repeating the request to work on this pilot is not treated as authorization to switch repositories, and none was requested.
-
-**Honest statement: runtime confirmation is NOT_CONFIRMED.** Everything in ЭТАП 1-3 is real and verified *for the `selena-OS` repository as checked out in this sandbox*. Whether that is the code path real users' AI-visibility data flows through today is an open question this pilot cannot answer without access to `selena-ai-visibility`.
+**What this means for the pilot:** the substring-match baseline this pilot targets is confirmed to be the same code genuinely running behind the public product today. But the Jev integration itself (`apps/worker/src/pilots/jev-mentions/`) exists only in `selena-OS`. Shipping it to production is not a side effect of merging PR #58/#59 — it requires a separate, deliberate port into `Selena-AI-projects/selena-ai-visibility`, branch `release/selena-visibility-mvp`, which is a different repository with its own deploy process this session has only read access to.
 
 ## ЭТАП 3 — isolated implementation (unchanged in design, re-verified)
 
