@@ -28,10 +28,10 @@ staging — только через GitHub Actions.
 | T-SEL-03 | Selena | M5 шаг 3: подключение Telegram | DONE_CODE, TESTED_LOCAL; слито #200; миграция 0078 применена на staging (журнал 89) | #200 | Токен бота на staging (владелец) → VERIFIED_STAGING |
 | T-SEL-04 | Selena | M5 шаг 4: еженедельная задача и отправка | не начато | — | После T-SEL-02 |
 | T-SEL-05 | Selena | /check, клиентский кабинет, RU/EN обещания vs продукт | частично: ACCEPTANCE.md (#198) | #198 | Правки текста сайта R1–R3, P1, P2, P17, P23, P24 |
-| T-SEL-06 | Selena | Review/SMS: найти и проверить | не начато | — | Поиск в обоих репозиториях |
+| T-SEL-06 | Selena | Review/SMS: найти и проверить | Не найдено: в обоих репозиториях нет модуля отзывов/SMS; reviews только как ручная работа аудита $399 (SELENA-AI-COMPANY lib/visibility/sales.ts:319) | — | Уточнить у владельца, к какому проекту относится |
 | T-KORA-01 | KORA | Единые факты, Opening Club, аренда, события, UTM | BLOCKED_EXTERNAL: подключение parkourcafe/kora отклонено в сессии | — | Владелец разрешает доступ к репозиторию |
 | T-REMH-01 | REMHAOS | Бриф → паспорт → риски → цена → КП → ответ; M1–M4 | в работе | claude/autonomy-remh-01 | — |
-| T-OB-01 | OtherBali | GSC affected URLs → sitemap/routing; HANDOFF_2026-09-02 после #309; QR/SEO пилот | в очереди | — | — |
+| T-OB-01 | OtherBali | GSC affected URLs → sitemap/routing; HANDOFF_2026-09-02 после #309; QR/SEO пилот | в работе | claude/autonomy-ob-01 | — |
 | T-DOKI-01 | DOKI | employer → apply → board; Passport/Talent Pool; RLS #111/#114; apply bottleneck; SEO | в очереди | — | — |
-| T-PET-01 | PetID | #85/#89, миграция 0074, reminders, PET PASS → событие → напоминание → запись → визит; пилот клиники | в работе | claude/autonomy-pet-01 | — |
+| T-PET-01 | PetID | #85/#89, миграция 0074, reminders, PET PASS → событие → напоминание → запись → визит; пилот клиники | TESTED_LOCAL; 3 бага исправлены (повтор напоминания, визиты vs записи, чужое фото); cron — BLOCKED_DECISION; GSC 4xx — BLOCKED_EXTERNAL (нет выгрузки) | draft PR parkourcafe/Dog.uslugi#93 | Ревью #93; решение по миграции (метка «записался», CTR); выгрузка GSC; тариф пилота 1 490/3 990 vs 3 000–15 000 ₽ |
 | T-SEED-01 | Все | Посевы: восстановить планы, ≤10 площадок, 3 текста, UTM, 14 дней | в очереди; без отправок | — | После проектных задач |
