@@ -1,0 +1,37 @@
+# Очередь координатора: завершение шести проектов
+
+Ведёт только координатор. Статусы: DONE_CODE, TESTED_LOCAL, VERIFIED_STAGING,
+VERIFIED_PRODUCTION, READY_TO_PUBLISH, BLOCKED_EXTERNAL, BLOCKED_DECISION.
+Зелёная сессия или merged PR — не доказательство production.
+
+## Базовое состояние (2026-09-27)
+
+| Проект | Репозиторий | Ветка | SHA |
+|---|---|---|---|
+| Selena (приложение) | Selena-AI-projects/selena-ai-visibility | release/selena-visibility-mvp | 39dda8f6 |
+| Selena (сайт) | Selena-AI-projects/SELENA-AI-COMPANY | main | 2fab794 |
+| KORA | parkourcafe/kora | — | не подключён |
+| REMHAOS | parkourcafe/design-interior2026.07 | main | 737795d |
+| OtherBali | parkourcafe/privelegy-bali-club | main | beff274 |
+| DOKI.help | parkourcafe/mydoki | claude/cool-volta-pdpl4t | 68844b4 |
+| PetID.care | parkourcafe/Dog.uslugi | main | d8bf6fd |
+
+Сеть сессии не пускает на *.selenasystems.com и сайты проектов: проверки
+staging — только через GitHub Actions.
+
+## Задачи
+
+| task_id | Проект | Задача | Статус | Ветка / PR | Следующий шаг |
+|---|---|---|---|---|---|
+| T-SEL-01 | Selena | Падение /app/selena-admin (Buffer в браузерном бандле) | DONE_CODE, TESTED_LOCAL; слито в #201 | #201 | Владелец открывает админку на staging → VERIFIED_STAGING |
+| T-SEL-02 | Selena | Живой приёмочный замер $79 (5 вопросов KORA) | BLOCKED_DECISION: нужен клик владельца в /app/selena-admin | — | Заказ → сбор доказательств → ACCEPTANCE.md |
+| T-SEL-03 | Selena | M5 шаг 3: подключение Telegram | DONE_CODE, TESTED_LOCAL; слито #200; миграция 0078 применена на staging (журнал 89) | #200 | Токен бота на staging (владелец) → VERIFIED_STAGING |
+| T-SEL-04 | Selena | M5 шаг 4: еженедельная задача и отправка | не начато | — | После T-SEL-02 |
+| T-SEL-05 | Selena | /check, клиентский кабинет, RU/EN обещания vs продукт | частично: ACCEPTANCE.md (#198) | #198 | Правки текста сайта R1–R3, P1, P2, P17, P23, P24 |
+| T-SEL-06 | Selena | Review/SMS: найти и проверить | не начато | — | Поиск в обоих репозиториях |
+| T-KORA-01 | KORA | Единые факты, Opening Club, аренда, события, UTM | BLOCKED_EXTERNAL: подключение parkourcafe/kora отклонено в сессии | — | Владелец разрешает доступ к репозиторию |
+| T-REMH-01 | REMHAOS | Бриф → паспорт → риски → цена → КП → ответ; M1–M4 | в работе | claude/autonomy-remh-01 | — |
+| T-OB-01 | OtherBali | GSC affected URLs → sitemap/routing; HANDOFF_2026-09-02 после #309; QR/SEO пилот | в очереди | — | — |
+| T-DOKI-01 | DOKI | employer → apply → board; Passport/Talent Pool; RLS #111/#114; apply bottleneck; SEO | в очереди | — | — |
+| T-PET-01 | PetID | #85/#89, миграция 0074, reminders, PET PASS → событие → напоминание → запись → визит; пилот клиники | в работе | claude/autonomy-pet-01 | — |
+| T-SEED-01 | Все | Посевы: восстановить планы, ≤10 площадок, 3 текста, UTM, 14 дней | в очереди; без отправок | — | После проектных задач |
