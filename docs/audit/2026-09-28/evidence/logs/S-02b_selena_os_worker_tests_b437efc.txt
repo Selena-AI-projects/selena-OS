@@ -1,0 +1,17 @@
+
+ RUN  v4.1.10 /tmp/claude-0/-home-user/3f691186-1995-5f37-9cd1-29a75d1d027b/scratchpad/wt/selena-os/apps/worker
+
+
+ Test Files  7 passed | 1 skipped (8)
+      Tests  46 passed | 11 skipped (57)
+   Start at  03:37:08
+   Duration  1.45s (transform 1.40s, setup 0ms, import 2.01s, tests 413ms, environment 1ms)
+
+ RUN  v4.1.10 /tmp/claude-0/-home-user/3f691186-1995-5f37-9cd1-29a75d1d027b/scratchpad/wt/selena-os/apps/worker
+
+
+ Test Files  1 passed (1)
+      Tests  11 passed (11)
+   Start at  03:37:22
+   Duration  1.16s (transform 478ms, setup 0ms, import 612ms, tests 345ms, environment 0ms)
+

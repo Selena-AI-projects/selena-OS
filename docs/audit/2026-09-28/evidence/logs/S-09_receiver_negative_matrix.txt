@@ -1,0 +1,17 @@
+N1 202 {"outcome":"recorded","event_id":"f9abe916-a2ba-4f06-baf6-7ad202b0a741"}
+N1_valid_v1                            202 {"outcome":"recorded","event_id":"f9abe916-a2ba-4f06-baf6-7ad202b0a741"}
+N2_replay_same_body                    202 {"outcome":"duplicate","event_id":"f9abe916-a2ba-4f06-baf6-7ad202b0a741"}
+N3_wrong_secret                        401 {"error":"rejected","reason":"signature"}
+N4_timestamp_minus_10min               401 {"error":"rejected","reason":"timestamp"}
+N5_timestamp_plus_10min                401 {"error":"rejected","reason":"timestamp"}
+N6_body_tampered_after_signing         401 {"error":"rejected","reason":"signature"}
+N7_payload_hash_mismatch               400 {"error":"rejected","reason":"payload_hash"}
+N8_same_event_id_different_content     409 {"error":"rejected","reason":"conflict","event_id":"f9abe916-a2ba-4f06-baf6-7ad202b0a741"}
+N9a_version3_first                     202 {"outcome":"recorded","event_id":"0bfda078-5464-4606-8cd5-270b08fd6621"}
+N9b_version2_late                      202 {"outcome":"stale","event_id":"70fa4015-9004-4a49-ae6d-72b309d670c6"}
+N10_oversize_600KiB                    413 {"error":"rejected","reason":"body"}
+N11_title_with_NUL                     500 {"error":"not_recorded"}
+N12_unknown_event_type                 CLIENT-ERROR ECONNRESET
+N13_unknown_extra_payload_key          202 {"outcome":"recorded","event_id":"c23e6eaa-c7e6-46bb-888b-fd3a81386650"}
+N14_GET_bridge_path                    405 {"error":"method_not_allowed"}
+N15_other_path                         404 {"error":"not_found"}

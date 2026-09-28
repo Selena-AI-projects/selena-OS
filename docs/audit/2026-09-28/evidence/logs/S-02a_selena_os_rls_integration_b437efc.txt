@@ -1,0 +1,9 @@
+
+ RUN  v4.1.10 /tmp/claude-0/-home-user/3f691186-1995-5f37-9cd1-29a75d1d027b/scratchpad/wt/selena-os/packages/lib
+
+
+ Test Files  7 passed (7)
+      Tests  12 passed (12)
+   Start at  03:36:50
+   Duration  4.80s (transform 3.09s, setup 0ms, import 9.45s, tests 2.74s, environment 1ms)
+
