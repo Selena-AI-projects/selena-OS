@@ -46,7 +46,7 @@ async function withGatewayContext<T>(
 ): Promise<T> {
 	await client.query("BEGIN");
 	try {
-		await client.query("SELECT selena_registry.set_request_context($1, $2, $3, $4, $5, $6, $7, NULL)", [
+		await client.query("SELECT selena_registry.set_request_context($1, $2, $3, $4, $5, $6, $7, $8)", [
 			"service:gateway",
 			GATEWAY_CONTEXT.organizationId,
 			GATEWAY_CONTEXT.brandId,
