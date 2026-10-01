@@ -134,13 +134,20 @@ CNAME, поэтому `errorMessage` был пуст, а статус запис
 | Транзакционный outbox Aether | PASS | Миграция `0022`; постановка в одной транзакции с изменением задачи |
 | Подпись, окно времени, защита от replay, ротация ключа | PASS | `bridge_events.py`; подпись покрывает и метку времени |
 | Идемпотентность по event_id/version, retry, dead-letter, correlation | PASS | Уникальные индексы, состояние `dead`, `trace_id` |
-| Результат создаёт Inbox item, не APPROVED и не PUBLISHED | PASS | Нагрузка несёт только заголовок, статус и сводку |
+| Материал (`content.draft_ready`) создаёт Inbox item, не APPROVED и не PUBLISHED | PASS | Карточку Inbox рождает материал. Общий результат задачи (`task.result.ready`, v1) в Inbox не проецируется и с решения P1-4 больше не отправляется — результаты задач остаются видны в Aether |
 | Обратный путь отдельным событием, без записи в БД Aether | PASS | Приёмник — отдельный рантайм `receiver`; в БД Aether он не пишет вовсе |
 | Contract tests и fixtures до producer/consumer | PASS | Фикстуры генерирует отправитель (`contracts/control-room-event.v1.fixtures.json`), приёмник тестируется против тех же байтов: 18 тестов в `selena-aether-bridge.test.ts` |
 | Duplicate, out-of-order, invalid signature, expired timestamp, schema mismatch, retry, DLQ | PASS | Отдельный тест на каждый случай с обеих сторон: 25 в `test_bridge_events.py`, 24 в `test_bridge_delivery.py`, 18 контрактных, 12 pgTAP на приёмной таблице |
 | Доставка: повторы, dead-letter, запрет редиректа | PASS | `bridge_delivery.py`; после восьми попыток событие становится `dead` |
 | Кому мост выпускает задачи | PASS | `CONTROL_ROOM_BRIDGE_BUSINESS_KEYS`; пустой список = никому |
-| Один результат создаёт ровно один Inbox item | **PASS вживую** | Событие проекта Other Bali ушло с прода Aether в staging-приёмник: `status=sent`, одна попытка, без ошибок. Повторная доставка того же `event_id` опознана как дубль — в логе приёмника `aether event duplicate: event=e839fb24… version=1`, у отправителя снова `sent` без ошибки. Второй карточки не появилось |
+| Одно событие создаёт ровно один Inbox item | **PASS вживую** | Событие проекта Other Bali ушло с прода Aether в staging-приёмник: `status=sent`, одна попытка, без ошибок. Повторная доставка того же `event_id` опознана как дубль — в логе приёмника `aether event duplicate: event=e839fb24… version=1`, у отправителя снова `sent` без ошибки. Второй карточки не появилось. Прогон подтвердил механизм приёма (подпись, идемпотентность, dead-letter), общий для обоих типов событий и обслуживающий материалы |
+
+> **P1-4 (решение B, 2026-10).** Ранее каждая завершённая задача слала в Control
+> Room событие `task.result.ready` (v1), но проекция забирает только
+> `content.draft_ready`, поэтому такие события оседали непроецированными и в
+> Inbox владельца не попадали. Теперь поток их не шлёт: Control Room — это
+> конвейер материалов, а результаты задач видны в Aether. Контракт v1 и
+> отправитель сохранены для справки, но из потока задач не вызываются.
 
 **Gate 6: PASS, включая сквозной путь.** Мост включён на проде Aether с пилотом
 `other_bali` и доставляет в staging-приёмник.
