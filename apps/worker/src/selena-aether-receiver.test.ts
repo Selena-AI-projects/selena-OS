@@ -39,7 +39,7 @@ afterEach(() => {
 	vi.useRealTimers();
 });
 
-type ClientBehaviour = { outcome?: RecordOutcome; failOn?: string; sqlstate?: string };
+type ClientBehaviour = { outcome?: RecordOutcome; failOn?: string; sqlstate?: string; connectFails?: boolean };
 
 function fakePool(behaviour: ClientBehaviour = { outcome: "recorded" }) {
 	const statements: string[] = [];
@@ -57,7 +57,13 @@ function fakePool(behaviour: ClientBehaviour = { outcome: "recorded" }) {
 	} as unknown as PoolClient;
 	return {
 		statements,
-		pool: { connect: async () => client, end: async () => {} },
+		pool: {
+			connect: async () => {
+				if (behaviour.connectFails) throw new Error("could not connect");
+				return client;
+			},
+			end: async () => {},
+		},
 	};
 }
 
@@ -205,6 +211,20 @@ describe("what the receiver refuses", () => {
 		});
 	});
 
+	it("refuses a body with a NUL byte up front and never reaches the database", async () => {
+		atSigningTime();
+		await withReceiver({ outcome: "recorded" }, async (base, statements) => {
+			const response = await fetch(`${base}/v1/bridge/aether`, {
+				method: "POST",
+				headers: { "content-type": "application/json" },
+				body: `{"event_id":"x\u0000y"}`,
+			});
+			expect(response.status).toBe(400);
+			await expect(response.json()).resolves.toMatchObject({ reason: "body" });
+			expect(statements).toHaveLength(0);
+		});
+	});
+
 	it("serves nothing but the receive path", async () => {
 		await withReceiver({ outcome: "recorded" }, async (base) => {
 			expect((await post(base, ACCEPTED, "/")).status).toBe(404);
@@ -224,6 +244,19 @@ describe("when the database refuses", () => {
 			expect(body).not.toContain("database said no");
 			expect(statements).toContain("ROLLBACK");
 		});
+		errors.mockRestore();
+	});
+
+	it("answers 503 when the database is unreachable instead of crashing", async () => {
+		atSigningTime();
+		const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+		await withReceiver({ outcome: "recorded", connectFails: true }, async (base) => {
+			const response = await post(base, ACCEPTED);
+			expect(response.status).toBe(503);
+			await expect(response.json()).resolves.toMatchObject({ error: "unavailable" });
+		});
+		// Reaching here at all is the point: an unreachable database is answered,
+		// not thrown out of the request handler to crash the process.
 		errors.mockRestore();
 	});
 });
