@@ -344,6 +344,13 @@
       "when": 1789516800000,
       "tag": "0048_local_prepayment",
       "breakpoints": true
+    },
+    {
+      "idx": 50,
+      "version": "7",
+      "when": 1789516920000,
+      "tag": "0050_record_not_sent_outcome",
+      "breakpoints": true
     }
   ]
 }
