@@ -51,7 +51,15 @@ export type ProjectionOutcome =
 	| { kind: "idle" }
 	| { kind: "projected"; eventId: string; contentVersionId: string; created: boolean }
 	| { kind: "refused"; eventId: string; code: ProjectionErrorCode }
-	| { kind: "deferred"; eventId: string; code: ProjectionErrorCode; nextAttemptAt: Date };
+	| { kind: "deferred"; eventId: string; code: ProjectionErrorCode; nextAttemptAt: Date }
+	| { kind: "faulted"; eventId: string; nextAttemptAt: Date };
+
+/**
+ * The code stamped on an event whose projection threw something unexpected —
+ * not a refusal, not a missing prerequisite. Shaped like every other projection
+ * code so it stores in `projection_error` and reads back to the owner.
+ */
+const PROJECTION_FAULT = "PROJECTION_FAULT";
 
 /**
  * What the owner can still supply is not a verdict on the material: a project
@@ -86,12 +94,34 @@ function envelopeFrom(event: ClaimedDraftEvent): EventEnvelope {
 }
 
 /**
+ * Record an unexpected projection fault as a backed-off deferral, in its own
+ * transaction on a client whose previous transaction has already rolled back.
+ *
+ * Reusing the deferral path is deliberate. A cycle that throws and is never
+ * recorded leaves the inbox row unprojected, so the next tick claims it again —
+ * and because the claim takes the oldest event first, one event that always
+ * throws is re-claimed forever and starves every newer event behind it. The
+ * back-off moves it out of the way so the queue drains and the same event is
+ * retried later rather than spun on every five seconds.
+ */
+async function deferFault(client: PoolClient, eventRowId: string): Promise<Date> {
+	await client.query("BEGIN");
+	await setWorkerServiceSettings(client);
+	const nextAttemptAt = await deferProjection(client, eventRowId, PROJECTION_FAULT);
+	await client.query("COMMIT");
+	return nextAttemptAt;
+}
+
+/**
  * One claimed event, start to finish, in one transaction. Returns what happened
- * so the loop can log it; never throws for a refusal, only for a fault that
- * should leave the event unclaimed.
+ * so the loop can log it; never throws for a refusal. An unexpected fault after
+ * an event is claimed is turned into a backed-off deferral so the queue is not
+ * blocked; a fault before a claim (or one the deferral itself cannot record,
+ * because the database is unreachable) is rethrown for the loop to back off on.
  */
 export async function projectOnce(pool: WorkerPool, sourceEnvironment: SourceEnvironment): Promise<ProjectionOutcome> {
 	const client = await pool.connect();
+	let claimed: ClaimedDraftEvent | null = null;
 	try {
 		await client.query("BEGIN");
 		await setWorkerServiceSettings(client);
@@ -100,6 +130,7 @@ export async function projectOnce(pool: WorkerPool, sourceEnvironment: SourceEnv
 			await client.query("ROLLBACK");
 			return { kind: "idle" };
 		}
+		claimed = event;
 
 		const refuse = async (code: ProjectionErrorCode): Promise<ProjectionOutcome> => {
 			if (DEFERRABLE_CODES.has(code)) {
@@ -162,7 +193,25 @@ export async function projectOnce(pool: WorkerPool, sourceEnvironment: SourceEnv
 		return { kind: "projected", eventId: event.eventId, contentVersionId: ref.contentVersionId, created: ref.created };
 	} catch (error) {
 		await client.query("ROLLBACK").catch(() => undefined);
-		throw error;
+		// A fault before an event was claimed is transient (the claim or the
+		// context setup failed): nothing is pinned to a row, so let the loop back
+		// off and retry the whole cycle.
+		if (!claimed) throw error;
+		// Identifiers and the fault, never content — the same discipline the loop keeps.
+		console.error(
+			`aether projection faulted: event=${claimed.eventId} ${error instanceof Error ? error.message : String(error)}`,
+		);
+		let nextAttemptAt: Date;
+		try {
+			nextAttemptAt = await deferFault(client, claimed.eventRowId);
+		} catch {
+			// If even the deferral cannot be written the database is unreachable,
+			// which is why the cycle faulted. Rethrow the original fault so the loop
+			// backs off; nothing is lost, the row stays claimable and is tried again.
+			await client.query("ROLLBACK").catch(() => undefined);
+			throw error;
+		}
+		return { kind: "faulted", eventId: claimed.eventId, nextAttemptAt };
 	} finally {
 		client.release();
 	}
@@ -215,6 +264,10 @@ export async function runProjectionLoop(options: {
 		} else if (outcome.kind === "deferred") {
 			console.warn(
 				`aether material deferred: event=${outcome.eventId} code=${outcome.code} next=${outcome.nextAttemptAt.toISOString()}`,
+			);
+		} else if (outcome.kind === "faulted") {
+			console.error(
+				`aether material faulted and was deferred for retry: event=${outcome.eventId} next=${outcome.nextAttemptAt.toISOString()}`,
 			);
 		} else {
 			console.warn(`aether material refused: event=${outcome.eventId} code=${outcome.code}`);
