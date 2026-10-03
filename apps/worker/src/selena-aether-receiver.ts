@@ -234,6 +234,13 @@ export function createReceiverServer(options: {
 			return sendJson(response, 413, { error: "rejected", reason });
 		}
 
+		if (body.includes("\u0000")) {
+			// A NUL byte cannot be stored and would otherwise surface from the
+			// recording function as a 500, which the sender retries until the event
+			// dies. Refuse it up front as the malformed input it is.
+			return sendJson(response, 400, { error: "rejected", reason: "body" });
+		}
+
 		let envelope: EventEnvelope;
 		try {
 			envelope = acceptWithCredentials(
@@ -248,7 +255,16 @@ export function createReceiverServer(options: {
 			throw error;
 		}
 
-		const client = await pool.connect();
+		let client: PoolClient;
+		try {
+			client = await pool.connect();
+		} catch (error) {
+			// The database is unreachable. Answer 503 so the sender retries later,
+			// rather than letting the rejected connection crash the receiver — a
+			// crash here turned a brief outage into a restart loop.
+			console.error("Aether receiver could not reach the database", error);
+			return sendJson(response, 503, { error: "unavailable" });
+		}
 		try {
 			const outcome = await recordEvent(client, envelope);
 			// Identifiers and the verdict, never the payload: an operator needs to

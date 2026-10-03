@@ -304,6 +304,11 @@ export function startSelenaTriggerDispatcher(): (() => Promise<void>) | null {
 		running = true;
 		try {
 			while ((await dispatchOneTriggerWorkflow(pool, carrier)) === "DISPATCHED") undefined;
+		} catch (error) {
+			// The tick is fired from a timer with no awaiter, so a throw here would
+			// be an unhandled rejection that crashes the worker and stops every
+			// future dispatch. Log it and let the next tick try again instead.
+			console.error("Selena trigger dispatcher tick failed", error);
 		} finally {
 			running = false;
 		}
