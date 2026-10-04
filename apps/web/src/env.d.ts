@@ -74,6 +74,9 @@ declare global {
 			readonly SELENA_GATEWAY_PORT?: string;
 			readonly SELENA_TRIGGER_API_URL?: string;
 			readonly SELENA_TRIGGER_TASK_ID?: string;
+			readonly SELENA_AETHER_RETURN_ENABLED?: string;
+			readonly AETHER_RETURN_URL?: string;
+			readonly AETHER_RETURN_SECRET?: string;
 			readonly APP_URL?: string;
 			readonly SCRAPE_TARGETS?: string;
 			readonly OPENAI_API_KEY: string;

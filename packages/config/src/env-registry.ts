@@ -119,6 +119,27 @@ export const ENV_REGISTRY: EnvVarSpec[] = [
 			"Which source environment (local, staging, production) this deployment's growth bindings answer for; a material from any other environment finds no binding.",
 	},
 	{
+		name: "SELENA_AETHER_RETURN_ENABLED",
+		scope: "server",
+		requiredBy: "optional",
+		description:
+			"Lets the worker send terminal content outcomes (published, refused, failed, rejected) back to Aether, only when set to the exact value true.",
+	},
+	{
+		name: "AETHER_RETURN_URL",
+		scope: "server",
+		requiredBy: "optional",
+		description:
+			"HTTPS endpoint on Aether that receives signed content outcomes from the return channel; required with AETHER_RETURN_SECRET when the return sender is enabled.",
+	},
+	{
+		name: "AETHER_RETURN_SECRET",
+		scope: "server",
+		requiredBy: "optional",
+		description:
+			"Shared secret the return sender signs outcomes with and Aether verifies; required with AETHER_RETURN_URL when the return sender is enabled.",
+	},
+	{
 		name: "CONTENT_OS_STAGE1_ENABLED",
 		scope: "server",
 		requiredBy: "optional",
