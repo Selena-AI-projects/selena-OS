@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@sentry/node": "^10.69.0",
+    "@typesafe-ai/sdk": "0.6.0",
     "@workspace/deployment": "workspace:*",
     "@workspace/lib": "workspace:*",
     "@workspace/whitelabel": "workspace:*",

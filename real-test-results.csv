@@ -1,0 +1,13 @@
+case,jev_status,model,entity,reference,verdict,probability,input_tokens,output_tokens,note
+"ordinary: direct brand mention",jev,"jev-1.13.0","Elmo",true,yes,0.9700,561,40,
+"ordinary: direct brand mention",jev,"jev-1.13.0","Profound",false,no,0.0200,561,40,
+"ordinary: alias + competitor domain mention",jev,"jev-1.13.0","Elmo",true,yes,0.7300,575,40,
+"ordinary: alias + competitor domain mention",jev,"jev-1.13.0","Profound",true,yes,0.8200,575,40,
+"reference: negated mention still counts as presence (not a heuristic bug)",jev,"jev-1.13.0","Elmo",false,no,0.0200,566,40,
+"reference: negated mention still counts as presence (not a heuristic bug)",jev,"jev-1.13.0","Profound",true,no,0.0500,566,40,
+"entity-attribution error: common-word collision, no brand context",jev,"jev-1.13.0","Elmo",false,ambiguous,0.5700,560,40,
+"entity-attribution error: common-word collision, no brand context",jev,"jev-1.13.0","Profound",false,no,0.0100,560,40,
+"insufficient_data: empty text",insufficient_data,,,,,,,,"empty answer text"
+"insufficient_data: brand has no name",insufficient_data,,,,,,,,"brand has no name"
+"adversarial: prompt injection inside the answer text",jev,"jev-1.13.0","Elmo",true,yes,0.8400,594,40,
+"adversarial: prompt injection inside the answer text",jev,"jev-1.13.0","Profound",true,yes,0.7500,594,40,

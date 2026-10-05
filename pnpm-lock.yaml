@@ -140,7 +140,7 @@ importers:
         version: 1.167.1(@tanstack/query-core@5.101.4)(@tanstack/react-query@5.101.4(react@19.2.8))(@tanstack/react-router@1.170.18(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(@tanstack/router-core@1.171.15)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       '@tanstack/react-start':
         specifier: ^1.168.34
-        version: 1.168.34(esbuild@0.28.1)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(rolldown@1.2.1)(supports-color@7.2.0)(vite@8.2.0(@types/node@26.1.2)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))
+        version: 1.168.34(crossws@0.4.4(srvx@0.11.15))(esbuild@0.28.1)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(rolldown@1.2.1)(supports-color@7.2.0)(vite@8.2.0(@types/node@26.1.2)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))
       '@tanstack/react-virtual':
         specifier: ^3.14.9
         version: 3.14.9(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
@@ -289,6 +289,9 @@ importers:
       '@sentry/node':
         specifier: ^10.69.0
         version: 10.69.0(@opentelemetry/core@2.10.0(@opentelemetry/api@1.9.1))(supports-color@7.2.0)
+      '@typesafe-ai/sdk':
+        specifier: 0.6.0
+        version: 0.6.0
       '@workspace/deployment':
         specifier: workspace:*
         version: link:../../packages/deployment
@@ -358,7 +361,7 @@ importers:
         version: 1.170.18(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       '@tanstack/react-start':
         specifier: ^1.168.34
-        version: 1.168.34(esbuild@0.28.1)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(rolldown@1.2.1)(supports-color@7.2.0)(vite@8.2.0(@types/node@26.1.2)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))
+        version: 1.168.34(crossws@0.4.4(srvx@0.11.15))(esbuild@0.28.1)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(rolldown@1.2.1)(supports-color@7.2.0)(vite@8.2.0(@types/node@26.1.2)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))
       '@upstash/redis':
         specifier: ^1.38.1
         version: 1.38.1
@@ -4969,6 +4972,10 @@ packages:
   '@types/use-sync-external-store@0.0.6':
     resolution: {integrity: sha512-zFDAD+tlpf2r4asuHEj0XH6pY6i0g5NeAHPn+15wk3BV6JA69eERFXC1gyGThDkVa1zCyKr5jox1+2LbV/AMLg==}
 
+  '@typesafe-ai/sdk@0.6.0':
+    resolution: {integrity: sha512-IddX+Q0XM+VagOUZFeP7wZjaO4SHMdvnh2zEBdrZZnXedWI3BNK1lKhMx3ayrkFWvVLbVcUHJy6AVZlY+e6Jaw==}
+    engines: {node: '>=20'}
+
   '@typescript/typescript-aix-ppc64@7.0.2':
     resolution: {integrity: sha512-MTKKkWB7p/0E9xi1d1tHtZ5PiLkGEMIq88pK2CubZjOsLtYTLqhgIgi6zepFa+9GHZ6h05NMCkQxGKiPXMxXtQ==}
     engines: {node: '>=16.20.0'}
@@ -5443,10 +5450,12 @@ packages:
   auth0@6.0.0:
     resolution: {integrity: sha512-RnwCiNMTCBz0spbeTRBRyhsN1cDTOk5ubqGZA7q8/L6we6agATtp67+kca4YPoQW0fVv8p1ff82W456w5PmrSw==}
     engines: {node: ^20.19.0 || ^22.12.0 || ^24.0.0 || ^26.0.0}
+    deprecated: 'auth0 v6 is deprecated and no longer receives updates. v7 is Management-API-only with no breaking changes for Management API usage; the authentication layer moved to @auth0/auth0-auth-js and @auth0/auth0-server-js, which receive all new features. Migration guide: https://github.com/auth0/node-auth0/blob/master/v7_MIGRATION_GUIDE.md'
 
   auth0@6.1.0:
     resolution: {integrity: sha512-I/PJLoG6HecJk2j62J83zV9bKS3v5f2xKdDL5uYFmjmhBfmnu9rg1z3SDcpASSYUuJvuRd5uF3vmsKfzn2OCgw==}
     engines: {node: ^20.19.0 || ^22.12.0 || ^24.0.0 || ^26.0.0}
+    deprecated: 'auth0 v6 is deprecated and no longer receives updates. v7 is Management-API-only with no breaking changes for Management API usage; the authentication layer moved to @auth0/auth0-auth-js and @auth0/auth0-server-js, which receive all new features. Migration guide: https://github.com/auth0/node-auth0/blob/master/v7_MIGRATION_GUIDE.md'
 
   aws4-axios@3.4.0:
     resolution: {integrity: sha512-BlpjvRWiOi52k8bCeoSCTe5jKQQdSqAN18x07WR8sZghzGW6tvtuepz+72pPvImI2vCn2F5HiyLvOVAVjoha+g==}
@@ -13729,15 +13738,15 @@ snapshots:
       react: 19.2.8
       react-dom: 19.2.8(react@19.2.8)
 
-  '@tanstack/react-start-rsc@0.1.33(esbuild@0.28.1)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(rolldown@1.2.1)(supports-color@7.2.0)(vite@8.2.0(@types/node@26.1.2)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))':
+  '@tanstack/react-start-rsc@0.1.33(crossws@0.4.4(srvx@0.11.15))(esbuild@0.28.1)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(rolldown@1.2.1)(supports-color@7.2.0)(vite@8.2.0(@types/node@26.1.2)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))':
     dependencies:
       '@tanstack/react-router': 1.170.18(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       '@tanstack/router-core': 1.171.15
       '@tanstack/router-utils': 1.162.2(supports-color@7.2.0)
       '@tanstack/start-client-core': 1.170.14
       '@tanstack/start-fn-stubs': 1.162.0
-      '@tanstack/start-plugin-core': 1.171.25(@tanstack/react-router@1.170.18(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(esbuild@0.28.1)(rolldown@1.2.1)(supports-color@7.2.0)(vite@8.2.0(@types/node@26.1.2)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))
-      '@tanstack/start-server-core': 1.169.17
+      '@tanstack/start-plugin-core': 1.171.25(@tanstack/react-router@1.170.18(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(crossws@0.4.4(srvx@0.11.15))(esbuild@0.28.1)(rolldown@1.2.1)(supports-color@7.2.0)(vite@8.2.0(@types/node@26.1.2)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))
+      '@tanstack/start-server-core': 1.169.17(crossws@0.4.4(srvx@0.11.15))
       '@tanstack/start-storage-context': 1.167.17
       pathe: 2.0.3
       react: 19.2.8
@@ -13764,7 +13773,7 @@ snapshots:
       '@tanstack/start-client-core': 1.170.14
       '@tanstack/start-fn-stubs': 1.162.0
       '@tanstack/start-plugin-core': 1.171.25(@tanstack/react-router@1.170.18(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(esbuild@0.28.1)(rolldown@1.2.1)(vite@8.2.0(@types/node@26.1.2)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))
-      '@tanstack/start-server-core': 1.169.17
+      '@tanstack/start-server-core': 1.169.17(crossws@0.4.4(srvx@0.11.15))
       '@tanstack/start-storage-context': 1.167.17
       pathe: 2.0.3
       react: 19.2.8
@@ -13784,26 +13793,26 @@ snapshots:
       - webpack
     optional: true
 
-  '@tanstack/react-start-server@1.167.22(react-dom@19.2.8(react@19.2.8))(react@19.2.8)':
+  '@tanstack/react-start-server@1.167.22(crossws@0.4.4(srvx@0.11.15))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)':
     dependencies:
       '@tanstack/react-router': 1.170.18(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       '@tanstack/router-core': 1.171.15
-      '@tanstack/start-server-core': 1.169.17
+      '@tanstack/start-server-core': 1.169.17(crossws@0.4.4(srvx@0.11.15))
       react: 19.2.8
       react-dom: 19.2.8(react@19.2.8)
     transitivePeerDependencies:
       - crossws
 
-  '@tanstack/react-start@1.168.34(esbuild@0.28.1)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(rolldown@1.2.1)(supports-color@7.2.0)(vite@8.2.0(@types/node@26.1.2)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))':
+  '@tanstack/react-start@1.168.34(crossws@0.4.4(srvx@0.11.15))(esbuild@0.28.1)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(rolldown@1.2.1)(supports-color@7.2.0)(vite@8.2.0(@types/node@26.1.2)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))':
     dependencies:
       '@tanstack/react-router': 1.170.18(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       '@tanstack/react-start-client': 1.168.16(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
-      '@tanstack/react-start-rsc': 0.1.33(esbuild@0.28.1)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(rolldown@1.2.1)(supports-color@7.2.0)(vite@8.2.0(@types/node@26.1.2)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))
-      '@tanstack/react-start-server': 1.167.22(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+      '@tanstack/react-start-rsc': 0.1.33(crossws@0.4.4(srvx@0.11.15))(esbuild@0.28.1)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(rolldown@1.2.1)(supports-color@7.2.0)(vite@8.2.0(@types/node@26.1.2)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))
+      '@tanstack/react-start-server': 1.167.22(crossws@0.4.4(srvx@0.11.15))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       '@tanstack/router-utils': 1.162.2(supports-color@7.2.0)
       '@tanstack/start-client-core': 1.170.14
-      '@tanstack/start-plugin-core': 1.171.25(@tanstack/react-router@1.170.18(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(esbuild@0.28.1)(rolldown@1.2.1)(supports-color@7.2.0)(vite@8.2.0(@types/node@26.1.2)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))
-      '@tanstack/start-server-core': 1.169.17
+      '@tanstack/start-plugin-core': 1.171.25(@tanstack/react-router@1.170.18(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(crossws@0.4.4(srvx@0.11.15))(esbuild@0.28.1)(rolldown@1.2.1)(supports-color@7.2.0)(vite@8.2.0(@types/node@26.1.2)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))
+      '@tanstack/start-server-core': 1.169.17(crossws@0.4.4(srvx@0.11.15))
       pathe: 2.0.3
       react: 19.2.8
       react-dom: 19.2.8(react@19.2.8)
@@ -13828,11 +13837,11 @@ snapshots:
       '@tanstack/react-router': 1.170.18(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       '@tanstack/react-start-client': 1.168.16(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       '@tanstack/react-start-rsc': 0.1.33(esbuild@0.28.1)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(rolldown@1.2.1)(vite@8.2.0(@types/node@26.1.2)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))
-      '@tanstack/react-start-server': 1.167.22(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+      '@tanstack/react-start-server': 1.167.22(crossws@0.4.4(srvx@0.11.15))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       '@tanstack/router-utils': 1.162.2
       '@tanstack/start-client-core': 1.170.14
       '@tanstack/start-plugin-core': 1.171.25(@tanstack/react-router@1.170.18(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(esbuild@0.28.1)(rolldown@1.2.1)(vite@8.2.0(@types/node@26.1.2)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))
-      '@tanstack/start-server-core': 1.169.17
+      '@tanstack/start-server-core': 1.169.17(crossws@0.4.4(srvx@0.11.15))
       pathe: 2.0.3
       react: 19.2.8
       react-dom: 19.2.8(react@19.2.8)
@@ -13997,7 +14006,7 @@ snapshots:
 
   '@tanstack/start-fn-stubs@1.162.0': {}
 
-  '@tanstack/start-plugin-core@1.171.25(@tanstack/react-router@1.170.18(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(esbuild@0.28.1)(rolldown@1.2.1)(supports-color@7.2.0)(vite@8.2.0(@types/node@26.1.2)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))':
+  '@tanstack/start-plugin-core@1.171.25(@tanstack/react-router@1.170.18(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(crossws@0.4.4(srvx@0.11.15))(esbuild@0.28.1)(rolldown@1.2.1)(supports-color@7.2.0)(vite@8.2.0(@types/node@26.1.2)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))':
     dependencies:
       '@babel/code-frame': 7.27.1
       '@babel/core': 7.29.7(supports-color@7.2.0)
@@ -14006,7 +14015,7 @@ snapshots:
       '@tanstack/router-generator': 1.167.21(supports-color@7.2.0)
       '@tanstack/router-plugin': 1.168.23(@tanstack/react-router@1.170.18(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(esbuild@0.28.1)(rolldown@1.2.1)(supports-color@7.2.0)(vite@8.2.0(@types/node@26.1.2)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))
       '@tanstack/router-utils': 1.162.2(supports-color@7.2.0)
-      '@tanstack/start-server-core': 1.169.17
+      '@tanstack/start-server-core': 1.169.17(crossws@0.4.4(srvx@0.11.15))
       exsolve: 1.1.1
       lightningcss: 1.33.0
       pathe: 2.0.3
@@ -14044,7 +14053,7 @@ snapshots:
       '@tanstack/router-generator': 1.167.21
       '@tanstack/router-plugin': 1.168.23(@tanstack/react-router@1.170.18(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(esbuild@0.28.1)(rolldown@1.2.1)(vite@8.2.0(@types/node@26.1.2)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))
       '@tanstack/router-utils': 1.162.2
-      '@tanstack/start-server-core': 1.169.17
+      '@tanstack/start-server-core': 1.169.17(crossws@0.4.4(srvx@0.11.15))
       exsolve: 1.1.1
       lightningcss: 1.33.0
       pathe: 2.0.3
@@ -14074,14 +14083,14 @@ snapshots:
       - webpack
     optional: true
 
-  '@tanstack/start-server-core@1.169.17':
+  '@tanstack/start-server-core@1.169.17(crossws@0.4.4(srvx@0.11.15))':
     dependencies:
       '@tanstack/history': 1.162.0
       '@tanstack/router-core': 1.171.15
       '@tanstack/start-client-core': 1.170.14
       '@tanstack/start-storage-context': 1.167.17
       fetchdts: 0.1.7
-      h3-v2: h3@2.0.1-rc.26
+      h3-v2: h3@2.0.1-rc.26(crossws@0.4.4(srvx@0.11.15))
       seroval: 1.6.0
     transitivePeerDependencies:
       - crossws
@@ -14282,6 +14291,8 @@ snapshots:
   '@types/unist@3.0.3': {}
 
   '@types/use-sync-external-store@0.0.6': {}
+
+  '@typesafe-ai/sdk@0.6.0': {}
 
   '@typescript/typescript-aix-ppc64@7.0.2':
     optional: true
@@ -14928,7 +14939,7 @@ snapshots:
       zod: 4.4.3
     optionalDependencies:
       '@prisma/client': 5.22.0
-      '@tanstack/react-start': 1.168.34(esbuild@0.28.1)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(rolldown@1.2.1)(supports-color@7.2.0)(vite@8.2.0(@types/node@26.1.2)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))
+      '@tanstack/react-start': 1.168.34(crossws@0.4.4(srvx@0.11.15))(esbuild@0.28.1)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(rolldown@1.2.1)(supports-color@7.2.0)(vite@8.2.0(@types/node@26.1.2)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))
       better-sqlite3: 12.11.1
       drizzle-kit: 0.31.10
       drizzle-orm: 0.41.0(@opentelemetry/api@1.9.1)(@prisma/client@5.22.0)(@types/pg@8.20.3)(better-sqlite3@12.11.1)(kysely@0.28.17)(pg@8.22.0)
@@ -14959,7 +14970,7 @@ snapshots:
       zod: 4.4.3
     optionalDependencies:
       '@prisma/client': 5.22.0
-      '@tanstack/react-start': 1.168.34(esbuild@0.28.1)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(rolldown@1.2.1)(supports-color@7.2.0)(vite@8.2.0(@types/node@26.1.2)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))
+      '@tanstack/react-start': 1.168.34(crossws@0.4.4(srvx@0.11.15))(esbuild@0.28.1)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(rolldown@1.2.1)(supports-color@7.2.0)(vite@8.2.0(@types/node@26.1.2)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))
       better-sqlite3: 12.11.1
       drizzle-kit: 0.31.10
       drizzle-orm: 0.45.2(@opentelemetry/api@1.9.1)(@prisma/client@5.22.0)(@types/pg@8.20.3)(@upstash/redis@1.38.1)(better-sqlite3@12.11.1)(kysely@0.28.17)(pg@8.22.0)
@@ -16219,10 +16230,12 @@ snapshots:
     optionalDependencies:
       crossws: 0.4.4(srvx@0.11.15)
 
-  h3@2.0.1-rc.26:
+  h3@2.0.1-rc.26(crossws@0.4.4(srvx@0.11.15)):
     dependencies:
       rou3: 0.9.1
       srvx: 0.12.4
+    optionalDependencies:
+      crossws: 0.4.4(srvx@0.11.15)
 
   handlebars@4.7.9:
     dependencies:
