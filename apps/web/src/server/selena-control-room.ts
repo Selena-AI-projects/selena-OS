@@ -30,6 +30,7 @@ import {
 	releaseIntentIdempotencyKey,
 	sha256,
 } from "@workspace/lib/selena-control-room";
+import { linkedInPostRefusal } from "@workspace/lib/selena-linkedin-post";
 import { configureReleaseProviders } from "@workspace/lib/selena-release-providers";
 import { and, desc, eq, isNull, sql } from "drizzle-orm";
 import { z } from "zod";
@@ -927,6 +928,30 @@ export const addReviewEvidenceFn = createServerFn({ method: "POST" })
 		});
 	});
 
+/**
+ * A LinkedIn Page takes a post, not an article: refuse a material that is not
+ * one, or that LinkedIn would cut off, before anyone approves or queues it.
+ */
+async function assertFitsChannel(
+	tx: ControlRoomDatabase,
+	account: { platform: string },
+	version: { body: string; contentId: string; ctaUrl: string },
+): Promise<void> {
+	if (account.platform !== "linkedin_page") return;
+	const [item] = await tx
+		.select({ contentKind: scrContentItems.contentKind, kind: scrContentItems.kind })
+		.from(scrContentItems)
+		.where(eq(scrContentItems.id, version.contentId))
+		.limit(1);
+	const refusal = linkedInPostRefusal({
+		body: version.body,
+		contentKind: item?.contentKind,
+		ctaUrl: version.ctaUrl,
+		materialKind: item?.kind,
+	});
+	if (refusal) throw new Error(refusal);
+}
+
 export const approveContentVersionFn = createServerFn({ method: "POST" })
 	.validator(
 		z.object({
@@ -1009,6 +1034,7 @@ export const approveContentVersionFn = createServerFn({ method: "POST" })
 				throw new Error("A newer content version invalidates this approval request");
 			if (!isLocalLinkedInDryRunAccount(account) && (!account.allowlisted || account.status !== "ACTIVE"))
 				throw new Error("Target account is not allowlisted for release");
+			await assertFitsChannel(tx, account, version);
 			if (assets.some((asset) => asset.scanStatus !== "CLEAN")) {
 				throw new Error("Approval requires every attached asset to complete malware scanning");
 			}
@@ -1262,6 +1288,7 @@ export const queueReleaseIntentFn = createServerFn({ method: "POST" })
 			if (latestVersion?.id !== version.id) throw new Error("A newer content version invalidates this release intent");
 			if (!isLocalLinkedInDryRunAccount(account) && (!account.allowlisted || account.status !== "ACTIVE"))
 				throw new Error("Target account is not allowlisted for release");
+			await assertFitsChannel(tx, account, version);
 			if (
 				activeKillSwitches.some(
 					(killSwitch) =>

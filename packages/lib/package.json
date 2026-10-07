@@ -61,6 +61,7 @@
 		"./selena-release-providers": "./src/selena-release-providers.ts",
 		"./selena-release-publish-policy": "./src/selena-release-publish-policy.ts",
 		"./selena-blotato": "./src/selena-blotato.ts",
+		"./selena-linkedin-post": "./src/selena-linkedin-post.ts",
 		"./selena-postiz": "./src/selena-postiz.ts",
 		"./selena-postiz-ingestion": "./src/selena-postiz-ingestion.ts",
 		"./public-source-adapters": "./src/public-source-adapters.ts",
