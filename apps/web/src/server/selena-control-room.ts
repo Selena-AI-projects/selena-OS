@@ -30,8 +30,15 @@ import {
 	releaseIntentIdempotencyKey,
 	sha256,
 } from "@workspace/lib/selena-control-room";
+import { labArticleRefusal } from "@workspace/lib/selena-lab-article";
 import { linkedInPostRefusal } from "@workspace/lib/selena-linkedin-post";
-import { configureReleaseProviders } from "@workspace/lib/selena-release-providers";
+import { BLOTATO_PROVIDER_ID } from "@workspace/lib/selena-release-provider-blotato";
+import { SELENA_LAB_PLATFORM, SELENA_LAB_PROVIDER_ID } from "@workspace/lib/selena-release-provider-lab";
+import {
+	configureReleaseProviders,
+	missingProviderSettings,
+	releaseEnvironmentFrom,
+} from "@workspace/lib/selena-release-providers";
 import { and, desc, eq, isNull, sql } from "drizzle-orm";
 import { z } from "zod";
 import { isGrowthEngineStage1Enabled } from "../lib/growth-engine-stage1.server";
@@ -929,26 +936,30 @@ export const addReviewEvidenceFn = createServerFn({ method: "POST" })
 	});
 
 /**
- * A LinkedIn Page takes a post, not an article: refuse a material that is not
- * one, or that LinkedIn would cut off, before anyone approves or queues it.
+ * A LinkedIn Page takes a post and Selena Lab takes an article: refuse a
+ * material that does not fit its channel — or that LinkedIn would cut off, or
+ * the Lab page could not show — before anyone approves or queues it.
  */
 async function assertFitsChannel(
 	tx: ControlRoomDatabase,
 	account: { platform: string },
-	version: { body: string; contentId: string; ctaUrl: string },
+	version: { body: string; contentId: string; ctaUrl: string; disclosure: unknown },
 ): Promise<void> {
-	if (account.platform !== "linkedin_page") return;
+	if (account.platform !== "linkedin_page" && account.platform !== SELENA_LAB_PLATFORM) return;
 	const [item] = await tx
 		.select({ contentKind: scrContentItems.contentKind, kind: scrContentItems.kind })
 		.from(scrContentItems)
 		.where(eq(scrContentItems.id, version.contentId))
 		.limit(1);
-	const refusal = linkedInPostRefusal({
-		body: version.body,
-		contentKind: item?.contentKind,
-		ctaUrl: version.ctaUrl,
-		materialKind: item?.kind,
-	});
+	const refusal =
+		account.platform === SELENA_LAB_PLATFORM
+			? labArticleRefusal({ body: version.body, disclosure: version.disclosure, materialKind: item?.kind })
+			: linkedInPostRefusal({
+					body: version.body,
+					contentKind: item?.contentKind,
+					ctaUrl: version.ctaUrl,
+					materialKind: item?.kind,
+				});
 	if (refusal) throw new Error(refusal);
 }
 
@@ -1519,7 +1530,7 @@ export const setReleaseKillSwitchFn = createServerFn({ method: "POST" })
  * answer names the account a release would land on.
  */
 export const getReleaseProviderStatusFn = createServerFn({ method: "GET" })
-	.validator(brandSchema)
+	.validator(brandSchema.extend({ provider: z.enum([BLOTATO_PROVIDER_ID]).default(BLOTATO_PROVIDER_ID) }))
 	.handler(async ({ data }) => {
 		const context = await resolveSessionAuthContext();
 		assertHumanReviewer(context);
@@ -1527,16 +1538,17 @@ export const getReleaseProviderStatusFn = createServerFn({ method: "GET" })
 		// the provider call happens after it, outside the transaction.
 		await withControlRoomTransaction(context, data.brandId, async () => undefined);
 
+		const missing = missingProviderSettings(data.provider);
 		const configuration = configureReleaseProviders();
-		if (configuration.state !== "CONFIGURED") {
-			return { missing: configuration.missing, state: "NOT_CONFIGURED" as const };
+		if (missing.length > 0 || configuration.state !== "CONFIGURED") {
+			return { missing, state: "NOT_CONFIGURED" as const };
 		}
-		const provider = configuration.registry.resolve(configuration.providerId);
+		const provider = configuration.registry.resolve(data.provider);
 		const connection = await provider.validateConnection();
 		return {
 			account: connection.state === "CONNECTED" ? connection.account : null,
 			environment: configuration.environment,
-			providerId: configuration.providerId,
+			providerId: data.provider,
 			reason: connection.state === "MISCONFIGURED" ? connection.reason : null,
 			state: connection.state,
 		};
@@ -1577,6 +1589,40 @@ export const confirmChannelBindingFn = createServerFn({ method: "POST" })
 			const row = (result as unknown as { rows?: { account_id?: string }[] }).rows?.[0];
 			if (!row?.account_id) throw new Error("The channel binding was not recorded");
 			return { channelAccountId: row.account_id };
+		});
+	});
+
+/**
+ * Let approved articles go to Selena Lab, the articles section of the site.
+ *
+ * Nothing about the destination is typed by hand: the repository is the one
+ * this deployment is configured with and the contour is the one it runs as.
+ * The web service holds only the repository's name — the token that opens
+ * pull requests lives on the gateway — so binding the site cannot itself
+ * write anything there; it says the gateway may propose an approved article,
+ * and the owner's merge is still what publishes it.
+ */
+export const confirmSiteChannelBindingFn = createServerFn({ method: "POST" })
+	.validator(brandSchema)
+	.handler(async ({ data }) => {
+		const context = await resolveSessionAuthContext();
+		assertHumanReviewer(context);
+		const repository = process.env.SELENA_LAB_SITE_REPOSITORY?.trim();
+		if (!repository) {
+			throw new Error("SELENA_LAB_SITE_REPOSITORY is not set on the web service, so there is no site to bind");
+		}
+		const environment = releaseEnvironmentFrom();
+		return await withControlRoomTransaction(context, data.brandId, async (tx) => {
+			const result = await tx.execute(sql`
+				SELECT * FROM selena_registry.confirm_site_channel_binding(
+					${data.brandId},
+					${repository},
+					${environment}::selena_registry.release_environment
+				)
+			`);
+			const row = (result as unknown as { rows?: { account_id?: string }[] }).rows?.[0];
+			if (!row?.account_id) throw new Error("The site binding was not recorded");
+			return { channelAccountId: row.account_id, environment, provider: SELENA_LAB_PROVIDER_ID, repository };
 		});
 	});
 

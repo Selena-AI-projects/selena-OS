@@ -282,6 +282,21 @@ export const ENV_REGISTRY: EnvVarSpec[] = [
 			"LinkedIn company page under the allowed Blotato account that releases target; omit to post as the account itself.",
 	},
 	{
+		name: "SELENA_LAB_GITHUB_TOKEN",
+		scope: "server",
+		requiredBy: "optional",
+		credential: true,
+		description:
+			"Fine-grained GitHub token (contents and pull requests, read and write, on the site repository only) with which the gateway opens a pull request for an approved Selena Lab article; set on the gateway alone.",
+	},
+	{
+		name: "SELENA_LAB_SITE_REPOSITORY",
+		scope: "server",
+		requiredBy: "optional",
+		description:
+			"owner/name of the site repository Selena Lab articles are proposed to; the web service names it when the owner binds the site channel, the gateway writes only to it.",
+	},
+	{
 		name: "APP_URL",
 		scope: "server",
 		requiredBy: ["cloud"],

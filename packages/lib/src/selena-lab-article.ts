@@ -465,6 +465,23 @@ export function labArticleFile(input: {
 	};
 }
 
+/**
+ * The article as a revision of the file already on the site: it keeps the
+ * date it first came out, and only `updatedAt` moves.
+ */
+export function asRevisionOf(file: LabArticleFile, previousContent: string): LabArticleFile {
+	let previous: unknown;
+	try {
+		previous = JSON.parse(previousContent);
+	} catch {
+		return file;
+	}
+	const publishedAt = record(previous).publishedAt;
+	const entry = JSON.parse(file.content) as Record<string, unknown>;
+	if (typeof publishedAt !== "string" || !isRealDate(publishedAt) || publishedAt > String(entry.updatedAt)) return file;
+	return { ...file, content: `${JSON.stringify({ ...entry, publishedAt }, null, 2)}\n` };
+}
+
 /** Why an approved material cannot become a Lab article, or null when it can. */
 export function labArticleRefusal(input: {
 	body: string;

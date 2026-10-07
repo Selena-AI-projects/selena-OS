@@ -39,7 +39,7 @@ function publicationPackage() {
  * functions the dispatch uses and records the order they were called in, so a
  * test can tell whether the provider was reached before or after a commit.
  */
-function gateway(options: { shouldSubmit?: boolean } = {}) {
+function gateway(options: { provider?: string; shouldSubmit?: boolean } = {}) {
 	const calls: string[] = [];
 	const query: GatewayQuery = async <Row>(sql: string) => {
 		if (sql.includes("prepare_postiz_submission")) {
@@ -63,7 +63,7 @@ function gateway(options: { shouldSubmit?: boolean } = {}) {
 					content_hash: "a".repeat(64),
 					expires_at: new Date("2030-01-01T01:00:00.000Z"),
 					manifest_hash: "b".repeat(64),
-					provider: "blotato",
+					provider: options.provider ?? "blotato",
 					signature: "signed-manifest",
 					signature_algorithm: "Ed25519",
 					signing_key_version: "v1",
@@ -93,10 +93,9 @@ function transport(scenario: "healthy" | "rejects" = "healthy") {
 	const fetchFn = vi.fn(async (input: RequestInfo | URL) => {
 		const url = String(input);
 		if (url.endsWith("/accounts")) {
-			return new Response(
-				JSON.stringify({ items: [{ fullname: "Page", id: ACCOUNT_ID, platform: "linkedin" }] }),
-				{ status: 200 },
-			);
+			return new Response(JSON.stringify({ items: [{ fullname: "Page", id: ACCOUNT_ID, platform: "linkedin" }] }), {
+				status: 200,
+			});
 		}
 		if (url.endsWith("/posts")) {
 			posts.push(url);
@@ -178,6 +177,25 @@ describe("dispatchReleaseManifest", () => {
 			}),
 		).resolves.toMatchObject({ outcome: "DEFINITIVE_FAILURE" });
 		expect(boundary.recorded[0]?.[1]).toBe("DEFINITIVE_FAILURE");
+	});
+
+	it("records a release bound to a provider this gateway does not hold as never sent, naming it", async () => {
+		const boundary = gateway({ provider: "selena_lab" });
+		const { fetchFn, posts } = transport();
+		await expect(
+			dispatchReleaseManifest({
+				configuration: production(fetchFn),
+				idempotencyKey: "release-idempotency-key",
+				inGatewayContext: boundary.inGatewayContext,
+				manifestId: MANIFEST_ID,
+				now: NOW,
+			}),
+		).resolves.toMatchObject({
+			outcome: "NOT_SENT",
+			reason: expect.stringContaining("selena_lab provider bound to this channel is not configured"),
+		});
+		expect(posts).toHaveLength(0);
+		expect(boundary.recorded[0]?.[1]).toBe("NOT_SENT");
 	});
 
 	it("records a refusal as an attempt that never left, on a contour that may not publish", async () => {

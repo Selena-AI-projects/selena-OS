@@ -1,13 +1,36 @@
-import type { ReleaseEnvironment } from "./selena-release-provider";
+import type { ReleaseEnvironment, ReleaseProviderAdapter } from "./selena-release-provider";
 import { createReleaseProviderRegistry } from "./selena-release-provider";
-import { createBlotatoReleaseProvider } from "./selena-release-provider-blotato";
+import { BLOTATO_PROVIDER_ID, createBlotatoReleaseProvider } from "./selena-release-provider-blotato";
+import { createSelenaLabReleaseProvider, SELENA_LAB_PROVIDER_ID } from "./selena-release-provider-lab";
 import { guardPublishing, type PublishPolicyEnv } from "./selena-release-publish-policy";
 
 export type ReleaseProviderRegistry = ReturnType<typeof createReleaseProviderRegistry>;
 
 export type ReleaseProviderConfiguration =
 	| { state: "NOT_CONFIGURED"; missing: string[] }
-	| { state: "CONFIGURED"; environment: ReleaseEnvironment; providerId: string; registry: ReleaseProviderRegistry };
+	| {
+			state: "CONFIGURED";
+			environment: ReleaseEnvironment;
+			providerIds: readonly string[];
+			registry: ReleaseProviderRegistry;
+	  };
+
+/**
+ * What each provider needs on a runtime before it is built. A runtime holds
+ * only the providers it is given settings for: the site's GitHub token, for
+ * one, belongs on the gateway that opens pull requests and nowhere else.
+ */
+export const RELEASE_PROVIDER_SETTINGS: Readonly<Record<string, readonly string[]>> = {
+	[BLOTATO_PROVIDER_ID]: ["BLOTATO_API_KEY", "BLOTATO_ALLOWED_ACCOUNT_ID"],
+	[SELENA_LAB_PROVIDER_ID]: ["SELENA_LAB_GITHUB_TOKEN", "SELENA_LAB_SITE_REPOSITORY"],
+};
+
+/** The settings a provider still lacks on this runtime; empty when it can be built. */
+export function missingProviderSettings(providerId: string, env: PublishPolicyEnv = process.env): string[] {
+	const required = RELEASE_PROVIDER_SETTINGS[providerId];
+	if (!required) throw new Error(`Unknown release provider: ${providerId}`);
+	return required.filter((name) => !env[name]);
+}
 
 /**
  * The release environment a runtime guards its providers with.
@@ -36,26 +59,45 @@ export function releaseEnvironmentFrom(env: PublishPolicyEnv = process.env): Rel
  * adapter goes in behind `guardPublishing`, so reading — connection state,
  * the accounts a credential can see — works anywhere the key is present,
  * while shaping or dispatching a release refuses structurally outside a
- * production contour with the publish flag set. Without a key there is no
- * registry at all: the caller sees what is missing rather than a provider
- * that fails on first use.
+ * production contour with the publish flag set. A provider without its
+ * settings is left out rather than built to fail on first use; with none at
+ * all there is no registry, and the caller sees what is missing.
  */
 export function configureReleaseProviders(
 	env: PublishPolicyEnv = process.env,
 	fetchFn: typeof fetch = fetch,
 ): ReleaseProviderConfiguration {
-	const missing = ["BLOTATO_API_KEY", "BLOTATO_ALLOWED_ACCOUNT_ID"].filter((name) => !env[name]);
-	if (missing.length > 0) return { missing, state: "NOT_CONFIGURED" };
+	const adapters: ReleaseProviderAdapter[] = [];
+	if (missingProviderSettings(BLOTATO_PROVIDER_ID, env).length === 0) {
+		adapters.push(
+			createBlotatoReleaseProvider(
+				{
+					allowedAccountId: env.BLOTATO_ALLOWED_ACCOUNT_ID as string,
+					allowedPageId: env.BLOTATO_ALLOWED_PAGE_ID || undefined,
+					apiKey: env.BLOTATO_API_KEY as string,
+				},
+				fetchFn,
+			),
+		);
+	}
+	if (missingProviderSettings(SELENA_LAB_PROVIDER_ID, env).length === 0) {
+		adapters.push(
+			createSelenaLabReleaseProvider(
+				{ repository: env.SELENA_LAB_SITE_REPOSITORY as string, token: env.SELENA_LAB_GITHUB_TOKEN as string },
+				fetchFn,
+			),
+		);
+	}
+	if (adapters.length === 0) {
+		return {
+			missing: Object.keys(RELEASE_PROVIDER_SETTINGS).flatMap((providerId) => missingProviderSettings(providerId, env)),
+			state: "NOT_CONFIGURED",
+		};
+	}
 
 	const environment = releaseEnvironmentFrom(env);
-	const blotato = createBlotatoReleaseProvider(
-		{
-			allowedAccountId: env.BLOTATO_ALLOWED_ACCOUNT_ID as string,
-			allowedPageId: env.BLOTATO_ALLOWED_PAGE_ID || undefined,
-			apiKey: env.BLOTATO_API_KEY as string,
-		},
-		fetchFn,
+	const registry = createReleaseProviderRegistry(
+		adapters.map((adapter) => guardPublishing(adapter, { env, environment })),
 	);
-	const registry = createReleaseProviderRegistry([guardPublishing(blotato, { env, environment })]);
-	return { environment, providerId: blotato.providerId, registry, state: "CONFIGURED" };
+	return { environment, providerIds: registry.providers(), registry, state: "CONFIGURED" };
 }

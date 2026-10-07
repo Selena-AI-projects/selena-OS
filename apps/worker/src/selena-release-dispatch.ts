@@ -115,6 +115,13 @@ export async function dispatchReleaseManifest(input: {
 	};
 
 	const authorization = reserved.authorization;
+	if (!configuration.providerIds.includes(authorization.provider)) {
+		return record({
+			outcome: "NOT_SENT",
+			reason: `The ${authorization.provider} provider bound to this channel is not configured on the Release Gateway`,
+			reservationId,
+		});
+	}
 	let provider: ReleaseProviderAdapter;
 	let prepared: PreparedRelease;
 	try {

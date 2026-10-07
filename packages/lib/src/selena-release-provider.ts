@@ -47,6 +47,12 @@ export type NormalizedRelease = {
 	contentHash: string;
 	contentVersionId: string;
 	ctaUrl: string | null;
+	/**
+	 * The version's disclosure as its author delivered it: language and, for an
+	 * article, the slug and search fields a page needs. Read only by adapters
+	 * that publish pages; a post has no use for it.
+	 */
+	disclosure?: unknown;
 	destination: {
 		accountRef: string;
 		channelAccountId: string;
@@ -284,6 +290,7 @@ export function toNormalizedRelease(
 		contentVersionId,
 		ctaUrl: asString(content.ctaUrl),
 		destination: { accountRef, channelAccountId, externalAccountId, platform },
+		disclosure: content.disclosure ?? null,
 		notBefore,
 		organizationId,
 		releaseIntentId,
