@@ -167,6 +167,32 @@ select has_column_privilege('selena_release.release_manifests', 'manifest', 'SEL
 кого уже есть своя система управления ключами. Домен шлюзу не нужен — к нему
 ходит только `web` по приватной сети.
 
+### Канал Selena Lab: статьи на сайт
+
+Одобренная статья из Aether уходит на сайт не напрямую: шлюз открывает pull request
+в репозитории сайта с файлом `data/lab/articles/<slug>.<en|ru>.json`, а публикует
+статью слияние этого pull request — сайт выкладывается из `main` (правила сайта —
+`docs/22-selena-lab-publishing.md` в SELENA-AI-COMPANY). Сайт должен уже читать
+такие файлы: без `data/lab/english-only.json` в его `main` шлюз отказывает, ничего
+не записав.
+
+| Сервис | Переменная | Значение |
+|---|---|---|
+| `gateway` | `SELENA_LAB_GITHUB_TOKEN` | fine-grained токен GitHub только на репозиторий сайта: Contents и Pull requests — чтение и запись. Только на шлюзе: `web` его не получает |
+| `gateway`, `web` | `SELENA_LAB_SITE_REPOSITORY` | `owner/name` репозитория сайта. `web` берёт его, когда владелец привязывает сайт; шлюз пишет только в него |
+
+Шлюз пишет лишь ветки `selena-lab/…` и pull request в `main`, ветку `main` он не
+двигает. Защита `main` в репозитории сайта (слияние только через pull request)
+делает это правилом GitHub, а не только кода. Как и у LinkedIn, pull request
+открывается лишь на контуре `production` с `SELENA_RELEASE_PUBLISH_ENABLED=true`:
+флаг разрешает шлюзу выходить к провайдерам, а что выходит — решают одобрение и
+постановка в очередь.
+
+Привязка — в Control Room, раздел Publications, кнопка «Bind the site». Ссылка
+на pull request появляется в Publishing activity. Открытый pull request
+публикацией не считается, поэтому Aether получает только отказ или сбой; отметки
+о слиянии пока нет, и сообщить автору «опубликовано» по сайту система ещё не умеет.
+
 ### worker
 
 `DATABASE_URL` под `selena_worker_login` плюс тот же минимум прикладных
