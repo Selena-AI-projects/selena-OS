@@ -6,6 +6,7 @@ import {
 	createBlotatoAdapter,
 } from "./selena-blotato";
 import { sha256 } from "./selena-control-room";
+import { LINKEDIN_POST_MAX_CHARACTERS, linkedInPostText } from "./selena-linkedin-post";
 import {
 	assertFutureSchedule,
 	assertReleaseDispatchInvariants,
@@ -97,12 +98,18 @@ function shapeBlotatoPayload(release: NormalizedRelease, allowedPageId?: string)
 		}
 		if (!asset.sourceUrl.startsWith("https://")) throw new Error("Blotato media must be reachable over HTTPS");
 	}
+	const text = linkedInPostText(release.body, release.ctaUrl);
+	if (text.length > LINKEDIN_POST_MAX_CHARACTERS) {
+		// Refused here rather than by LinkedIn: once Blotato accepts a submission, a
+		// post LinkedIn later rejects reads as published on our side.
+		throw new Error(`LinkedIn post is ${text.length} characters; LinkedIn allows ${LINKEDIN_POST_MAX_CHARACTERS}`);
+	}
 	return {
 		accountId: release.destination.externalAccountId,
 		mediaUrls: release.assets.map((asset) => asset.sourceUrl),
 		platform: BLOTATO_PLATFORM,
 		scheduledTime: release.notBefore,
-		text: release.ctaUrl ? `${release.body}\n\n${release.ctaUrl}` : release.body,
+		text,
 		...(allowedPageId ? { pageId: allowedPageId } : {}),
 	};
 }

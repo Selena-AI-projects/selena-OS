@@ -351,6 +351,39 @@ describe.each(subjects)("release provider contract: $name", (subject) => {
 	});
 });
 
+describe("blotato posts to LinkedIn", () => {
+	function provider(transport: ReturnType<typeof createBlotatoTransport>) {
+		return createBlotatoReleaseProvider(
+			{ allowedAccountId: BLOTATO_ACCOUNT_ID, apiKey: "blotato-test-key", apiUrl: BLOTATO_TEST_API_URL },
+			transport,
+		);
+	}
+
+	function prepareBody(adapter: ReturnType<typeof provider>, body: string) {
+		return adapter.prepareManifest({
+			authorization: authorization(adapter.providerId),
+			now: NOW,
+			release: releaseFor(BLOTATO_ACCOUNT_ID, { assets: [], body }),
+		});
+	}
+
+	it("sends the text LinkedIn will show, not the Markdown it was written in", async () => {
+		const transport = createBlotatoTransport("healthy");
+		const adapter = provider(transport);
+		await adapter.dispatch(prepareBody(adapter, "## Three checks\n\n- **Sources** that cite you"));
+
+		const postCall = transport.mock.calls.find(([, init]) => init?.method === "POST");
+		const sent = JSON.parse(String(postCall?.[1]?.body));
+		expect(sent.post.content.text).toBe("Three checks\n\n• Sources that cite you\n\nhttps://selena.test.invalid/offer");
+	});
+
+	it("refuses to prepare a post longer than LinkedIn allows, so nothing reaches Blotato", () => {
+		const transport = createBlotatoTransport("healthy");
+		expect(() => prepareBody(provider(transport), "a".repeat(3001))).toThrow(/LinkedIn allows 3000/);
+		expect(transport).not.toHaveBeenCalled();
+	});
+});
+
 describe("release provider registry", () => {
 	it("refuses to map one provider ID onto two adapters", () => {
 		expect(() =>

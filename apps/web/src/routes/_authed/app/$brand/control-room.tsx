@@ -343,7 +343,16 @@ function ControlRoomPage() {
 	function checkProviderConnection() {
 		startTransition(async () => {
 			try {
-				setProviderStatus(await getReleaseProviderStatusFn({ data: { brandId } }));
+				const status = await getReleaseProviderStatusFn({ data: { brandId } });
+				setProviderStatus(status);
+				// The connected account is the only one the key may post to, so it is
+				// what the binding below has to name; typing it by hand only invites a
+				// mismatch the gateway would later refuse.
+				if (status.state === "CONNECTED" && status.account) {
+					const { accountRef, externalAccountId } = status.account;
+					setChannelAccountRef((value) => value || accountRef);
+					setChannelProviderAccountId((value) => value || externalAccountId);
+				}
 			} catch {
 				setNotice("The channel connection could not be checked. Nothing was published.");
 			}
@@ -471,7 +480,7 @@ function ControlRoomPage() {
 
 	function submitApproval(event: FormEvent<HTMLFormElement>) {
 		event.preventDefault();
-		run(
+		runShowingReason(
 			() =>
 				approveContentVersionFn({
 					data: {
@@ -487,7 +496,7 @@ function ControlRoomPage() {
 
 	function submitReleaseIntent(event: FormEvent<HTMLFormElement>) {
 		event.preventDefault();
-		run(
+		runShowingReason(
 			() =>
 				queueReleaseIntentFn({
 					data: {
@@ -497,7 +506,9 @@ function ControlRoomPage() {
 						scheduleTimezone: releaseTimezone,
 					},
 				}),
-			"LinkedIn test is ready. Nothing will be published.",
+			data.stagingMvp
+				? "LinkedIn test is ready. Nothing will be published."
+				: "Release queued. Its outcome appears under Publications.",
 		);
 	}
 
@@ -783,7 +794,7 @@ function ControlRoomPage() {
 									<p className="mt-3 text-sm text-muted-foreground">
 										{linkedInPageAccount
 											? `${displayChannel(linkedInPageAccount)} is ready for a controlled release after approval.`
-											: "Connect the configured LinkedIn Page through the controlled Postiz setup. Connection setup does not create a post."}
+											: "Bind the LinkedIn Page under Publications. Binding a channel does not create a post."}
 									</p>
 								</CardContent>
 							</Card>
@@ -1130,7 +1141,7 @@ function ControlRoomPage() {
 									<p className="text-sm text-muted-foreground">
 										{data.stagingMvp
 											? "This test stops after a queued internal record. It cannot send or publish anything."
-											: "Publishing stays unavailable until the separate safety service is deployed."}
+											: "A queued release goes to the provider only while publishing is switched on for this contour. Stop brand blocks every queued release at once."}
 									</p>
 									<div className="flex flex-wrap items-center gap-2">
 										<StatusBadge value={brandStopActive ? "BLOCKED" : "READY"} />
@@ -1269,9 +1280,14 @@ function ControlRoomPage() {
 												</span>
 											</div>
 											{providerStatus.account && (
-												<p className="font-medium">
-													{providerStatus.account.accountRef} ({providerStatus.account.platform})
-												</p>
+												<>
+													<p className="font-medium">
+														{providerStatus.account.accountRef} ({providerStatus.account.platform})
+													</p>
+													<p className="text-muted-foreground">
+														Account id: <span className="font-mono">{providerStatus.account.externalAccountId}</span>
+													</p>
+												</>
 											)}
 											{providerStatus.reason && <p className="text-muted-foreground">{providerStatus.reason}</p>}
 										</>
