@@ -17,6 +17,7 @@ import {
 	approveContentVersionFn,
 	cancelReleaseIntentFn,
 	confirmChannelBindingFn,
+	confirmSiteChannelBindingFn,
 	createContentVersionFn,
 	createControlRoomContentFn,
 	getControlRoomWorkspaceFn,
@@ -182,6 +183,7 @@ function StatusBadge({ value }: { value: string | null }) {
 function displayChannel(account: { platform: string; providerAccountRef: string }): string {
 	if (account.platform === "linkedin_page_dry_run") return "LinkedIn test — nothing will be published";
 	if (account.platform === "linkedin_page") return account.providerAccountRef || "LinkedIn Page";
+	if (account.platform === "website_lab") return `${account.providerAccountRef || "Selena Lab"} (site)`;
 	return account.providerAccountRef || account.platform.replaceAll("_", " ");
 }
 
@@ -375,6 +377,20 @@ function ControlRoomPage() {
 				}),
 			`Channel bound: an approved release for this brand may now be carried to its provider on ${boundEnvironment}`,
 		);
+	}
+
+	function bindSite() {
+		startTransition(async () => {
+			try {
+				const bound = await confirmSiteChannelBindingFn({ data: { brandId } });
+				await router.invalidate();
+				setNotice(
+					`Site bound on ${bound.environment}: an approved article for this brand will be proposed to ${bound.repository} as a pull request. Merging it publishes the article.`,
+				);
+			} catch (error) {
+				setNotice(error instanceof Error && error.message ? error.message : "The site could not be bound.");
+			}
+		});
 	}
 
 	function revokeChannelBinding(bindingId: string) {
@@ -1351,6 +1367,27 @@ function ControlRoomPage() {
 						)}
 						{data.role === "owner" && (
 							<Card className="rounded-md shadow-none">
+								<CardHeader className="flex flex-row items-start justify-between gap-4 space-y-0">
+									<CardTitle className="text-base">Selena Lab site</CardTitle>
+									<Button disabled={pending} onClick={bindSite} size="sm" variant="outline">
+										<IconLockCheck className="size-4" />
+										Bind the site
+									</Button>
+								</CardHeader>
+								<CardContent className="space-y-2 text-sm text-muted-foreground">
+									<p>
+										An approved Aether article released to the site becomes a pull request in the site repository.
+										Nothing is public until you merge it: the site deploys from its main branch.
+									</p>
+									<p>
+										Only articles go here, in Russian and English. Approve and queue each edition: the pull request
+										opens once both are approved, and the article goes out in both languages at once.
+									</p>
+								</CardContent>
+							</Card>
+						)}
+						{data.role === "owner" && (
+							<Card className="rounded-md shadow-none">
 								<CardHeader>
 									<CardTitle className="text-base">Channel bindings</CardTitle>
 								</CardHeader>
@@ -1427,7 +1464,24 @@ function ControlRoomPage() {
 													<TableCell>{channelName(item.channelAccountId)}</TableCell>
 													<TableCell>{formatDate(item.updatedAt)}</TableCell>
 													<TableCell>
-														<StatusBadge value={item.status} />
+														<div className="flex flex-wrap items-center gap-2">
+															<StatusBadge value={item.status} />
+															{item.platform === "website_lab" &&
+																item.platformObjectId?.startsWith("https://github.com/") && (
+																	<a
+																		className="text-xs underline underline-offset-2"
+																		href={item.platformObjectId}
+																		rel="noreferrer"
+																		target="_blank"
+																	>
+																		{item.platformObjectId.includes("/tree/")
+																			? "Waiting for the other language"
+																			: item.status === "ACCEPTED"
+																				? "Pull request: merge to publish"
+																				: "Pull request"}
+																	</a>
+																)}
+														</div>
 													</TableCell>
 												</TableRow>
 											))

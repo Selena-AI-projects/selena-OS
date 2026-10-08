@@ -59,6 +59,8 @@ declare global {
 			readonly BLOTATO_API_KEY?: string;
 			readonly BLOTATO_ALLOWED_ACCOUNT_ID?: string;
 			readonly BLOTATO_ALLOWED_PAGE_ID?: string;
+			readonly SELENA_LAB_GITHUB_TOKEN?: string;
+			readonly SELENA_LAB_SITE_REPOSITORY?: string;
 			readonly SELENA_SCANNER_URL?: string;
 			readonly SELENA_SCANNER_INTERNAL_TOKEN?: string;
 			readonly SELENA_STORAGE_API_URL?: string;

@@ -1,13 +1,18 @@
 import { describe, expect, it, vi } from "vitest";
 import type { NormalizedRelease, ReleaseDispatchAuthorization } from "./selena-release-provider";
 import { BLOTATO_PROVIDER_ID } from "./selena-release-provider-blotato";
-import { configureReleaseProviders, releaseEnvironmentFrom } from "./selena-release-providers";
+import { SELENA_LAB_PROVIDER_ID } from "./selena-release-provider-lab";
+import { configureReleaseProviders, missingProviderSettings, releaseEnvironmentFrom } from "./selena-release-providers";
 import { PublishRefusedError } from "./selena-release-publish-policy";
 
 const ACCOUNT_ID = "acct-1";
 const NOT_BEFORE = "2030-01-02T12:00:00.000Z";
 const NOW = new Date("2030-01-01T00:00:00.000Z");
 const CONFIGURED = { BLOTATO_ALLOWED_ACCOUNT_ID: ACCOUNT_ID, BLOTATO_API_KEY: "test-key" };
+const SITE = {
+	SELENA_LAB_GITHUB_TOKEN: "site-token",
+	SELENA_LAB_SITE_REPOSITORY: "Selena-AI-projects/SELENA-AI-COMPANY",
+};
 
 function transport(): { calls: string[]; fetchFn: typeof fetch } {
 	const calls: string[] = [];
@@ -78,12 +83,41 @@ describe("releaseEnvironmentFrom", () => {
 describe("configureReleaseProviders", () => {
 	it("names what is missing instead of building a provider that fails on first use", () => {
 		expect(configureReleaseProviders({}, transport().fetchFn)).toEqual({
-			missing: ["BLOTATO_API_KEY", "BLOTATO_ALLOWED_ACCOUNT_ID"],
+			missing: [
+				"BLOTATO_API_KEY",
+				"BLOTATO_ALLOWED_ACCOUNT_ID",
+				"SELENA_LAB_GITHUB_TOKEN",
+				"SELENA_LAB_SITE_REPOSITORY",
+			],
 			state: "NOT_CONFIGURED",
 		});
 		expect(configureReleaseProviders({ BLOTATO_API_KEY: "k" }, transport().fetchFn)).toMatchObject({
-			missing: ["BLOTATO_ALLOWED_ACCOUNT_ID"],
+			missing: ["BLOTATO_ALLOWED_ACCOUNT_ID", "SELENA_LAB_GITHUB_TOKEN", "SELENA_LAB_SITE_REPOSITORY"],
 		});
+		expect(missingProviderSettings(SELENA_LAB_PROVIDER_ID, { SELENA_LAB_SITE_REPOSITORY: "o/r" })).toEqual([
+			"SELENA_LAB_GITHUB_TOKEN",
+		]);
+	});
+
+	it("builds only the providers a runtime holds settings for, each behind the publishing guard", () => {
+		const siteOnly = configureReleaseProviders(
+			{ ...SITE, SELENA_GROWTH_SOURCE_ENVIRONMENT: "staging", SELENA_RELEASE_PUBLISH_ENABLED: "true" },
+			transport().fetchFn,
+		);
+		if (siteOnly.state !== "CONFIGURED") throw new Error("expected a configured registry");
+		expect(siteOnly.providerIds).toEqual([SELENA_LAB_PROVIDER_ID]);
+		expect(() => siteOnly.registry.resolve(BLOTATO_PROVIDER_ID)).toThrow("PROVIDER_NOT_BOUND");
+		expect(() =>
+			siteOnly.registry.resolve(SELENA_LAB_PROVIDER_ID).prepareManifest({
+				authorization: { ...authorization("STAGING"), providerId: SELENA_LAB_PROVIDER_ID },
+				now: NOW,
+				release: release(),
+			}),
+		).toThrow(PublishRefusedError);
+
+		const both = configureReleaseProviders({ ...CONFIGURED, ...SITE }, transport().fetchFn);
+		if (both.state !== "CONFIGURED") throw new Error("expected a configured registry");
+		expect(both.providerIds).toEqual([BLOTATO_PROVIDER_ID, SELENA_LAB_PROVIDER_ID]);
 	});
 
 	it("lets a staging runtime look at its account without being able to publish", async () => {
