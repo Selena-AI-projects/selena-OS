@@ -1380,8 +1380,8 @@ function ControlRoomPage() {
 										Nothing is public until you merge it: the site deploys from its main branch.
 									</p>
 									<p>
-										Only articles go here. The English edition goes first; the Russian one follows under the same
-										address once the English article is on the site.
+										Only articles go here, in Russian and English. Approve and queue each edition: the pull request
+										opens once both are approved, and the article goes out in both languages at once.
 									</p>
 								</CardContent>
 							</Card>
@@ -1474,7 +1474,11 @@ function ControlRoomPage() {
 																		rel="noreferrer"
 																		target="_blank"
 																	>
-																		{item.status === "ACCEPTED" ? "Pull request: merge to publish" : "Pull request"}
+																		{item.platformObjectId.includes("/tree/")
+																			? "Waiting for the other language"
+																			: item.status === "ACCEPTED"
+																				? "Pull request: merge to publish"
+																				: "Pull request"}
 																	</a>
 																)}
 														</div>

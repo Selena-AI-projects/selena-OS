@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { englishOnlyAfter, LabArticleRefused, labArticleFile, labArticleRefusal } from "./selena-lab-article";
+import { LabArticleRefused, labArticleFile, labArticleRefusal } from "./selena-lab-article";
 
 const PROVENANCE = {
 	contentHash: "a".repeat(64),
@@ -275,23 +275,5 @@ describe("labArticleRefusal", () => {
 		expect(
 			labArticleRefusal({ body: ARTICLE, disclosure: disclosure({ meta_title: "Short" }), materialKind: "ARTICLE" }),
 		).toMatch(/search title/);
-	});
-});
-
-describe("englishOnlyAfter", () => {
-	it("lists an English article until its Russian edition is on the site", () => {
-		const english = { locale: "en" as const, slug: "ai-recommendations-check" };
-		const russian = { locale: "ru" as const, slug: "ai-recommendations-check" };
-		expect(englishOnlyAfter(["/lab/guides/z"], english, false)).toEqual([
-			"/lab/articles/ai-recommendations-check",
-			"/lab/guides/z",
-		]);
-		expect(englishOnlyAfter(["/lab/articles/ai-recommendations-check"], english, false)).toEqual([
-			"/lab/articles/ai-recommendations-check",
-		]);
-		expect(englishOnlyAfter([], english, true)).toEqual([]);
-		expect(englishOnlyAfter(["/lab/articles/ai-recommendations-check", "/lab/guides/z"], russian, false)).toEqual([
-			"/lab/guides/z",
-		]);
 	});
 });

@@ -34,21 +34,27 @@ const RUSSIAN = `# Почему ИИ не советует ресторан
 
 type Pull = { head: string; html_url: string; merged_at: string | null; number: number; state: "open" | "closed" };
 
-/** An in-memory site repository behind GitHub's REST paths. */
+const BRANCH = "selena-lab/articles/ai-recommendations-check";
+const BRANCH_URL = `https://github.com/${REPOSITORY}/tree/${BRANCH}`;
+
+/** An in-memory site repository behind GitHub's REST paths: branches are snapshots of files. */
 function github(
 	options: { failOn?: Record<string, number>; files?: Record<string, string | undefined>; pulls?: Pull[] } = {},
 ) {
-	const files: Record<string, string | undefined> = { [ENGLISH_ONLY]: "[]\n", ...options.files };
+	const commits = new Map<string, Record<string, string | undefined>>([
+		["base-commit", { [ENGLISH_ONLY]: "[]\n", ...options.files }],
+	]);
+	const trees = new Map<string, Record<string, string | undefined>>();
+	const refs = new Map<string, string>([["main", "base-commit"]]);
 	const pulls: Pull[] = [...(options.pulls ?? [])];
-	const refs = new Map<string, string>([["heads/main", "base-commit"]]);
 	const requests: Array<{ body: unknown; host: string; key: string; redirect?: RequestRedirect }> = [];
-	const trees: Array<Array<{ content: string; path: string }>> = [];
+	const written: Array<Array<{ content: string; path: string }>> = [];
 	const json = (status: number, body: unknown) => new Response(JSON.stringify(body), { status });
 
 	const fetchFn = (async (input: RequestInfo | URL, init?: RequestInit) => {
 		const url = new URL(String(input));
 		const method = init?.method ?? "GET";
-		const path = url.pathname.replace(`/repos/${REPOSITORY}`, "");
+		const path = decodeURIComponent(url.pathname.replace(`/repos/${REPOSITORY}`, ""));
 		const key = `${method} ${path}`;
 		const body = init?.body ? JSON.parse(String(init.body)) : undefined;
 		requests.push({ body, host: url.host, key, redirect: init?.redirect });
@@ -58,37 +64,51 @@ function github(
 		if (failure) return json(failure[1], { message: "Server Error" });
 
 		if (key === "GET ") return json(200, { default_branch: "main", full_name: REPOSITORY });
-		if (key === "GET /git/ref/heads/main") return json(200, { object: { sha: refs.get("heads/main") } });
-		if (key === "GET /git/commits/base-commit") return json(200, { tree: { sha: "base-tree" } });
+		if (method === "GET" && path.startsWith("/git/ref/heads/")) {
+			const sha = refs.get(path.slice("/git/ref/heads/".length));
+			return sha ? json(200, { object: { sha } }) : json(404, { message: "Not Found" });
+		}
+		if (method === "GET" && path.startsWith("/git/commits/")) {
+			return json(200, { tree: { sha: `tree-of-${path.slice("/git/commits/".length)}` } });
+		}
 		if (method === "GET" && path.startsWith("/contents/")) {
-			const file = decodeURIComponent(path.slice("/contents/".length));
-			const content = files[file];
+			const sha = refs.get(url.searchParams.get("ref") ?? "main");
+			const content = sha ? commits.get(sha)?.[path.slice("/contents/".length)] : undefined;
 			if (content === undefined) return json(404, { message: "Not Found" });
 			return json(200, { content: Buffer.from(content, "utf8").toString("base64"), encoding: "base64", type: "file" });
 		}
 		if (key === "POST /git/trees") {
-			trees.push(
-				body.tree.map((entry: { content: string; path: string }) => ({ content: entry.content, path: entry.path })),
-			);
-			return json(201, { sha: `tree-${trees.length}` });
+			const entries = body.tree.map((entry: { content: string; path: string }) => ({
+				content: entry.content,
+				path: entry.path,
+			}));
+			written.push(entries);
+			const base = commits.get(String(body.base_tree).replace("tree-of-", "")) ?? {};
+			const sha = `tree-${written.length}`;
+			trees.set(sha, {
+				...base,
+				...Object.fromEntries(entries.map((entry: { content: string; path: string }) => [entry.path, entry.content])),
+			});
+			return json(201, { sha });
 		}
-		if (key === "POST /git/commits") return json(201, { sha: `commit-${trees.length}` });
+		if (key === "POST /git/commits") {
+			const sha = `commit-${commits.size}`;
+			commits.set(sha, trees.get(body.tree) ?? {});
+			return json(201, { sha });
+		}
 		if (key === "POST /git/refs") {
-			const ref = body.ref.replace("refs/", "");
+			const ref = body.ref.replace("refs/heads/", "");
 			if (refs.has(ref)) return json(422, { message: "Reference already exists" });
 			refs.set(ref, body.sha);
 			return json(201, {});
 		}
-		if (method === "PATCH" && path.startsWith("/git/refs/")) {
-			refs.set(path.replace("/git/refs/", ""), body.sha);
+		if (method === "PATCH" && path.startsWith("/git/refs/heads/")) {
+			refs.set(path.slice("/git/refs/heads/".length), body.sha);
 			return json(200, {});
 		}
 		if (key === "GET /pulls") {
 			const head = url.searchParams.get("head")?.split(":")[1];
-			return json(
-				200,
-				pulls.filter((pull) => pull.head === head),
-			);
+			return json(200, pulls.filter((pull) => pull.head === head).reverse());
 		}
 		if (key === "POST /pulls") {
 			if (pulls.some((pull) => pull.head === body.head && pull.state === "open"))
@@ -104,8 +124,9 @@ function github(
 		throw new Error(`Unexpected GitHub request: ${key}`);
 	}) as typeof fetch;
 
+	const filesOn = (branch: string) => commits.get(refs.get(branch) ?? "") ?? {};
 	const writes = () => requests.filter((request) => request.key.startsWith("POST") || request.key.startsWith("PATCH"));
-	return { fetchFn, pulls, refs, requests, trees, writes };
+	return { fetchFn, filesOn, pulls, refs, requests, writes, written };
 }
 
 function release(overrides: Partial<NormalizedRelease> = {}, language = "en", body = ARTICLE): NormalizedRelease {
@@ -165,100 +186,76 @@ async function publish(site: ReturnType<typeof github>, input: NormalizedRelease
 }
 
 describe("Selena Lab release provider", () => {
-	it("opens a pull request that adds the article and leaves main to the owner's merge", async () => {
+	it("holds the first edition on the article's branch until the other one arrives", async () => {
 		const site = github();
-		await expect(publish(site)).resolves.toEqual({ outcome: "ACCEPTED", providerReferenceId: PR_URL });
+		await expect(publish(site, release({}, "ru", RUSSIAN))).resolves.toEqual({
+			outcome: "ACCEPTED",
+			providerReferenceId: BRANCH_URL,
+		});
+		expect(site.pulls).toEqual([]);
+		expect(Object.keys(site.filesOn(BRANCH))).toContain(RU_FILE);
+		expect(site.refs.get("main")).toBe("base-commit");
+	});
 
-		const [tree] = site.trees;
-		expect(tree.map((file) => file.path)).toEqual([EN_FILE, ENGLISH_ONLY]);
-		const entry = JSON.parse(tree[0].content);
+	it("opens one pull request with both editions once the second is approved", async () => {
+		const site = github();
+		await publish(site, release({}, "ru", RUSSIAN));
+		await expect(publish(site, release({ releaseIntentId: "55555555-5555-5555-5555-555555555555" }))).resolves.toEqual({
+			outcome: "ACCEPTED",
+			providerReferenceId: PR_URL,
+		});
+
+		const onBranch = site.filesOn(BRANCH);
+		expect(onBranch[RU_FILE]).toBeDefined();
+		const english = JSON.parse(onBranch[EN_FILE] ?? "{}");
 		// The planned date in the release's own time zone, not UTC's.
-		expect(entry).toMatchObject({
-			publishedAt: "2030-01-02",
-			slug: "ai-recommendations-check",
-			updatedAt: "2030-01-02",
-		});
-		expect(entry.provenance).toEqual({
-			contentHash: "a".repeat(64),
-			contentVersionId: "11111111-1111-1111-1111-111111111111",
-			manifestHash: "b".repeat(64),
-			releaseIntentId: "33333333-3333-3333-3333-333333333333",
-		});
-		expect(JSON.parse(tree[1].content)).toEqual(["/lab/articles/ai-recommendations-check"]);
+		expect(english).toMatchObject({ publishedAt: "2030-01-02", slug: "ai-recommendations-check" });
+		expect(english.provenance.releaseIntentId).toBe("55555555-5555-5555-5555-555555555555");
 
 		const pullRequest = site.requests.find((request) => request.key === "POST /pulls")?.body as Record<string, string>;
-		expect(pullRequest).toMatchObject({
-			base: "main",
-			head: "selena-lab/articles/ai-recommendations-check-en-33333333",
-			title: "Selena Lab: Why AI assistants skip a restaurant that ranks on Google (EN)",
-		});
+		expect(pullRequest).toMatchObject({ base: "main", head: BRANCH });
+		expect(pullRequest.body).toContain("https://www.selenasystems.com/ru/lab/articles/ai-recommendations-check");
 		expect(pullRequest.body).toContain("https://www.selenasystems.com/lab/articles/ai-recommendations-check");
-		expect(site.refs.get("heads/main")).toBe("base-commit");
-		expect(site.writes().every((request) => !request.key.includes("heads/main"))).toBe(true);
+		expect(site.refs.get("main")).toBe("base-commit");
+		expect(site.writes().every((request) => !request.key.endsWith("heads/main"))).toBe(true);
 		expect(site.requests.every((request) => request.host === "api.github.com" && request.redirect === "error")).toBe(
 			true,
 		);
+		// The site's own list of untranslated hand-written articles is never touched.
+		expect(site.written.flat().some((file) => file.path === ENGLISH_ONLY)).toBe(false);
 	});
 
-	it("takes the English article off the English-only list when its Russian edition goes out", async () => {
-		const site = github({
-			files: { [EN_FILE]: "{}\n", [ENGLISH_ONLY]: '["/lab/articles/ai-recommendations-check", "/lab/guides/z"]\n' },
-		});
-		await expect(publish(site, release({}, "ru", RUSSIAN))).resolves.toMatchObject({ outcome: "ACCEPTED" });
-		const [tree] = site.trees;
-		expect(tree.map((file) => file.path)).toEqual([RU_FILE, ENGLISH_ONLY]);
-		expect(JSON.parse(tree[1].content)).toEqual(["/lab/guides/z"]);
-	});
-
-	it("refuses a Russian edition before its English article is on the site, writing nothing", async () => {
-		const site = github();
-		await expect(publish(site, release({}, "ru", RUSSIAN))).resolves.toMatchObject({
-			outcome: "DEFINITIVE_FAILURE",
-			reason: expect.stringContaining("goes out after its English article"),
-		});
-		expect(site.writes()).toEqual([]);
-	});
-
-	it("keeps the first publication date when an article on the site is revised", async () => {
+	it("revises one edition alone when the pair is already on the site, keeping its first date", async () => {
 		const previous = `${JSON.stringify({ publishedAt: "2029-11-05", slug: "ai-recommendations-check" })}\n`;
 		const site = github({ files: { [EN_FILE]: previous, [RU_FILE]: "{}\n" } });
-		await expect(publish(site)).resolves.toMatchObject({ outcome: "ACCEPTED" });
-		const [tree] = site.trees;
-		// Its Russian edition exists, so the list of untranslated articles is left alone.
-		expect(tree.map((file) => file.path)).toEqual([EN_FILE]);
-		expect(JSON.parse(tree[0].content)).toMatchObject({ publishedAt: "2029-11-05", updatedAt: "2030-01-02" });
+		await expect(publish(site)).resolves.toEqual({ outcome: "ACCEPTED", providerReferenceId: PR_URL });
+		expect(site.written).toHaveLength(1);
+		expect(site.written[0].map((file) => file.path)).toEqual([EN_FILE]);
+		expect(JSON.parse(site.written[0][0].content)).toMatchObject({
+			publishedAt: "2029-11-05",
+			updatedAt: "2030-01-02",
+		});
 	});
 
-	it("answers a repeated release with the pull request it already opened", async () => {
-		const open = github({
-			pulls: [
-				{
-					head: "selena-lab/articles/ai-recommendations-check-en-33333333",
-					html_url: PR_URL,
-					merged_at: null,
-					number: 154,
-					state: "open",
-				},
-			],
-		});
-		await expect(publish(open)).resolves.toEqual({ outcome: "ACCEPTED", providerReferenceId: PR_URL });
-		expect(open.writes()).toEqual([]);
+	it("answers a repeated release with the pull request already open, writing nothing again", async () => {
+		const site = github();
+		await publish(site, release({}, "ru", RUSSIAN));
+		await publish(site);
+		const writes = site.writes().length;
+		await expect(publish(site)).resolves.toEqual({ outcome: "ACCEPTED", providerReferenceId: PR_URL });
+		expect(site.writes()).toHaveLength(writes);
+	});
 
-		const closed = github({
-			pulls: [
-				{
-					head: "selena-lab/articles/ai-recommendations-check-en-33333333",
-					html_url: PR_URL,
-					merged_at: null,
-					number: 154,
-					state: "closed",
-				},
-			],
+	it("starts the branch again when an earlier pull request for the article is over", async () => {
+		const site = github({
+			pulls: [{ head: BRANCH, html_url: PR_URL, merged_at: "2029-12-01T00:00:00Z", number: 120, state: "closed" }],
 		});
-		await expect(publish(closed)).resolves.toMatchObject({
-			outcome: "DEFINITIVE_FAILURE",
-			reason: expect.stringContaining("closed without merging"),
+		site.refs.set(BRANCH, "base-commit");
+		await expect(publish(site, release({}, "ru", RUSSIAN))).resolves.toEqual({
+			outcome: "ACCEPTED",
+			providerReferenceId: BRANCH_URL,
 		});
+		expect(site.requests.some((request) => request.key === `PATCH /git/refs/heads/${BRANCH}`)).toBe(true);
 	});
 
 	it("refuses to write to a site that does not read Lab files yet", async () => {
@@ -271,23 +268,17 @@ describe("Selena Lab release provider", () => {
 	});
 
 	it("calls a failure before the pull request definitive and a lost answer to it ambiguous", async () => {
-		const beforePullRequest = github({ failOn: { "POST /git/trees": 500 } });
-		await expect(publish(beforePullRequest)).resolves.toMatchObject({
+		await expect(publish(github({ failOn: { "POST /git/trees": 500 } }))).resolves.toMatchObject({
 			outcome: "DEFINITIVE_FAILURE",
 			reason: expect.stringContaining("Nothing was opened for the owner to merge"),
 		});
-
-		await expect(publish(github({ failOn: { "POST /pulls": 502 } }))).resolves.toMatchObject({ outcome: "AMBIGUOUS" });
-		await expect(publish(github({ failOn: { "POST /pulls": 403 } }))).resolves.toMatchObject({
+		const pair = { [RU_FILE]: "{}\n", [EN_FILE]: "{}\n" };
+		await expect(publish(github({ failOn: { "POST /pulls": 502 }, files: pair }))).resolves.toMatchObject({
+			outcome: "AMBIGUOUS",
+		});
+		await expect(publish(github({ failOn: { "POST /pulls": 403 }, files: pair }))).resolves.toMatchObject({
 			outcome: "DEFINITIVE_FAILURE",
 		});
-	});
-
-	it("resets a branch an interrupted attempt left without a pull request", async () => {
-		const site = github();
-		site.refs.set("heads/selena-lab/articles/ai-recommendations-check-en-33333333", "stale-commit");
-		await expect(publish(site)).resolves.toMatchObject({ outcome: "ACCEPTED" });
-		expect(site.refs.get("heads/selena-lab/articles/ai-recommendations-check-en-33333333")).toBe("commit-1");
 	});
 
 	it("will not shape a release for another repository, with media, or that the page cannot show", () => {

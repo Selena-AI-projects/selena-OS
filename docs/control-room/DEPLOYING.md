@@ -169,10 +169,13 @@ select has_column_privilege('selena_release.release_manifests', 'manifest', 'SEL
 
 ### Канал Selena Lab: статьи на сайт
 
-Одобренная статья из Aether уходит на сайт не напрямую: шлюз открывает pull request
-в репозитории сайта с файлом `data/lab/articles/<slug>.<en|ru>.json`, а публикует
-статью слияние этого pull request — сайт выкладывается из `main` (правила сайта —
-`docs/22-selena-lab-publishing.md` в SELENA-AI-COMPANY). Сайт должен уже читать
+Одобренная статья из Aether уходит на сайт не напрямую. Сайт публикует статью
+только в двух языках (решение владельца от 08.10.2026: основной русский, английский
+обязателен), и каждая версия — отдельный одобренный выпуск. Шлюз кладёт файл
+версии `data/lab/articles/<slug>.<ru|en>.json` в ветку статьи
+`selena-lab/articles/<slug>` и открывает pull request, когда в ней есть обе
+версии. Публикует статью слияние этого pull request — сайт выкладывается из
+`main` (правила сайта — `docs/22-selena-lab-publishing.md` в SELENA-AI-COMPANY). Сайт должен уже читать
 такие файлы: без `data/lab/english-only.json` в его `main` шлюз отказывает, ничего
 не записав.
 
@@ -188,8 +191,9 @@ select has_column_privilege('selena_release.release_manifests', 'manifest', 'SEL
 флаг разрешает шлюзу выходить к провайдерам, а что выходит — решают одобрение и
 постановка в очередь.
 
-Привязка — в Control Room, раздел Publications, кнопка «Bind the site». Ссылка
-на pull request появляется в Publishing activity. Открытый pull request
+Привязка — в Control Room, раздел Publications, кнопка «Bind the site». В
+Publishing activity первая одобренная версия показывает ветку, которая ждёт
+вторую, а вторая — ссылку на pull request. Открытый pull request
 публикацией не считается, поэтому Aether получает только отказ или сбой; отметки
 о слиянии пока нет, и сообщить автору «опубликовано» по сайту система ещё не умеет.
 

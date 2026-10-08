@@ -1,11 +1,5 @@
-import {
-	createGitHubClient,
-	GitHubApiError,
-	type GitHubClient,
-	type GitHubFile,
-	RELEASE_BRANCH_PREFIX,
-} from "./selena-github";
-import { asRevisionOf, englishOnlyAfter, type LabArticleFile, labArticleFile } from "./selena-lab-article";
+import { createGitHubClient, GitHubApiError, type GitHubClient, RELEASE_BRANCH_PREFIX } from "./selena-github";
+import { asRevisionOf, type LabArticleFile, labArticleFile } from "./selena-lab-article";
 import {
 	assertReleaseDispatchInvariants,
 	assertSupportedPlatform,
@@ -77,21 +71,24 @@ function account(repository: string): ReleaseProviderAccount {
 	};
 }
 
+function otherEditionPath(file: LabArticleFile): string {
+	return `data/lab/articles/${file.slug}.${file.locale === "ru" ? "en" : "ru"}.json`;
+}
+
 function pullRequestBody(release: NormalizedRelease, file: LabArticleFile, manifestHash: string): string {
-	const language = file.locale === "en" ? "английская версия" : "русская версия";
+	const russianPath = file.labPath.startsWith("/ru/") ? file.labPath : `/ru${file.labPath}`;
+	const englishPath = russianPath.replace(/^\/ru/, "");
 	return [
-		"Статья из Control Room, одобренная владельцем.",
+		"Статья из Control Room, одобренная владельцем, в двух языковых версиях.",
 		"",
-		`- Страница после слияния: ${SITE_URL}${file.labPath}`,
-		`- Язык: ${language}`,
-		`- Плановая дата: ${release.notBefore} (${release.timezone})`,
-		`- Версия материала: \`${release.contentVersionId}\`, хеш \`${release.contentHash}\``,
-		`- Подписанный выпуск: \`${manifestHash}\``,
+		`- Русская версия: ${SITE_URL}${russianPath}`,
+		`- Английская версия: ${SITE_URL}${englishPath}`,
+		`- Последней одобрена версия \`${release.contentVersionId}\` (${file.locale}), подписанный выпуск \`${manifestHash}\``,
 		"",
-		"Слияние публикует статью: сайт выкладывается из `main` сразу.",
+		"Слияние публикует обе версии: сайт выкладывается из `main` сразу.",
 		"",
-		"Файл собран из одобренного текста. Правка руками разойдётся с одобренной версией — если",
-		"нужна правка, исправьте материал и одобрите его заново: откроется новый pull request.",
+		"Файлы собраны из одобренных текстов. Правка руками разойдётся с одобренной версией — если",
+		"нужна правка, исправьте материал и одобрите его заново.",
 	].join("\n");
 }
 
@@ -125,48 +122,27 @@ function reasonOf(error: unknown, fallback: string): string {
 	return error instanceof Error && error.message ? error.message : fallback;
 }
 
-/** The files the pull request changes, or a refusal when the site cannot take this edition. */
-async function filesFor(client: GitHubClient, prepared: LabArticleFile): Promise<GitHubFile[] | { refusal: string }> {
-	const englishOnlyRaw = await client.readFile(ENGLISH_ONLY_PATH);
-	if (englishOnlyRaw === null) {
-		return { refusal: `The site on ${client.baseBranch} does not read Lab files yet: ${ENGLISH_ONLY_PATH} is missing` };
-	}
-	const englishOnly: unknown = JSON.parse(englishOnlyRaw);
-	if (!Array.isArray(englishOnly) || englishOnly.some((entry) => typeof entry !== "string")) {
-		return { refusal: `${ENGLISH_ONLY_PATH} on ${client.baseBranch} is not a list of page addresses` };
-	}
-	const previous = await client.readFile(prepared.path);
-	const file = previous === null ? prepared : asRevisionOf(prepared, previous);
-	if (previous === file.content) return { refusal: "The site already has this article exactly as approved" };
-
-	const englishPath = `/lab/articles/${prepared.slug}`;
-	if (prepared.locale === "ru" && previous === null) {
-		const englishFile = await client.readFile(`data/lab/articles/${prepared.slug}.en.json`);
-		if (englishFile === null && !englishOnly.includes(englishPath)) {
-			return {
-				refusal: `The Russian edition goes out after its English article, and ${englishPath} is not on the site waiting for one`,
-			};
-		}
-	}
-	const russianEditionExists =
-		prepared.locale === "en" && (await client.readFile(`data/lab/articles/${prepared.slug}.ru.json`)) !== null;
-	const nextEnglishOnly = englishOnlyAfter(englishOnly as string[], file, russianEditionExists);
-	const listChanged =
-		nextEnglishOnly.length !== englishOnly.length || nextEnglishOnly.some((entry) => !englishOnly.includes(entry));
-	const article = { content: file.content, path: file.path };
-	return listChanged
-		? [article, { content: `${JSON.stringify(nextEnglishOnly, null, 2)}\n`, path: ENGLISH_ONLY_PATH }]
-		: [article];
+/**
+ * Where the article's branch stands: still collecting editions, already under
+ * review, or left from a publication that is over and must start again.
+ */
+async function branchState(client: GitHubClient, branch: string) {
+	const pullRequest = await client.findPullRequest(branch);
+	if (pullRequest?.state === "open") return { extend: true, pullRequest } as const;
+	return { extend: pullRequest === null, pullRequest: null } as const;
 }
 
 /**
  * Selena Lab, the articles section of selenasystems.com, as a release channel.
  *
- * A release here opens a pull request in the site repository that adds the
- * article as a data file. Opening it is what the provider reports as
- * ACCEPTED; the article is public only once the owner merges it, because the
- * site deploys from its main branch. So the provider proposes and the owner
- * publishes, and nothing in this adapter can write to the main branch.
+ * The site publishes an article only in both languages (owner decision of
+ * 08.10.2026: Russian primary, English required), and each edition is its own
+ * approved release. So each release adds its edition as a data file to one
+ * branch per article, and the pull request opens once both editions are on
+ * it. Either step is what the provider reports as ACCEPTED — the reference is
+ * the branch while it waits for the other edition, then the pull request. The
+ * article is public only once the owner merges it, because the site deploys
+ * from its main branch; nothing in this adapter can write to the main branch.
  *
  * Like the other adapters, the transport defaults to `disarmedFetch()`.
  */
@@ -234,12 +210,12 @@ export function createSelenaLabReleaseProvider(
 				publishedOn: calendarDate(release.notBefore, release.timezone),
 			});
 			const payload: LabReleasePayload = {
-				branch: `${RELEASE_BRANCH_PREFIX}articles/${file.slug}-${file.locale}-${release.releaseIntentId.slice(0, 8)}`,
+				branch: `${RELEASE_BRANCH_PREFIX}articles/${file.slug}`,
 				commitMessage: `Publish the Lab article ${file.slug} (${file.locale})\n\nRelease intent ${release.releaseIntentId}, content version ${release.contentVersionId}.`,
 				file,
 				pullRequest: {
 					body: pullRequestBody(release, file, input.authorization.manifestHash),
-					title: `Selena Lab: ${file.title} (${file.locale.toUpperCase()})`,
+					title: `Selena Lab: ${file.slug} (RU + EN)`,
 				},
 				repository: config.repository,
 			};
@@ -262,23 +238,38 @@ export function createSelenaLabReleaseProvider(
 			}
 			// Everything before the pull request is invisible to the site: a branch
 			// alone publishes nothing, so a failure up to here is definitive.
+			let state: Awaited<ReturnType<typeof branchState>>;
 			try {
-				const existing = await client.findPullRequest(payload.branch);
-				if (existing) {
-					return existing.state === "open" || existing.merged
-						? { outcome: "ACCEPTED", providerReferenceId: existing.url }
-						: {
-								outcome: "DEFINITIVE_FAILURE",
-								reason: `The pull request for this release was closed without merging: ${existing.url}`,
-							};
+				if ((await client.readFile(ENGLISH_ONLY_PATH)) === null) {
+					return {
+						outcome: "DEFINITIVE_FAILURE",
+						reason: `The site on ${client.baseBranch} does not read Lab files yet: ${ENGLISH_ONLY_PATH} is missing`,
+					};
 				}
-				const files = await filesFor(client, payload.file);
-				if ("refusal" in files) return { outcome: "DEFINITIVE_FAILURE", reason: files.refusal };
-				await client.commitToBranch({
-					branch: payload.branch,
-					files: files.map((file) => ({ content: file.content, path: file.path })),
-					message: payload.commitMessage,
-				});
+				state = await branchState(client, payload.branch);
+				const previous = await client.readFile(payload.file.path);
+				const file = previous === null ? payload.file : asRevisionOf(payload.file, previous);
+				if (previous === file.content) {
+					return { outcome: "DEFINITIVE_FAILURE", reason: "The site already has this edition exactly as approved" };
+				}
+				const onBranch = state.extend ? await client.readFile(file.path, payload.branch) : null;
+				if (onBranch !== file.content) {
+					await client.commitToBranch({
+						branch: payload.branch,
+						extend: state.extend,
+						files: [{ content: file.content, path: file.path }],
+						message: payload.commitMessage,
+					});
+				}
+				// The site takes an article only with both editions, so the pull
+				// request waits until the other one is on the branch.
+				if ((await client.readFile(otherEditionPath(file), payload.branch)) === null) {
+					return {
+						outcome: "ACCEPTED",
+						providerReferenceId: `https://github.com/${client.repository}/tree/${payload.branch}`,
+					};
+				}
+				if (state.pullRequest) return { outcome: "ACCEPTED", providerReferenceId: state.pullRequest.url };
 			} catch (error) {
 				rethrowIfRefused(error);
 				return {

@@ -41,15 +41,25 @@ export type GitHubFile = { content: string; path: string };
 export type GitHubClient = {
 	readonly baseBranch: string;
 	readonly repository: string;
-	/** Writes one commit on top of the base branch's head to a release branch, creating or resetting it. */
-	commitToBranch(input: { branch: string; files: readonly GitHubFile[]; message: string }): Promise<string>;
+	/**
+	 * Writes one commit to a release branch. With `extend`, the commit goes on top
+	 * of the branch as it stands, so editions added one after another accumulate;
+	 * otherwise, or when the branch does not exist, it goes on top of the base
+	 * branch and the release branch is created or reset to it.
+	 */
+	commitToBranch(input: {
+		branch: string;
+		extend: boolean;
+		files: readonly GitHubFile[];
+		message: string;
+	}): Promise<string>;
 	createPullRequest(input: { body: string; branch: string; title: string }): Promise<GitHubPullRequest>;
 	findPullRequest(branch: string): Promise<GitHubPullRequest | null>;
 	getPullRequest(number: number): Promise<GitHubPullRequest>;
 	/** The repository as the token sees it, or a GitHubApiError when it cannot. */
 	getRepository(): Promise<{ defaultBranch: string; fullName: string }>;
-	/** A text file on the base branch, or null when there is none. */
-	readFile(path: string): Promise<string | null>;
+	/** A text file on the base branch, or on `ref` when given; null when there is none. */
+	readFile(path: string, ref?: string): Promise<string | null>;
 };
 
 function asRecord(value: unknown): Record<string, unknown> | null {
@@ -117,12 +127,21 @@ export function createGitHubClient(config: GitHubRepositoryConfig, fetchFn: type
 		return response.status === 204 ? null : response.json();
 	}
 
+	function refPath(branch: string): string {
+		return branch.split("/").map(encodeURIComponent).join("/");
+	}
+
+	async function headOf(branch: string): Promise<string | null> {
+		const ref = asRecord(await request(`/git/ref/heads/${refPath(branch)}`, { allow404: true }));
+		if (!ref) return null;
+		const sha = asString(asRecord(ref.object)?.sha);
+		if (!sha) throw new GitHubApiError(200, `GitHub returned ${branch} without its commit`);
+		return sha;
+	}
+
 	async function baseHead(): Promise<string> {
-		const ref = asRecord(
-			await request(`/git/ref/heads/${config.baseBranch.split("/").map(encodeURIComponent).join("/")}`),
-		);
-		const sha = asString(asRecord(ref?.object)?.sha);
-		if (!sha) throw new GitHubApiError(200, "GitHub returned the base branch without its commit");
+		const sha = await headOf(config.baseBranch);
+		if (!sha) throw new GitHubApiError(404, `The base branch ${config.baseBranch} does not exist`);
 		return sha;
 	}
 
@@ -138,26 +157,24 @@ export function createGitHubClient(config: GitHubRepositoryConfig, fetchFn: type
 			return { defaultBranch, fullName };
 		},
 
-		async readFile(path) {
+		async readFile(path, ref = config.baseBranch) {
 			const body = asRecord(
-				await request(
-					`/contents/${path.split("/").map(encodeURIComponent).join("/")}?ref=${encodeURIComponent(config.baseBranch)}`,
-					{
-						allow404: true,
-					},
-				),
+				await request(`/contents/${path.split("/").map(encodeURIComponent).join("/")}?ref=${encodeURIComponent(ref)}`, {
+					allow404: true,
+				}),
 			);
 			if (!body) return null;
 			const content = asString(body.content);
 			if (body.type !== "file" || body.encoding !== "base64" || content === null) {
-				throw new GitHubApiError(200, `${path} on ${config.baseBranch} is not a readable file`);
+				throw new GitHubApiError(200, `${path} on ${ref} is not a readable file`);
 			}
 			return decodeBase64(content);
 		},
 
 		async commitToBranch(input) {
 			assertReleaseBranch(input.branch, config.baseBranch);
-			const parent = await baseHead();
+			const current = input.extend ? await headOf(input.branch) : null;
+			const parent = current ?? (await baseHead());
 			const commit = asRecord(await request(`/git/commits/${parent}`));
 			const baseTree = asString(asRecord(commit?.tree)?.sha);
 			if (!baseTree) throw new GitHubApiError(200, "GitHub returned the base commit without its tree");
@@ -187,16 +204,25 @@ export function createGitHubClient(config: GitHubRepositoryConfig, fetchFn: type
 				)?.sha,
 			);
 			if (!sha) throw new GitHubApiError(200, "GitHub did not return the new commit");
+			if (current) {
+				// Not forced: if the branch moved since it was read, GitHub refuses
+				// rather than dropping the edition that moved it.
+				await request(`/git/refs/heads/${refPath(input.branch)}`, {
+					body: JSON.stringify({ force: false, sha }),
+					method: "PATCH",
+				});
+				return sha;
+			}
 			try {
 				await request("/git/refs", {
 					body: JSON.stringify({ ref: `refs/heads/${input.branch}`, sha }),
 					method: "POST",
 				});
 			} catch (error) {
-				// The branch is this release's own, left by an attempt that stopped
-				// before its pull request; it is reset to the commit just made.
+				// The branch is left from a publication that is over (its pull request
+				// merged or closed); it starts again from the base branch.
 				if (!(error instanceof GitHubApiError) || error.status !== 422) throw error;
-				await request(`/git/refs/heads/${input.branch}`, {
+				await request(`/git/refs/heads/${refPath(input.branch)}`, {
 					body: JSON.stringify({ force: true, sha }),
 					method: "PATCH",
 				});

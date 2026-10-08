@@ -506,20 +506,3 @@ export function labArticleRefusal(input: {
 		throw error;
 	}
 }
-
-/**
- * The site's list of English entries without a Russian edition, after this
- * article. An English article joins it unless its Russian edition is already
- * on the site; a Russian edition takes its English article off it.
- */
-export function englishOnlyAfter(
-	current: readonly string[],
-	file: Pick<LabArticleFile, "locale" | "slug">,
-	russianEditionExists: boolean,
-): string[] {
-	const englishPath = `/lab/articles/${file.slug}`;
-	const next = new Set(current);
-	if (file.locale === "en" && !russianEditionExists) next.add(englishPath);
-	else next.delete(englishPath);
-	return [...next].sort();
-}
