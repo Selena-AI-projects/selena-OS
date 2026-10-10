@@ -30,6 +30,8 @@ export type GitHubRepositoryConfig = {
 };
 
 export type GitHubPullRequest = {
+	/** When it was merged or closed; null while it is open. */
+	closedAt: string | null;
 	merged: boolean;
 	number: number;
 	state: "open" | "closed";
@@ -54,6 +56,7 @@ export type GitHubClient = {
 		message: string;
 	}): Promise<string>;
 	createPullRequest(input: { body: string; branch: string; title: string }): Promise<GitHubPullRequest>;
+	/** The most recently opened pull request from the branch, in any state. */
 	findPullRequest(branch: string): Promise<GitHubPullRequest | null>;
 	getPullRequest(number: number): Promise<GitHubPullRequest>;
 	/** The repository as the token sees it, or a GitHubApiError when it cannot. */
@@ -83,7 +86,13 @@ function parsePullRequest(value: unknown): GitHubPullRequest {
 	if (!url || typeof number !== "number" || (state !== "open" && state !== "closed")) {
 		throw new GitHubApiError(200, "GitHub returned a pull request without its number, address or state");
 	}
-	return { merged: record?.merged === true || asString(record?.merged_at) !== null, number, state, url };
+	return {
+		closedAt: asString(record?.closed_at),
+		merged: record?.merged === true || asString(record?.merged_at) !== null,
+		number,
+		state,
+		url,
+	};
 }
 
 function assertReleaseBranch(branch: string, baseBranch: string): void {
@@ -232,7 +241,7 @@ export function createGitHubClient(config: GitHubRepositoryConfig, fetchFn: type
 
 		async findPullRequest(branch) {
 			const found = await request(
-				`/pulls?state=all&head=${encodeURIComponent(`${owner}:${branch}`)}&base=${encodeURIComponent(config.baseBranch)}`,
+				`/pulls?state=all&sort=created&direction=desc&head=${encodeURIComponent(`${owner}:${branch}`)}&base=${encodeURIComponent(config.baseBranch)}`,
 			);
 			if (!Array.isArray(found) || found.length === 0) return null;
 			return parsePullRequest(found[0]);
