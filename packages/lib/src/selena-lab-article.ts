@@ -39,6 +39,8 @@ export type LabArticleFile = {
 	title: string;
 };
 
+export type LabEdition = Pick<LabArticleFile, "labPath" | "locale" | "path" | "slug">;
+
 type Link = { href: string; title: string };
 type Source = { href: string; publisher: string; title: string };
 type FlowItem =
@@ -78,6 +80,19 @@ type Element =
 	| { kind: "subheading"; text: string };
 
 type Section = { elements: Element[]; heading: string };
+
+function localeOf(language: string): LabLocale | null {
+	return /^en\b/.test(language) ? "en" : /^ru\b/.test(language) ? "ru" : null;
+}
+
+function edition(slug: string, locale: LabLocale): LabEdition {
+	return {
+		labPath: `${locale === "ru" ? "/ru/lab" : "/lab"}/articles/${slug}`,
+		locale,
+		path: `data/lab/articles/${slug}.${locale}.json`,
+		slug,
+	};
+}
 
 function refuse(message: string): never {
 	throw new LabArticleRefused(message);
@@ -375,7 +390,7 @@ export function labArticleFile(input: {
 	const disclosure = record(input.disclosure);
 	const metadata = record(disclosure.metadata);
 	const language = typeof disclosure.language === "string" ? disclosure.language.toLowerCase() : "";
-	const locale: LabLocale | null = /^en\b/.test(language) ? "en" : /^ru\b/.test(language) ? "ru" : null;
+	const locale = localeOf(language);
 	if (!locale)
 		refuse(`Selena Lab publishes English and Russian; this article is "${language || "of no stated language"}"`);
 
@@ -455,14 +470,18 @@ export function labArticleFile(input: {
 		...(related.length > 0 ? { related } : {}),
 		provenance: input.provenance,
 	};
-	return {
-		content: `${JSON.stringify(entry, null, 2)}\n`,
-		labPath: `${locale === "ru" ? "/ru/lab" : "/lab"}/articles/${slug}`,
-		locale,
-		path: `data/lab/articles/${slug}.${locale}.json`,
-		slug,
-		title: parsed.title,
-	};
+	return { content: `${JSON.stringify(entry, null, 2)}\n`, ...edition(slug, locale), title: parsed.title };
+}
+
+/**
+ * Where the edition a disclosure names lives on the site, or null when it does
+ * not name one Selena Lab can hold.
+ */
+export function labEditionOf(input: unknown): LabEdition | null {
+	const disclosure = record(input);
+	const locale = localeOf(typeof disclosure.language === "string" ? disclosure.language.toLowerCase() : "");
+	const slug = record(disclosure.metadata).slug;
+	return locale && typeof slug === "string" && SLUG.test(slug) ? edition(slug, locale) : null;
 }
 
 /**

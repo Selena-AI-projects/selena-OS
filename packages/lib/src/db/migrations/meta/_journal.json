@@ -372,6 +372,13 @@
       "when": 1789603260000,
       "tag": "0052_selena_lab_site_channel",
       "breakpoints": true
+    },
+    {
+      "idx": 53,
+      "version": "7",
+      "when": 1789603320000,
+      "tag": "0053_site_publication_confirmation",
+      "breakpoints": true
     }
   ]
 }

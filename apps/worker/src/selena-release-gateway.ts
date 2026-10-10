@@ -2,14 +2,22 @@ import { randomUUID, timingSafeEqual } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { assertDatabaseTlsVerified, requiresVerifiedDatabaseTls } from "@workspace/lib/db/staging-tls";
+import { createGitHubClient } from "@workspace/lib/selena-github";
 import {
 	assertImmutablePublicationPackage,
 	ensureGatewaySigningKey,
 	signReleaseManifest,
 } from "@workspace/lib/selena-release-gateway";
-import { configureReleaseProviders } from "@workspace/lib/selena-release-providers";
+import { SELENA_LAB_PROVIDER_ID } from "@workspace/lib/selena-release-provider-lab";
+import { configureReleaseProviders, missingProviderSettings } from "@workspace/lib/selena-release-providers";
 import { Pool, type PoolClient } from "pg";
 import { dispatchReleaseManifest, type GatewayQuery } from "./selena-release-dispatch";
+import {
+	type PendingSitePublication,
+	SITE_PUBLICATION_WATCH_INTERVAL_MS,
+	type SitePublicationLedger,
+	watchSitePublications,
+} from "./selena-site-publication-watch";
 
 const GATEWAY_CONTEXT = { organizationId: "__gateway__", brandId: "__gateway__" };
 
@@ -175,6 +183,65 @@ function gatewayTransactionFor(pool: Pool, manifestId: string) {
 	};
 }
 
+/**
+ * Settles site releases once the owner merges or closes their pull request.
+ * It runs only where the site provider is configured, because that is where
+ * the token that can read the site repository lives.
+ */
+function startSitePublicationWatch(pool: Pool): () => void {
+	if (missingProviderSettings(SELENA_LAB_PROVIDER_ID).length > 0) return () => {};
+	const client = createGitHubClient(
+		{
+			baseBranch: "main",
+			repository: process.env.SELENA_LAB_SITE_REPOSITORY as string,
+			token: process.env.SELENA_LAB_GITHUB_TOKEN as string,
+		},
+		fetch,
+	);
+	const ledger: SitePublicationLedger = {
+		async listPending(limit) {
+			const connection = await pool.connect();
+			try {
+				return await withGatewayContext(connection, async () => {
+					const result = await connection.query<PendingSitePublication>(
+						"SELECT * FROM selena_release.list_pending_site_publications($1)",
+						[limit],
+					);
+					return result.rows;
+				});
+			} finally {
+				connection.release();
+			}
+		},
+		async record(pending, outcome) {
+			const inManifest = gatewayTransactionFor(pool, pending.release_manifest_id);
+			await inManifest(async (query) => {
+				await query("SELECT selena_release.record_site_publication_outcome($1, $2, $3)", [
+					pending.reservation_id,
+					outcome.result,
+					outcome.result === "PUBLISHED" ? outcome.reference : null,
+				]);
+				return null;
+			});
+		},
+	};
+	let running = false;
+	const round = async () => {
+		if (running) return;
+		running = true;
+		try {
+			await watchSitePublications({ client, ledger });
+		} catch (error) {
+			console.error(`Site publication watch failed: ${error instanceof Error ? error.message : "unknown error"}`);
+		} finally {
+			running = false;
+		}
+	};
+	const timer = setInterval(() => void round(), SITE_PUBLICATION_WATCH_INTERVAL_MS);
+	void round();
+	return () => clearInterval(timer);
+}
+
 function sendJson(response: ServerResponse, status: number, body: Record<string, unknown>): void {
 	response.writeHead(status, { "cache-control": "no-store", "content-type": "application/json" });
 	response.end(JSON.stringify(body));
@@ -225,7 +292,9 @@ export async function startSelenaReleaseGateway(): Promise<void> {
 		}
 	});
 	server.listen(port, "0.0.0.0");
+	const stopWatching = startSitePublicationWatch(pool);
 	const shutdown = async () => {
+		stopWatching();
 		server.close();
 		await pool.end();
 		process.exit(0);

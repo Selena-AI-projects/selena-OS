@@ -18,7 +18,7 @@ import { disarmedFetch, rethrowIfRefused } from "./selena-release-publish-policy
 export const SELENA_LAB_PROVIDER_ID = "selena_lab";
 export const SELENA_LAB_PLATFORM = "website_lab";
 
-const SITE_URL = "https://www.selenasystems.com";
+export const SELENA_LAB_SITE_URL = "https://www.selenasystems.com";
 const ENGLISH_ONLY_PATH = "data/lab/english-only.json";
 
 const CAPABILITIES: ReleaseProviderCapabilities = {
@@ -81,8 +81,8 @@ function pullRequestBody(release: NormalizedRelease, file: LabArticleFile, manif
 	return [
 		"Статья из Control Room, одобренная владельцем, в двух языковых версиях.",
 		"",
-		`- Русская версия: ${SITE_URL}${russianPath}`,
-		`- Английская версия: ${SITE_URL}${englishPath}`,
+		`- Русская версия: ${SELENA_LAB_SITE_URL}${russianPath}`,
+		`- Английская версия: ${SELENA_LAB_SITE_URL}${englishPath}`,
 		`- Последней одобрена версия \`${release.contentVersionId}\` (${file.locale}), подписанный выпуск \`${manifestHash}\``,
 		"",
 		"Слияние публикует обе версии: сайт выкладывается из `main` сразу.",
